@@ -1037,6 +1037,11 @@ func (s *erasureSets) startMergeWalksN(ctx context.Context, bucket, prefix, mark
 			go func(disk StorageAPI) {
 				defer wg.Done()
 
+				if disk == nil {
+					// disk offline, ignore it.
+					return
+				}
+
 				var entryCh chan FileInfo
 				var err error
 				if splunk {
