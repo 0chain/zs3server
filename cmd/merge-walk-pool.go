@@ -30,15 +30,26 @@ const (
 type mergeWalkVersions struct {
 	added      time.Time
 	entryChs   []FileInfoVersionsCh
-	endWalkCh  chan struct{}   // To signal when mergeWalk go-routine should end.
+	endWalkCh  *endWalkSafeCh
 	endTimerCh chan<- struct{} // To signal when timer go-routine should end.
+}
+
+type endWalkSafeCh struct {
+	ch   chan struct{} // To signal when mergeWalk go-routine should end.
+	once sync.Once
+}
+
+func (s *endWalkSafeCh) close() {
+	s.once.Do(func() {
+		close(s.ch)
+	})
 }
 
 // mergeWalk - represents the go routine that does the merge walk.
 type mergeWalk struct {
 	added      time.Time
 	entryChs   []FileInfoCh
-	endWalkCh  chan struct{}   // To signal when mergeWalk go-routine should end.
+	endWalkCh  *endWalkSafeCh
 	endTimerCh chan<- struct{} // To signal when timer go-routine should end.
 }
 
@@ -81,7 +92,7 @@ func (t *MergeWalkVersionsPool) Release(params listParams) ([]FileInfoVersionsCh
 		delete(t.pool, params)
 	}
 	walk.endTimerCh <- struct{}{}
-	return walk.entryChs, walk.endWalkCh
+	return walk.entryChs, walk.endWalkCh.ch
 }
 
 // Set - similar to mergeWalkPool.Set but for file versions
@@ -120,7 +131,7 @@ func (t *MergeWalkVersionsPool) Set(params listParams, resultChs []FileInfoVersi
 			}
 			select {
 			case endCh <- struct{}{}:
-				close(endWalkCh)
+				endWalkCh.close()
 			default:
 			}
 		} else {
@@ -135,7 +146,7 @@ func (t *MergeWalkVersionsPool) Set(params listParams, resultChs []FileInfoVersi
 	walkInfo := mergeWalkVersions{
 		added:      UTCNow(),
 		entryChs:   resultChs,
-		endWalkCh:  endWalkCh,
+		endWalkCh:  &endWalkSafeCh{ch: endWalkCh},
 		endTimerCh: endTimerCh,
 	}
 
@@ -147,7 +158,7 @@ func (t *MergeWalkVersionsPool) Set(params listParams, resultChs []FileInfoVersi
 		// We are at limit, invalidate oldest, move list down and add new as last.
 		select {
 		case walks[0].endTimerCh <- struct{}{}:
-			close(walks[0].endWalkCh)
+			walks[0].endWalkCh.close()
 		default:
 		}
 		copy(walks, walks[1:])
@@ -185,7 +196,7 @@ func (t *MergeWalkVersionsPool) Set(params listParams, resultChs []FileInfoVersi
 				}
 			}
 			// Signal the mergeWalk go-routine to die.
-			close(endWalkCh)
+			walkInfo.endWalkCh.close()
 		case <-endTimerCh:
 			return
 		}
@@ -235,7 +246,7 @@ func (t *MergeWalkPool) Release(params listParams) ([]FileInfoCh, chan struct{})
 		delete(t.pool, params)
 	}
 	walk.endTimerCh <- struct{}{}
-	return walk.entryChs, walk.endWalkCh
+	return walk.entryChs, walk.endWalkCh.ch
 }
 
 // Set - adds a mergeWalk to the mergeWalkPool.
@@ -281,7 +292,7 @@ func (t *MergeWalkPool) Set(params listParams, resultChs []FileInfoCh, endWalkCh
 			}
 			select {
 			case endCh <- struct{}{}:
-				close(endWalkCh)
+				endWalkCh.close()
 			default:
 			}
 		} else {
@@ -295,7 +306,7 @@ func (t *MergeWalkPool) Set(params listParams, resultChs []FileInfoCh, endWalkCh
 	walkInfo := mergeWalk{
 		added:      UTCNow(),
 		entryChs:   resultChs,
-		endWalkCh:  endWalkCh,
+		endWalkCh:  &endWalkSafeCh{ch: endWalkCh},
 		endTimerCh: endTimerCh,
 	}
 
@@ -307,7 +318,7 @@ func (t *MergeWalkPool) Set(params listParams, resultChs []FileInfoCh, endWalkCh
 		// We are at limit, invalidate oldest, move list down and add new as last.
 		select {
 		case walks[0].endTimerCh <- struct{}{}:
-			close(walks[0].endWalkCh)
+			walks[0].endWalkCh.close()
 		default:
 		}
 		copy(walks, walks[1:])
@@ -345,7 +356,7 @@ func (t *MergeWalkPool) Set(params listParams, resultChs []FileInfoCh, endWalkCh
 				}
 			}
 			// Signal the mergeWalk go-routine to die.
-			close(endWalkCh)
+			walkInfo.endWalkCh.close()
 		case <-endTimerCh:
 			return
 		}
