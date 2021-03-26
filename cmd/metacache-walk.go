@@ -116,6 +116,9 @@ func (s *xlStorage) WalkDir(ctx context.Context, opts WalkDirOptions, wr io.Writ
 		if len(current) > 0 && !strings.HasPrefix(current, prefix) {
 			return nil
 		}
+		if contextCanceled(ctx) {
+			return ctx.Err()
+		}
 		entries, err := s.ListDir(ctx, opts.Bucket, current, -1)
 		if err != nil {
 			// Folder could have gone away in-between
@@ -148,6 +151,9 @@ func (s *xlStorage) WalkDir(ctx context.Context, opts WalkDirOptions, wr io.Writ
 			// Do do not retain the file.
 			entries[i] = ""
 
+			if contextCanceled(ctx) {
+				return ctx.Err()
+			}
 			// If root was an object return it as such.
 			if HasSuffix(entry, xlStorageFormatFile) {
 				var meta metaCacheEntry
@@ -186,6 +192,9 @@ func (s *xlStorage) WalkDir(ctx context.Context, opts WalkDirOptions, wr io.Writ
 		for _, entry := range entries {
 			if entry == "" {
 				continue
+			}
+			if contextCanceled(ctx) {
+				return ctx.Err()
 			}
 			meta := metaCacheEntry{name: PathJoin(current, entry)}
 
