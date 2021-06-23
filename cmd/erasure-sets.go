@@ -1007,6 +1007,12 @@ func (s *erasureSets) startMergeWalksVersionsN(ctx context.Context, bucket, pref
 			wg.Add(1)
 			go func(disk StorageAPI) {
 				defer wg.Done()
+
+				if disk == nil {
+					// disk offline, ignore it.
+					return
+				}
+
 				entryCh, err := disk.WalkVersions(GlobalContext, bucket, prefix, marker, recursive, endWalkCh)
 				if err != nil {
 					return
