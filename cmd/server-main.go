@@ -444,8 +444,16 @@ func serverMain(ctx *cli.Context) {
 	erasureSelfTest()
 	compressSelfTest()
 
-	// Handle all server command args.
-	serverHandleCmdArgs(ctx)
+	drives, err := parseDrives(ctx)
+	if err != nil {
+		logger.Fatal(config.ErrUnexpectedError(err), "Unable to parse the input arguments")
+	}
+	if drives == "" {
+		// Handle all server command args.
+		serverHandleCmdArgs(ctx)
+	} else {
+		globalMinioDrives = drives
+	}
 
 	// Handle all server environment vars.
 	serverHandleEnvVars()

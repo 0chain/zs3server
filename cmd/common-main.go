@@ -111,7 +111,7 @@ const consolePrefix = "CONSOLE_"
 func minioConfigToConsoleFeatures() {
 	os.Setenv("CONSOLE_PBKDF_SALT", globalDeploymentID)
 	os.Setenv("CONSOLE_PBKDF_PASSPHRASE", globalDeploymentID)
-	os.Setenv("CONSOLE_MINIO_SERVER", getAPIEndpoints()[0])
+	os.Setenv("CONSOLE_MINIO_SERVER", globalMinioEndpoint)
 	if value := env.Get("MINIO_LOG_QUERY_URL", ""); value != "" {
 		os.Setenv("CONSOLE_LOG_QUERY_URL", value)
 		if value := env.Get("MINIO_LOG_QUERY_AUTH_TOKEN", ""); value != "" {
