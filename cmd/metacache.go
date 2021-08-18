@@ -18,7 +18,6 @@ package cmd
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"path"
 	"strings"
@@ -238,14 +237,10 @@ func (m *metacache) delete(ctx context.Context) {
 		logger.LogIf(ctx, fmt.Errorf("metacache.delete: bucket (%s) or id (%s) empty", m.bucket, m.id))
 	}
 	objAPI := newObjectLayerFn()
-	if objAPI == nil {
-		logger.LogIf(ctx, errors.New("metacache.delete: no object layer"))
-		return
+	if objAPI != nil {
+		ez, ok := objAPI.(*erasureServerPools)
+		if ok {
+			ez.renameAll(ctx, minioMetaBucket, metacachePrefixForID(m.bucket, m.id))
+		}
 	}
-	ez, ok := objAPI.(*erasureServerPools)
-	if !ok {
-		logger.LogIf(ctx, errors.New("metacache.delete: expected objAPI to be *erasureServerPools"))
-		return
-	}
-	ez.deleteAll(ctx, minioMetaBucket, metacachePrefixForID(m.bucket, m.id))
 }

@@ -311,7 +311,7 @@ func (s *storageRESTServer) WalkDirHandler(w http.ResponseWriter, r *http.Reques
 	}
 
 	var reportNotFound bool
-	if v := vars[storageRESTReportNotFound]; v != "" {
+	if v := r.URL.Query().Get(storageRESTReportNotFound); v != "" {
 		reportNotFound, err = strconv.ParseBool(v)
 		if err != nil {
 			s.writeErrorResponse(w, err)
