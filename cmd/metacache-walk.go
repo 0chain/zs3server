@@ -113,6 +113,9 @@ func (s *xlStorage) WalkDir(ctx context.Context, opts WalkDirOptions, wr io.Writ
 	forward := opts.ForwardTo
 	var scanDir func(path string) error
 	scanDir = func(current string) error {
+		if len(current) > 0 && !strings.HasPrefix(current, prefix) {
+			return nil
+		}
 		entries, err := s.ListDir(ctx, opts.Bucket, current, -1)
 		if err != nil {
 			// Folder could have gone away in-between
@@ -127,9 +130,6 @@ func (s *xlStorage) WalkDir(ctx context.Context, opts WalkDirOptions, wr io.Writ
 		}
 		dirObjects := make(map[string]struct{})
 		for i, entry := range entries {
-			if len(prefix) > 0 && !strings.HasPrefix(entry, prefix) {
-				continue
-			}
 			if len(forward) > 0 && entry < forward {
 				continue
 			}
@@ -183,8 +183,6 @@ func (s *xlStorage) WalkDir(ctx context.Context, opts WalkDirOptions, wr io.Writ
 		// Process in sort order.
 		sort.Strings(entries)
 		dirStack := make([]string, 0, 5)
-		prefix = "" // Remove prefix after first level.
-
 		for _, entry := range entries {
 			if entry == "" {
 				continue
