@@ -111,7 +111,9 @@ func (s *xlStorage) WalkDir(ctx context.Context, opts WalkDirOptions, wr io.Writ
 		if contextCanceled(ctx) {
 			return ctx.Err()
 		}
+		s.walkMu.Lock()
 		entries, err := s.ListDir(ctx, opts.Bucket, current, -1)
+		s.walkMu.Unlock()
 		if err != nil {
 			// Folder could have gone away in-between
 			if err != errVolumeNotFound && err != errFileNotFound {
@@ -152,7 +154,9 @@ func (s *xlStorage) WalkDir(ctx context.Context, opts WalkDirOptions, wr io.Writ
 			// If root was an object return it as such.
 			if HasSuffix(entry, xlStorageFormatFile) {
 				var meta metaCacheEntry
+				s.walkMu.Lock()
 				meta.metadata, err = xioutil.ReadFile(pathJoin(volumeDir, current, entry))
+				s.walkMu.Unlock()
 				if err != nil {
 					logger.LogIf(ctx, err)
 					continue
@@ -167,7 +171,9 @@ func (s *xlStorage) WalkDir(ctx context.Context, opts WalkDirOptions, wr io.Writ
 			// Check legacy.
 			if HasSuffix(entry, xlStorageFormatFileV1) {
 				var meta metaCacheEntry
+				s.walkMu.Lock()
 				meta.metadata, err = xioutil.ReadFile(pathJoin(volumeDir, current, entry))
+				s.walkMu.Unlock()
 				if err != nil {
 					logger.LogIf(ctx, err)
 					continue
@@ -217,7 +223,9 @@ func (s *xlStorage) WalkDir(ctx context.Context, opts WalkDirOptions, wr io.Writ
 				meta.name = meta.name[:len(meta.name)-1] + globalDirSuffixWithSlash
 			}
 
+			s.walkMu.Lock()
 			meta.metadata, err = xioutil.ReadFile(pathJoin(volumeDir, meta.name, xlStorageFormatFile))
+			s.walkMu.Unlock()
 			switch {
 			case err == nil:
 				// It was an object
@@ -226,7 +234,9 @@ func (s *xlStorage) WalkDir(ctx context.Context, opts WalkDirOptions, wr io.Writ
 				}
 				out <- meta
 			case osIsNotExist(err):
+				s.walkMu.Lock()
 				meta.metadata, err = xioutil.ReadFile(pathJoin(volumeDir, meta.name, xlStorageFormatFileV1))
+				s.walkMu.Unlock()
 				if err == nil {
 					// Maybe rename? Would make it inconsistent across disks though.
 					// os.Rename(pathJoin(volumeDir, meta.name, xlStorageFormatFileV1), pathJoin(volumeDir, meta.name, xlStorageFormatFile))
