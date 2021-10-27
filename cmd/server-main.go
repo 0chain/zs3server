@@ -23,7 +23,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"math/rand"
 	"net"
 	"os"
@@ -515,8 +514,6 @@ func serverMain(ctx *cli.Context) {
 	httpServer.BaseContext = func(listener net.Listener) context.Context {
 		return GlobalContext
 	}
-	// Turn-off random logging by Go internally
-	httpServer.ErrorLog = log.New(&nullWriter{}, "", 0)
 	go func() {
 		globalHTTPServerErrorCh <- httpServer.Start(GlobalContext)
 	}()
