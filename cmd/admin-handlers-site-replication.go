@@ -265,12 +265,13 @@ func (a adminAPIHandlers) SiteReplicationInfo(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	if err = json.NewEncoder(w).Encode(info); err != nil {
+	jsonBytes, err := json.Marshal(info)
+	if err != nil {
 		writeErrorResponseJSON(ctx, w, toAdminAPIErr(ctx, err), r.URL)
 		return
 	}
 
-	w.(http.Flusher).Flush()
+	writeSuccessResponseJSON(w, jsonBytes)
 }
 
 func (a adminAPIHandlers) SRInternalGetIDPSettings(w http.ResponseWriter, r *http.Request) {
@@ -284,12 +285,14 @@ func (a adminAPIHandlers) SRInternalGetIDPSettings(w http.ResponseWriter, r *htt
 	}
 
 	idpSettings := globalSiteReplicationSys.GetIDPSettings(ctx)
-	if err := json.NewEncoder(w).Encode(idpSettings); err != nil {
+
+	jsonBytes, err := json.Marshal(idpSettings)
+	if err != nil {
 		writeErrorResponseJSON(ctx, w, toAdminAPIErr(ctx, err), r.URL)
 		return
 	}
 
-	w.(http.Flusher).Flush()
+	writeSuccessResponseJSON(w, jsonBytes)
 }
 
 func readJSONBody(ctx context.Context, body io.Reader, v interface{}, encryptionKey string) APIErrorCode {
