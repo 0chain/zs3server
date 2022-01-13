@@ -98,8 +98,5 @@ require (
 	github.com/nats-io/nats-streaming-server v0.21.2 // indirect
 )
 
-replace (
-	github.com/0chain/gosdk v1.3.4 => ../gosdk
-	github.com/gomodule/redigo v2.0.0+incompatible => github.com/gomodule/redigo v1.8.5
-	github.com/minio/console v0.12.5 => ../console
-)
+// github.com/0chain/gosdk v1.3.4 => ../gosdk
+replace github.com/gomodule/redigo v2.0.0+incompatible => github.com/gomodule/redigo v1.8.5
