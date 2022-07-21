@@ -1,0 +1,35 @@
+- name: install pre-requisite
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: install Go
+      include_role:
+        name: installGo
+
+    - name: install local system requirements
+      include_role:
+        name: local_sys_req
+
+- name: setup minio
+  hosts: master
+  gather_facts: false
+  vars_files:
+    - input.yaml
+  tasks:
+    - name: install Go
+      include_role:
+        name: installGo
+
+    - name: create wallet
+      include_role:
+        name: zwallet
+      when: create_wallet == "yes"
+
+    - name: create zbox
+      include_role:
+        name: zbox
+      when: create_allocation == "yes"
+
+    - name: minio API
+      include_role:
+        name: minio

@@ -1,0 +1,33 @@
+---
+# tasks file for local_sys_req
+- name: update local system all packages to their latest version
+  apt:
+    name: "*"
+    state: latest 
+
+- name: Install build-essential and git
+  apt:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - build-essential
+    - git
+
+- name: Clone zwalletcli
+  git:
+    repo: 'https://github.com/0chain/zwalletcli.git'
+    dest: ~/zwalletcli
+
+- name: Clone zboxcli
+  git:
+    repo: 'https://github.com/0chain/zboxcli.git'
+    dest: ~/zboxcli
+    force: yes
+
+- name: Install zwalletcli and zboxcli
+  make:
+    chdir: "{{ item }}"
+    target: install
+  loop:
+    - ~/zwalletcli
+    - ~/zboxcli

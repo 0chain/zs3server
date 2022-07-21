@@ -1,0 +1,39 @@
+---
+# tasks file for zwallet
+- name: Update all packages to their latest version
+  apt:
+    name: "*"
+    state: latest
+    
+- name: copy zwallet binaries
+  copy:
+    src: ~/zwalletcli/zwallet
+    dest: ~/
+    
+- name: Create directory
+  file:
+    path: $HOME/.zcn
+    state: directory
+
+- name: copy zwallet binaries
+  copy:
+    src: ~/zwalletcli/zwallet
+    dest: ~/
+    mode: u=rwx
+
+- name: create config file
+  template:
+    src: config.j2
+    dest: $HOME/.zcn/config.yaml
+
+- name: create wallet
+  command: ./zwallet faucet --methodName pour --input "new wallet"
+  when: create_wallet == "yes"
+
+- name: add token
+  command: ./zwallet faucet --methodName pour --input "{Pay day}"
+  when: add_token == "yes"
+
+- name: get balance
+  command: ./zwallet getbalance
+  when: check_balance == "yes"

@@ -1,0 +1,25 @@
+---
+# tasks file for 0fs
+- block:
+    - name: check go is installed or not
+      shell: bash -c "/usr/local/go/bin/go version"
+      register: go_version
+      args:
+        executable: /bin/bash
+  rescue:
+    - name: Download go
+      get_url:
+        url: https://go.dev/dl/go1.18.3.linux-amd64.tar.gz
+        dest: ~/
+    - name: Install Go
+      unarchive:
+        src: ~/go1.18.3.linux-amd64.tar.gz
+        dest: /usr/local
+        remote_src: yes
+
+    - name: Add another bin dir to system-wide $PATH.
+      lineinfile:
+        path: ~/.bashrc
+        line: >
+          export PATH=$PATH:/usr/local/go/bin
+        insertafter: EOF

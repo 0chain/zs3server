@@ -1,0 +1,15 @@
+---
+# tasks file for minio
+- name: copy minio build 
+  copy: 
+    src: ../files/minio
+    dest: $HOME
+    mode: u=rwx
+
+- name: deploy minio
+  command: nohup ./minio gateway zcn --configDir "{{ config_dir }}" --allocationId "{{ allocation }}" &
+  environment: 
+    - MINIO_ROOT_USER: "{{ minio_username }}"
+    - MINIO_ROOT_PASSWORD: "{{ minio_password }}"
+  async: 10000000000
+  poll: 0
