@@ -25,16 +25,16 @@ END
 
 tee -a input.yaml << END
 BlockWorker: https://hero.0chain.net/dns
-create_wallet: "no"
+create_wallet: "yes"
 check_balance: "yes"
 add_token: "yes"
 register_wallet: "yes"
-create_allocation: "no"
+create_allocation: "yes"
 lock_tokens: 0.5          # pass lock onle when create_allocation: "yes"
 minio_username: ${4}
 minio_password: ${5}
 config_dir: ${3}
-allocation: ${6}  # uncomment only when create_allocation is "no" else comment it
+# allocation: ${6}  # uncomment only when create_allocation is "no" else comment it
 END
 
 ansible-playbook main.yaml -v > minio-detailed-output
