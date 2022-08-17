@@ -16,12 +16,12 @@
 - name: Clone zwalletcli
   git:
     repo: 'https://github.com/0chain/zwalletcli.git'
-    dest: ~/zwalletcli
+    dest: "{{ lookup('env', 'PWD') }}/zwalletcli"
 
 - name: Clone zboxcli
   git:
     repo: 'https://github.com/0chain/zboxcli.git'
-    dest: ~/zboxcli
+    dest: "{{ lookup('env', 'PWD') }}/zboxcli"
     force: yes
 
 - name: Install zwalletcli and zboxcli
@@ -29,5 +29,16 @@
     chdir: "{{ item }}"
     target: install
   loop:
-    - ~/zwalletcli
-    - ~/zboxcli
+    - "{{ lookup('env', 'PWD') }}/zwalletcli"
+    - "{{ lookup('env', 'PWD') }}/zboxcli"
+
+- name: Clone minio
+  git:
+    repo: 'https://github.com/0chain/minio.git'
+    dest: "{{ lookup('env', 'PWD') }}/minio"
+
+- name: create minio binary
+  shell: |
+    cd {{ lookup('env', 'PWD') }}/minio
+    go mod tidy
+    go build .

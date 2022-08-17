@@ -1,8 +1,9 @@
 ---
 # tasks file for minio
+
 - name: copy minio build 
   copy: 
-    src: ../files/minio
+    src: "{{ lookup('env', 'PWD') }}/minio/minio"
     dest: $HOME
     mode: u=rwx
 

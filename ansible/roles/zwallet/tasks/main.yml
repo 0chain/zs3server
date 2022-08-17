@@ -5,11 +5,6 @@
     name: "*"
     state: latest
     
-- name: copy zwallet binaries
-  copy:
-    src: ~/zwalletcli/zwallet
-    dest: ~/
-    
 - name: Create directory
   file:
     path: $HOME/.zcn
@@ -17,7 +12,7 @@
 
 - name: copy zwallet binaries
   copy:
-    src: ~/zwalletcli/zwallet
+    src: "{{ lookup('env', 'PWD') }}/zwalletcli/zwallet"
     dest: ~/
     mode: u=rwx
 

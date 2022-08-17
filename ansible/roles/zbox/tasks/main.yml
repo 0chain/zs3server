@@ -2,7 +2,7 @@
 # tasks file for zbox
 - name: copy zbox binaries
   copy:
-    src: ~/zboxcli/zbox
+    src: "{{ lookup('env', 'PWD') }}/zboxcli/zbox"
     dest: ~/
     mode: u=rwx
 
