@@ -1,0 +1,11 @@
+BlockWorker: https://zs3.test.com/dns
+create_wallet: "no"
+check_balance: "yes"
+add_token: "yes"
+register_wallet: "yes"
+create_allocation: "no"
+lock_tokens: 0.5          # pass lock onle when create_allocation: "yes"
+minio_username: miniouser
+minio_password: miniopassword
+config_dir: /root/.zcn
+allocation: a0f02c0d3e196a5f79d381b5b938192cd9d9a793af49cffa1e26ac6e638c5e35   # uncomment only when create_allocation is "no" else comment it
