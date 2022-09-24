@@ -1,4 +1,4 @@
-name: build-&-publish-blobberstake-docker-image
+name: build-&-publish-minio-docker-image
 
 on:
   workflow_dispatch:
