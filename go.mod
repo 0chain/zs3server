@@ -3,7 +3,7 @@ module github.com/minio/minio
 go 1.16
 
 require (
-	cloud.google.com/go/storage v1.14.0
+	cloud.google.com/go/storage v1.22.1
 	github.com/Azure/azure-pipeline-go v0.2.2
 	github.com/Azure/azure-storage-blob-go v0.10.0
 	github.com/Shopify/sarama v1.28.0
@@ -37,11 +37,11 @@ require (
 	github.com/inconshreveable/mousetrap v1.0.0
 	github.com/jcmturner/gokrb5/v8 v8.4.2
 	github.com/json-iterator/go v1.1.12
-	github.com/klauspost/compress v1.15.6
-	github.com/klauspost/cpuid/v2 v2.0.13
+	github.com/klauspost/compress v1.15.9
+	github.com/klauspost/cpuid/v2 v2.1.1
 	github.com/klauspost/pgzip v1.2.5
 	github.com/klauspost/readahead v1.4.0
-	github.com/klauspost/reedsolomon v1.9.16
+	github.com/klauspost/reedsolomon v1.11.0
 	github.com/lib/pq v1.9.0
 	github.com/miekg/dns v1.1.43
 	github.com/minio/cli v1.22.0
@@ -83,19 +83,18 @@ require (
 	github.com/zeebo/xxh3 v1.0.0
 	go.etcd.io/etcd/api/v3 v3.5.4
 	go.etcd.io/etcd/client/v3 v3.5.4
-	go.uber.org/atomic v1.9.0
-	go.uber.org/zap v1.21.0
-	golang.org/x/crypto v0.0.0-20220525230936-793ad666bf5e
-	golang.org/x/oauth2 v0.0.0-20220411215720-9780585627b5
-	golang.org/x/sys v0.0.0-20220610221304-9f5ed59c137d
-	golang.org/x/time v0.0.0-20220609170525-579cf78fd858
-	google.golang.org/api v0.81.0
+	go.uber.org/atomic v1.10.0
+	go.uber.org/zap v1.23.0
+	golang.org/x/crypto v0.0.0-20220829220503-c86fa9a7ed90
+	golang.org/x/oauth2 v0.0.0-20220622183110-fd043fe589d2
+	golang.org/x/sys v0.0.0-20220909162455-aba9fc2a8ff2
+	golang.org/x/time v0.0.0-20220722155302-e5dcc9cfc0b9
+	google.golang.org/api v0.93.0
 	gopkg.in/yaml.v2 v2.4.0
 )
 
 require (
-	cloud.google.com/go/iam v0.3.0 // indirect
 	github.com/0chain/errors v1.0.3
-	github.com/0chain/gosdk v1.8.5
+	github.com/0chain/gosdk v1.8.10-0.20221013065231-bc842616c33e
 	github.com/nats-io/nats-streaming-server v0.21.2 // indirect
 )
