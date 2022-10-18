@@ -11,6 +11,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   build:
     name: Go ${{ matrix.go-version }} on ${{ matrix.os }} - healing
@@ -21,26 +24,16 @@ jobs:
         os: [ubuntu-latest]
     steps:
       - uses: actions/checkout@v2
-      - uses: actions/setup-go@v2
+      - uses: actions/setup-go@v3
         with:
           go-version: ${{ matrix.go-version }}
-      - uses: actions/cache@v2
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-${{ matrix.go-version }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-${{ matrix.go-version }}-go-
+          check-latest: true
       - name: Build on ${{ matrix.os }}
         if: matrix.os == 'ubuntu-latest'
         env:
           CGO_ENABLED: 0
           GO111MODULE: on
-          MINIO_KMS_KES_CERT_FILE: /home/runner/work/minio/minio/.github/workflows/root.cert
-          MINIO_KMS_KES_KEY_FILE: /home/runner/work/minio/minio/.github/workflows/root.key
-          MINIO_KMS_KES_ENDPOINT: "https://play.min.io:7373"
-          MINIO_KMS_KES_KEY_NAME: "my-minio-key"
+          MINIO_KMS_SECRET_KEY: "my-minio-key:OSMM+vkKUTCvQs9YL/CVMIMt43HFhkUpqJxTmGl6rYw="
           MINIO_KMS_AUTO_ENCRYPTION: on
         run: |
           sudo sysctl net.ipv6.conf.all.disable_ipv6=0
