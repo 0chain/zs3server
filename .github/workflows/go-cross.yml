@@ -36,4 +36,5 @@ jobs:
         run: |
           sudo sysctl net.ipv6.conf.all.disable_ipv6=0
           sudo sysctl net.ipv6.conf.default.disable_ipv6=0
-          make crosscompile
+          docker build -f Dockerfile.build_base -t zchain_build_base
+          docker run -v $PWD:/app -w /app zchain_build_base go build -v -trimpath -tags=kqueue,bn256 -gcflags "all=-N -l"
