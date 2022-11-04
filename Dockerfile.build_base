@@ -31,11 +31,11 @@ RUN cd /tmp && \
 
 # Build libzstd:
 # FIXME: Change this after https://github.com/valyala/gozstd/issues/6 is fixed.
-RUN go mod download -x github.com/valyala/gozstd
+# RUN go mod download -x github.com/valyala/gozstd
 
-RUN cp -r $GOPATH/pkg/mod/github.com/valyala/gozstd* /gozstd
+# RUN cp -r $GOPATH/pkg/mod/github.com/valyala/gozstd* /gozstd
 
-WORKDIR /gozstd
+# WORKDIR /gozstd
 
-RUN chmod -R +w .
-RUN make clean libzstd.a
+# RUN chmod -R +w .
+# RUN make clean libzstd.a
