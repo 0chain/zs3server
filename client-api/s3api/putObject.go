@@ -27,7 +27,7 @@ func putObject(bucketName string, objectName string) (PutObjectResponse, error) 
 	if err != nil {
 		return putObjectResponse, err
 	}
-	file, err := os.Open("/home/zidan/Downloads/" + objectName)
+	file, err := os.Open("/tmp/" + objectName)
 	if err != nil {
 		fmt.Println(err)
 		return putObjectResponse, err
