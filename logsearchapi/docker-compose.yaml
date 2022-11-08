@@ -10,24 +10,40 @@ services:
       - POSTGRES_PASSWORD=postgres
     ports:
       - '5432:5432'
-    volumes: 
+    volumes:
       - db:/var/lib/postgresql/data
+
   api:
-    container_name: logsearchapi
-    image: ahmedzidan204/logsearchapi:v1.0.0 #change to 0chain registry 
-    # build:
-    #   context: .
+    image: ahmedzidan204/logsearchapi:v1.0.0 #change to 0chain registry
     depends_on:
       - db
     ports:
       - 8080:8080
     environment:
       LOGSEARCH_PG_CONN_STR: "postgres://postgres:postgres@postgres-db/postgres?sslmode=disable"
-      LOGSEARCH_AUDIT_AUTH_TOKEN: 12345
-      MINIO_LOG_QUERY_AUTH_TOKEN: 12345
+      LOGSEARCH_AUDIT_AUTH_TOKEN: 1234
+      MINIO_LOG_QUERY_AUTH_TOKEN: 1234
       LOGSEARCH_DISK_CAPACITY_GB: 5
     links:
       - db
+
+  minio:
+    image: 0chaindev/zs3server:update-gosdk-fd4a580b
+    ports:
+      - 9000:9000
+      - 34871:34871
+    command: ["minio", "gateway", "zcn"]
+    environment:
+      MINIO_AUDIT_WEBHOOK_ENDPOINT: http://api:8080/api/ingest?token=1234
+      MINIO_AUDIT_WEBHOOK_AUTH_TOKEN: 1234
+      MINIO_AUDIT_WEBHOOK_ENABLE: "on"
+      MINIO_ROOT_USER: rootroor
+      MINIO_ROOT_PASSWORD: rootroot
+      MINIO_BROWSER: "OFF"
+    links:
+      - api:api
+    volumes:
+      - ~/.zcn:/root/.zcn
 volumes:
   db:
     driver: local

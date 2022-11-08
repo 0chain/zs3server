@@ -30,3 +30,10 @@ http://localhost:8080/api/query?token=12345&q=raw&timeAsc&fp=api_name:Put*&pageS
 ## API reference
 
 - API is coming from the minio operator for audit logs you can read more about it from here https://github.com/minio/operator/tree/master/logsearchapi
+
+
+## How to interact with minio Server
+
+```
+https://documenter.getpostman.com/view/1747463/SzzheJEs
+```
