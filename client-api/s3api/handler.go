@@ -4,14 +4,13 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"os"
 )
 
-const (
-	ENDPOINT        = "127.0.0.1:9000"
-	ACCESSKEY       = "rootroor"
-	SECRETACCESSKEY = "rootroot"
-	USESSL          = false
-)
+var ENDPOINT = os.Getenv("MINIO_SERVER")
+var ACCESSKEY = os.Getenv("MINIO_ROOT_USER")
+var SECRETACCESSKEY = os.Getenv("MINIO_ROOT_PASSWORD")
+var USESSL = false
 
 func Handler(w http.ResponseWriter, r *http.Request) {
 	action := r.URL.Query().Get("action")

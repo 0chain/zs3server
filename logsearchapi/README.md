@@ -37,3 +37,9 @@ http://localhost:8080/api/query?token=12345&q=raw&timeAsc&fp=api_name:Put*&pageS
 ```
 https://documenter.getpostman.com/view/1747463/SzzheJEs
 ```
+
+## Docker login
+
+```
+docker login --username myeasyploy
+```

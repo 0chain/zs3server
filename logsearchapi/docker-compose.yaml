@@ -26,9 +26,9 @@ services:
       LOGSEARCH_DISK_CAPACITY_GB: 5
     links:
       - db
-
-  minio:
+  minioserver:
     image: 0chaindev/zs3server:update-gosdk-fd4a580b
+    container_name: miniserver
     ports:
       - 9000:9000
       - 34871:34871
@@ -44,6 +44,17 @@ services:
       - api:api
     volumes:
       - ~/.zcn:/root/.zcn
+  minioclinet:
+    image: myeasyploy/minio-client:v1.0.0
+    container_name: miniclient
+    depends_on:
+      - minioserver
+    ports:
+      - 3001:3001
+    environment:
+      MINIO_SERVER: "miniserver:9000"   
+      MINIO_ROOT_USER: rootroor
+      MINIO_ROOT_PASSWORD: rootroot
 volumes:
   db:
     driver: local
