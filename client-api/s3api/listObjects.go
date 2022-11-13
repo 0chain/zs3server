@@ -13,10 +13,10 @@ type ListObjectResponse struct {
 	LastModified time.Time
 }
 
-func listobjects(bucketName string) ([]ListObjectResponse, error) {
+func listobjects(bucketName string, minioCredentials MinioCredentials) ([]ListObjectResponse, error) {
 	ctx := context.Background()
 	minioClient, err := minio.New(ENDPOINT, &minio.Options{
-		Creds:  credentials.NewStaticV4(ACCESSKEY, SECRETACCESSKEY, ""),
+		Creds:  credentials.NewStaticV4(minioCredentials.AccessKey, minioCredentials.SecretAccessKey, ""),
 		Secure: USESSL,
 	})
 

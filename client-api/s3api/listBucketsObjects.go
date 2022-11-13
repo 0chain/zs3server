@@ -19,11 +19,11 @@ type BucketObjects struct {
 	LastModified time.Time
 }
 
-func listBucketsObjects() ([]ListBucketsObject, error) {
+func listBucketsObjects(minioCredentials MinioCredentials) ([]ListBucketsObject, error) {
 	//miniClient, err := getMinioClient()
 	ctx := context.Background()
 	minioClient, err := minio.New(ENDPOINT, &minio.Options{
-		Creds:  credentials.NewStaticV4(ACCESSKEY, SECRETACCESSKEY, ""),
+		Creds:  credentials.NewStaticV4(minioCredentials.AccessKey, minioCredentials.SecretAccessKey, ""),
 		Secure: USESSL,
 	})
 	if err != nil {

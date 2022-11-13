@@ -13,10 +13,10 @@ type GetObjectResponse struct {
 	ObjectPath string
 }
 
-func getObject(bucketName string, objectName string) (GetObjectResponse, error) {
+func getObject(bucketName string, objectName string, minioCredentials MinioCredentials) (GetObjectResponse, error) {
 	ctx := context.Background()
 	minioClient, err := minio.New(ENDPOINT, &minio.Options{
-		Creds:  credentials.NewStaticV4(ACCESSKEY, SECRETACCESSKEY, ""),
+		Creds:  credentials.NewStaticV4(minioCredentials.AccessKey, minioCredentials.SecretAccessKey, ""),
 		Secure: USESSL,
 	})
 	getObjectResponse := GetObjectResponse{}

@@ -52,9 +52,7 @@ services:
     ports:
       - 3001:3001
     environment:
-      MINIO_SERVER: "miniserver:9000"   
-      MINIO_ROOT_USER: rootroor
-      MINIO_ROOT_PASSWORD: rootroot
+      MINIO_SERVER: "miniserver:9000"
 volumes:
   db:
     driver: local

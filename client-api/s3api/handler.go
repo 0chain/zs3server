@@ -2,37 +2,49 @@ package s3api
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
 )
 
 var ENDPOINT = os.Getenv("MINIO_SERVER")
-var ACCESSKEY = os.Getenv("MINIO_ROOT_USER")
-var SECRETACCESSKEY = os.Getenv("MINIO_ROOT_PASSWORD")
 var USESSL = false
+
+type MinioCredentials struct {
+	AccessKey       string `json:"accessKey"`
+	SecretAccessKey string `json:"secretAccessKey"`
+}
 
 func Handler(w http.ResponseWriter, r *http.Request) {
 	action := r.URL.Query().Get("action")
+	minioCredentials := MinioCredentials{}
+	if err := json.NewDecoder(r.Body).Decode(&minioCredentials); err != nil {
+		fmt.Println(err)
+		JSON(w, 500, nil)
+		return
+	}
 	switch action {
 	case "createBucket":
 		bucketName := r.URL.Query().Get("bucketName")
 		location := r.URL.Query().Get("location")
-		createBucket(bucketName, location)
+		createBucket(bucketName, location, minioCredentials)
 		JSON(w, 200, map[string]string{"Status": "succuess"})
 	case "listBuckets":
-		buckets, err := listBucket()
+		buckets, err := listBucket(minioCredentials)
 		if err != nil {
-			JSON(w, 500, nil)
+			JSON(w, 500, map[string]string{"error": err.Error()})
+			break
 		}
 		JSON(w, 200, buckets)
 	/*
 	   list all the buckets and their objects
 	*/
 	case "listbucketsObjest":
-		bucketObjectList, err := listBucketsObjects()
+		bucketObjectList, err := listBucketsObjects(minioCredentials)
 		if err != nil {
-			JSON(w, 500, nil)
+			JSON(w, 500, map[string]string{"error": err.Error()})
+			break
 		}
 		JSON(w, 200, bucketObjectList)
 	/*
@@ -42,18 +54,20 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	*/
 	case "listObjects":
 		bucketName := r.URL.Query().Get("bucketName")
-		bucketOjects, err := listobjects(bucketName)
+		bucketOjects, err := listobjects(bucketName, minioCredentials)
 		if err != nil {
-			JSON(w, 500, nil)
+			JSON(w, 500, map[string]string{"error": err.Error()})
+			break
 		}
 		JSON(w, 200, bucketOjects)
 
 	case "getObject":
 		bucketName := r.URL.Query().Get("bucketName")
 		objectName := r.URL.Query().Get("objectName")
-		getObjectResponse, err := getObject(bucketName, objectName)
+		getObjectResponse, err := getObject(bucketName, objectName, minioCredentials)
 		if err != nil {
-			JSON(w, 500, nil)
+			JSON(w, 500, map[string]string{"error": err.Error()})
+			break
 		}
 		JSON(w, 200, getObjectResponse)
 
@@ -66,9 +80,10 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		// 	fmt.Println(err)
 		// 	return
 		// }
-		putObjectResponse, err := putObject(bucketName, ObjectName)
+		putObjectResponse, err := putObject(bucketName, ObjectName, minioCredentials)
 		if err != nil {
-			JSON(w, 500, nil)
+			JSON(w, 500, map[string]string{"error": err.Error()})
+			break
 		}
 		JSON(w, 200, putObjectResponse)
 	default:

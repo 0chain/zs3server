@@ -16,11 +16,11 @@ type PutObjectResponse struct {
 	Size    int64
 }
 
-func putObject(bucketName string, objectName string) (PutObjectResponse, error) {
+func putObject(bucketName string, objectName string, minioCredentials MinioCredentials) (PutObjectResponse, error) {
 	ctx := context.Background()
 	putObjectResponse := PutObjectResponse{}
 	minioClient, err := minio.New(ENDPOINT, &minio.Options{
-		Creds:  credentials.NewStaticV4(ACCESSKEY, SECRETACCESSKEY, ""),
+		Creds:  credentials.NewStaticV4(minioCredentials.AccessKey, minioCredentials.SecretAccessKey, ""),
 		Secure: USESSL,
 	})
 

@@ -8,10 +8,10 @@ import (
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
-func createBucket(bucketName string, location string) {
+func createBucket(bucketName string, location string, minioCredentials MinioCredentials) {
 	ctx := context.Background()
 	minioClient, err := minio.New(ENDPOINT, &minio.Options{
-		Creds:  credentials.NewStaticV4(ACCESSKEY, SECRETACCESSKEY, ""),
+		Creds:  credentials.NewStaticV4(minioCredentials.AccessKey, minioCredentials.SecretAccessKey, ""),
 		Secure: USESSL,
 	})
 	if err != nil {
