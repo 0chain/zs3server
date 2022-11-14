@@ -1,4 +1,5 @@
 # Minio ClientAPI
+![Main-architecture](../assets/main-struture.png)
 
 This the only component that can communicate with ZS2server and it is protected using API key and API secret Key. 
 

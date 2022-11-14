@@ -4,7 +4,7 @@ User can set their access-key and secret-key before running zs3Server. So basica
 
 # Architecture 
 
-![Screenshot](./assets/main-struture.png)
+![Main-architecture](./assets/main-struture.png)
 
 There are three main components that will be installed in the customer server. 
 

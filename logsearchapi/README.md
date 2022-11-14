@@ -1,4 +1,34 @@
-# Log Search API Server for MinIO
+# LogSearch API Server for MinIO
+
+![Main-architecture](../assets/main-struture.png)
+
+LogSearch API where the Zs3sever will push the audit logs and it will be stored in postgresql
+
+This API is being used by the official Minio-operatore which will be the default API when folks use k8s based deployment.
+
+
+This Logsearch API is being compined with other 2 componets in one docker-compose file so it can be installed in the customer machine in one command.
+
+## API Reference
+
+The full API Reference is available [here](https://github.com/minio/operator/tree/master/logsearchapi).
+
+
+Example 1: Filter and export request info logs of Put operations on the bucket `photos` in last 24 hours
+
+```shell
+curl -XGET -s \
+   'http://logsearch:8080/api/query?q=reqinfo&timeAsc&export=ndjson&last=24h&fp=bucket:photos&fp=api_name:Put*' \
+   --data-urlencode 'token=xxx' > output.ndjson
+```
+
+Example 2: Filter for the first 1000 raw audit logs of decommissioning operations in the last 1000 hours
+
+```shell
+curl -XGET -s \
+   'http://logsearch:8080/api/query?q=raw&timeAsc&pageSize=1000&last=1000h&fp=api_name:*Decom*' \
+   --data-urlencode 'token=xxx'
+```
 
 ## Development setup
 
@@ -36,10 +66,4 @@ http://localhost:8080/api/query?token=12345&q=raw&timeAsc&fp=api_name:Put*&pageS
 
 ```
 https://documenter.getpostman.com/view/1747463/SzzheJEs
-```
-
-## Docker login
-
-```
-docker login --username myeasyploy
 ```
