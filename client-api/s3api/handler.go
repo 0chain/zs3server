@@ -3,6 +3,7 @@ package s3api
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -12,18 +13,15 @@ var ENDPOINT = os.Getenv("MINIO_SERVER")
 var USESSL = false
 
 type MinioCredentials struct {
-	AccessKey       string `json:"accessKey"`
-	SecretAccessKey string `json:"secretAccessKey"`
+	AccessKey       string
+	SecretAccessKey string
 }
 
 func Handler(w http.ResponseWriter, r *http.Request) {
 	action := r.URL.Query().Get("action")
 	minioCredentials := MinioCredentials{}
-	if err := json.NewDecoder(r.Body).Decode(&minioCredentials); err != nil {
-		fmt.Println(err)
-		JSON(w, 500, nil)
-		return
-	}
+	minioCredentials.AccessKey = r.URL.Query().Get("accessKey")
+	minioCredentials.SecretAccessKey = r.URL.Query().Get("secretAccessKey")
 	switch action {
 	case "createBucket":
 		bucketName := r.URL.Query().Get("bucketName")
@@ -37,9 +35,6 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 		JSON(w, 200, buckets)
-	/*
-	   list all the buckets and their objects
-	*/
 	case "listbucketsObjest":
 		bucketObjectList, err := listBucketsObjects(minioCredentials)
 		if err != nil {
@@ -47,11 +42,6 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 		JSON(w, 200, bucketObjectList)
-	/*
-		list all the objects for particular bucket
-		it requires bucketName
-		{endpoint}?action=listObjects&bucketName={$bucketname}
-	*/
 	case "listObjects":
 		bucketName := r.URL.Query().Get("bucketName")
 		bucketOjects, err := listobjects(bucketName, minioCredentials)
@@ -60,7 +50,6 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 		JSON(w, 200, bucketOjects)
-
 	case "getObject":
 		bucketName := r.URL.Query().Get("bucketName")
 		objectName := r.URL.Query().Get("objectName")
@@ -73,14 +62,33 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 
 	case "putObject":
 		bucketName := r.URL.Query().Get("bucketName")
-		ObjectName := r.URL.Query().Get("objectName")
-		// r.ParseMultipartForm(32 << 20)
-		// file, handler, err := r.FormFile("uploadfile")
-		// if err != nil {
-		// 	fmt.Println(err)
-		// 	return
-		// }
-		putObjectResponse, err := putObject(bucketName, ObjectName, minioCredentials)
+		//ObjectName := r.URL.Query().Get("objectName")
+		file, header, err := r.FormFile("file")
+
+		if err != nil {
+			log.Println("[-] Error in r.FormFile ", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprintf(w, "{'error': %s}", err)
+			return
+		}
+		defer file.Close()
+
+		out, err := os.Create("/tmp/" + header.Filename)
+		if err != nil {
+			log.Println("[-] Unable to create the file for writing. Check your write access privilege.", err)
+			fmt.Fprintf(w, "[-] Unable to create the file for writing. Check your write access privilege.", err)
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+		defer out.Close()
+
+		// write the content from POST to the file
+		_, err = io.Copy(out, file)
+		if err != nil {
+			log.Println("[-] Error copying file.", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		putObjectResponse, err := putObject(bucketName, header.Filename, minioCredentials)
 		if err != nil {
 			JSON(w, 500, map[string]string{"error": err.Error()})
 			break
