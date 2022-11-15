@@ -26,8 +26,13 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	case "createBucket":
 		bucketName := r.URL.Query().Get("bucketName")
 		location := r.URL.Query().Get("location")
-		createBucket(bucketName, location, minioCredentials)
-		JSON(w, 200, map[string]string{"Status": "succuess"})
+		CreateBucketResponse, err := createBucket(bucketName, location, minioCredentials)
+		if err != nil {
+			JSON(w, 500, map[string]string{"error": err.Error()})
+			break
+		}
+		JSON(w, 200, CreateBucketResponse)
+
 	case "listBuckets":
 		buckets, err := listBucket(minioCredentials)
 		if err != nil {
@@ -35,6 +40,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 		JSON(w, 200, buckets)
+
 	case "listbucketsObjest":
 		bucketObjectList, err := listBucketsObjects(minioCredentials)
 		if err != nil {
@@ -42,6 +48,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 		JSON(w, 200, bucketObjectList)
+
 	case "listObjects":
 		bucketName := r.URL.Query().Get("bucketName")
 		bucketOjects, err := listobjects(bucketName, minioCredentials)
@@ -50,6 +57,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 		JSON(w, 200, bucketOjects)
+
 	case "getObject":
 		bucketName := r.URL.Query().Get("bucketName")
 		objectName := r.URL.Query().Get("objectName")
@@ -62,7 +70,6 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 
 	case "putObject":
 		bucketName := r.URL.Query().Get("bucketName")
-		//ObjectName := r.URL.Query().Get("objectName")
 		file, header, err := r.FormFile("file")
 
 		if err != nil {

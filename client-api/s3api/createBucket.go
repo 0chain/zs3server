@@ -8,14 +8,21 @@ import (
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
-func createBucket(bucketName string, location string, minioCredentials MinioCredentials) {
+type CreateBucketResponse struct {
+	Success    bool
+	Bucketname string
+}
+
+func createBucket(bucketName string, location string, minioCredentials MinioCredentials) (CreateBucketResponse, error) {
 	ctx := context.Background()
 	minioClient, err := minio.New(ENDPOINT, &minio.Options{
 		Creds:  credentials.NewStaticV4(minioCredentials.AccessKey, minioCredentials.SecretAccessKey, ""),
 		Secure: USESSL,
 	})
+	createBucketResponse := CreateBucketResponse{}
 	if err != nil {
 		log.Fatalln(err)
+		return createBucketResponse, err
 	}
 
 	err = minioClient.MakeBucket(ctx, bucketName, minio.MakeBucketOptions{Region: location})
@@ -26,8 +33,11 @@ func createBucket(bucketName string, location string, minioCredentials MinioCred
 			log.Printf("We already own %s\n", bucketName)
 		} else {
 			log.Fatalln(err)
+			return createBucketResponse, err
 		}
-	} else {
-		log.Printf("Successfully created %s\n", bucketName)
 	}
+	createBucketResponse.Bucketname = bucketName
+	createBucketResponse.Success = true
+
+	return createBucketResponse, nil
 }
