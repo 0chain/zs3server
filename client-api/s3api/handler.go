@@ -41,7 +41,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		}
 		JSON(w, 200, buckets)
 
-	case "listbucketsObjest":
+	case "listBucketsObjects":
 		bucketObjectList, err := listBucketsObjects(minioCredentials)
 		if err != nil {
 			JSON(w, 500, map[string]string{"error": err.Error()})
@@ -101,6 +101,17 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 		JSON(w, 200, putObjectResponse)
+
+	case "removeObject":
+		bucketName := r.URL.Query().Get("bucketName")
+		objectName := r.URL.Query().Get("objectName")
+		removeObjectResponse, err := removeObject(bucketName, objectName, minioCredentials)
+		if err != nil {
+			JSON(w, 500, map[string]string{"error": err.Error()})
+			break
+		}
+		JSON(w, 200, removeObjectResponse)
+
 	default:
 		JSON(w, 500, map[string]string{"message": "feature not avaliable"})
 	}
