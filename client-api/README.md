@@ -5,6 +5,8 @@ This the only component that can communicate with ZS2server and it is protected 
 
 It will be used also by the UI component to do al the required function like create bucket, delete bucket and put object etc ....
 
+If you are running the components using ``docker-compose`` the client API will be running on port ``3001`` so to access it from your local you can visite ``localhost:3001``
+
 This component is also based on the minio Client SDK you can find it [here](https://github.com/minio/minio-go)
 
 # How to use it?
@@ -17,8 +19,12 @@ There are a couple of function that has been already implementd but we can add m
 4. listObjects
 5. getObject
 6. putObject
+7. deleteObject
 
+There are two query parameters are needed for any api call
 
+* AccessKey: same as the Zs3server root username
+* SecretAccessKey: same as the Zs3server root password
 ## CreateBucket
 
 This function will create a bucket for you and this bucket will be stored in 0chain allocation, it should be unique name
@@ -26,20 +32,21 @@ This function will create a bucket for you and this bucket will be stored in 0ch
 Example
 
 ```shell
-curl -X GET -i 'http://localhost:3001/?action=CreateBucket' --data '{
-"accessKey" : "rootroor",
-"secretAccessKey" : "rootroot"
-}'
+curl -X GET -i 'http://localhost:3001/?action=createBucket&bucketName=${bucketname}'
 ```
 Param:
 
 * Action: is what are you trying to do
 * bucketName: is the desired bucket name should be unique
 
-Data:
+Output:
 
-* AccessKey: same as the Zs3server root username
-* SecretAccessKey: same as the Zs3server root password
+```
+{
+  "Success": true,
+  "Bucketname": "createdBucketName"
+}
+```
 
 ## listBuckets
 
@@ -48,20 +55,34 @@ This function to list all the avaliable buckets
 Example:
 
 ```shell
-curl -X GET -i 'http://localhost:3001/?action=listBuckets' --data '{
-"accessKey" : "rootroor",
-"secretAccessKey" : "rootroot"
-}'
+curl -X GET -i 'http://localhost:3001/?action=listBuckets'
 ```
 
 Param:
 
 * ``action`` : "listnuckets"
 
-Data:
+Output:
+* Array of buckets 
 
-* AccessKey: same as the Zs3server root username
-* SecretAccessKey: same as the Zs3server root password
+Example:
+
+```
+[
+  {
+    "BucketName": "root",
+    "CreationDate": "2022-11-15T14:14:31Z"
+  },
+  {
+    "BucketName": "test-zidan",
+    "CreationDate": "2022-11-15T14:14:31Z"
+  },
+  {
+    "BucketName": "test-zidan2",
+    "CreationDate": "2022-11-17T07:57:17Z"
+  }
+]
+```
 
 ## listbucketsObjest
 
@@ -71,20 +92,37 @@ This function will list all the bucket with it's objects
 Example:
 
 ```shell
-curl -X GET -i 'http://localhost:3001/?action=listbucketsObjest' --data '{
-"accessKey" : "rootroor",
-"secretAccessKey" : "rootroot"
-}'
+curl -X GET -i 'http://localhost:3001/?action=listBucketsObjects'
 ```
 
 Param:
 
 * ``action`` : "listbucketsObjest"
 
-Data:
+Output:
 
-* AccessKey: same as the Zs3server root username
-* SecretAccessKey: same as the Zs3server root password
+* array of buckets of objects
+
+Example:
+```
+[
+  {
+    "BucketName": "test-zidan",
+    "CreationTime": "2022-11-15T14:14:31Z",
+    "BucketObjects": [
+      {
+        "Name": "OLXOTQAI.pdf",
+        "LastModified": "2022-11-16T01:07:47Z"
+      }
+    ]
+  },
+  {
+    "BucketName": "test-zidan2",
+    "CreationTime": "2022-11-17T07:57:17Z",
+    "BucketObjects": []
+  }
+]
+```
 
 
 ## listObjects
@@ -94,10 +132,7 @@ This function will list all the objects for specific bucket
 Example 
 
 ```shell
-curl -X GET -i 'http://localhost:3001/?action=listObjects&bucketName=mybucketname' --data '{
-"accessKey" : "rootroor",
-"secretAccessKey" : "rootroot"
-}'
+curl -X GET -i 'http://localhost:3001/?action=listObjects&bucketName=mybucketname'
 ```
 
 Param:
@@ -105,10 +140,19 @@ Param:
 * ``action`` : "listbucketsObjest"
 * ``bucketName``: the bucket name that you want to list its objects
 
-Data:
+Output:
 
-* AccessKey: same as the Zs3server root username
-* SecretAccessKey: same as the Zs3server root password
+* Array of Objects
+
+Example
+```
+[
+  {
+    "Name": "OLXOTQAI.pdf",
+    "LastModified": "2022-11-16T01:07:47Z"
+  }
+]
+```
 
 ## getObject
 
@@ -117,10 +161,7 @@ Returns a stream of the object data, this will be used to store the image then t
 Example 
 
 ```shell
-curl -X GET -i 'http://localhost:3001/?action=getObject&bucketName=mybucketname&objectName=myobject' --data '{
-"accessKey" : "rootroor",
-"secretAccessKey" : "rootroot"
-}'
+curl -X GET -i 'http://localhost:3001/?action=getObject&bucketName=mybucketname&objectName=myobject'
 ```
 
 Param:
@@ -128,11 +169,6 @@ Param:
 * ``action`` : "listbucketsObjest"
 * ``bucketName``: the bucket name that you want to list its objects
 * ``objectName``: the object name that you want to download it.
-
-Data:
-
-* AccessKey: same as the Zs3server root username
-* SecretAccessKey: same as the Zs3server root password
 
 ## putObject
 
@@ -141,22 +177,41 @@ This function is to upload object to zs3server
 Example:
 
 ```shell 
-curl -X GET -i 'http://localhost:3001/?action=putObject&bucketName=mybucketname&objectName=myobject' --data '{
-"accessKey" : "rootroor",
-"secretAccessKey" : "rootroot"
-}'
+curl -X GET -i 'http://localhost:3001/?action=putObject&bucketName=mybucketname'
+
+File: from form
 ```
 
 Param:
 
 * ``action`` : "listbucketsObjest"
 * ``bucketName``: the bucket name that you want to list its objects
-* ``objectName``: the object name that you want to download it.
 
-Data:
+Form:
 
-* AccessKey: same as the Zs3server root username
-* SecretAccessKey: same as the Zs3server root password
+* this API require a form filed with name ``file`` so it can upload this file to zs3server 
+
+## removeObject
+
+this API is to remove object from zs3server
 
 
-Note that this function later will change to ``POST`` request and it will work based on the upload form from The UI. 
+```shell 
+curl -X GET -i 'http://localhost:3001/?action=removeObject&bucketName=mybucketname&objectName=${objectname}'
+
+```
+
+Param:
+
+* ``action`` : "listbucketsObjest"
+* ``bucketName``: the bucket name that you want to list its objects
+* ``objectName``: the object name that you want to remove it.
+
+Output:
+
+```
+{
+  "Success": true,
+  "ObjectName": "ObjectName"
+}
+```

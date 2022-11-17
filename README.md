@@ -29,6 +29,23 @@ export MINIO_ROOT_PASSWORD=someminiopassword
 ./zs3server gateway zcn --configDir /path/to/config/dir
 > Note: allocation and configDir both are optional. By default configDir takes ~/.zcn as configDir and if allocation is not provided in command then it will look for allocation.txt file in configDir directory.
 ```
+## Run using docker 
+
+To build and run minio sevrer component in any machine you will need first to install docker and docker-compose 
+
+1. Make sure docker and docker-compose in your machine
+
+2. Make sure you have the allocation ready in the default folder ``~/.zcn``
+
+3. Run docker-compose command like the following
+
+```
+docker-compose up -d
+```
+
+4. Now you can interact with the clint API follow this [doc](/client-api/README.md)
+
+5. You can also interact with the logsearch API by following this [doc](/logsearchapi/README.md)
 
 ## Test using MinIO Client `mc`
 
