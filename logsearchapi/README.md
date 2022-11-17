@@ -9,6 +9,21 @@ This API is being used by the official Minio-operatore which will be the default
 
 This Logsearch API is being compined with other 2 componets in one docker-compose file so it can be installed in the customer machine in one command.
 
+## Steps to build the logsearch API
+
+We have built this API from the latest vesion of the official github repo you can find it [here](https://github.com/minio/operator/tree/master/logsearchapi) although the dockerfile you will find it here. 
+
+1. Download the logsearch api from the main repo [here](https://github.com/minio/operator/tree/master/logsearchapi)
+
+2. Attached the docker file from [here](./Dockerfile)
+
+3- Build the logsearch API using this command
+```
+docker build -t logsearchapi .
+``
+
+4- Push the docker image to any docker registery and start using it from docker-compose file
+
 ## API Reference
 
 The full API Reference is available [here](https://github.com/minio/operator/tree/master/logsearchapi).
