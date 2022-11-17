@@ -67,9 +67,3 @@ http://localhost:8080/api/query?token=12345&q=raw&timeAsc&fp=api_name:Put*&pageS
 ```
 https://documenter.getpostman.com/view/1747463/SzzheJEs
 ```
-
-## To Do
-- Write doc for logsearch api
-- How to run the product using docker-compose
-- How to access the url for an object
-- Add more capabilities to the minioclient API
