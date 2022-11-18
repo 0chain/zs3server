@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 )
 
 var ENDPOINT = os.Getenv("MINIO_SERVER")
@@ -66,6 +67,9 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			JSON(w, 500, map[string]string{"error": err.Error()})
 			break
 		}
+		w.Header().Set("Content-Disposition", "attachment; filename="+strconv.Quote(objectName))
+		w.Header().Set("Content-Type", "application/octet-stream")
+		http.ServeFile(w, r, getObjectResponse.ObjectPath)
 		JSON(w, 200, getObjectResponse)
 
 	case "putObject":
