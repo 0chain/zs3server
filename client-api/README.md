@@ -170,6 +170,10 @@ Param:
 * ``bucketName``: the bucket name that you want to list its objects
 * ``objectName``: the object name that you want to download it.
 
+Output:
+
+* Binary file will downloaded.
+
 ## putObject
 
 This function is to upload object to zs3server 
