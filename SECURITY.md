@@ -1,41 +1,51 @@
-# Security Policy
+# Introduction
+This module provides an s3-compatible API to 0chain allocation using minio-gateway Interface.
+User can set their access-key and secret-key before running zs3Server. So basically, zs3server is an http server that provides s3 compatible api so that clients that are already s3 compatible can easily communicates with 0chain allocationcan. Its just a plug and play.
 
-## Supported Versions
+# Architecture 
 
-We always provide security updates for the [latest release](https://github.com/minio/minio/releases/latest).
-Whenever there is a security update you just need to upgrade to the latest version.
+![Main-architecture](./assets/main-struture.png)
 
-## Reporting a Vulnerability
+There are three main components that will be installed in the customer server. 
 
-All security bugs in [minio/minio](https://github,com/minio/minio) (or other minio/* repositories)
-should be reported by email to security@min.io. Your email will be acknowledged within 48 hours,
-and you'll receive a more detailed response to your email within 72 hours indicating the next steps
-in handling your report.
+1. ZS3Server is the main component that will communicate directly with 0chain allocation 
 
-Please, provide a detailed explanation of the issue. In particular, outline the type of the security
-issue (DoS, authentication bypass, information disclose, ...) and the assumptions you're making (e.g. do
-you need access credentials for a successful exploit).
+2. [LogSereach](/logsearchapi/README.md) API is the log component which will store the audit log from S3 server and It will be consumed using ZS3 API
 
-If you have not received a reply to your email within 48 hours or you have not heard from the security team
-for the past five days please contact the security team directly:
-   - Primary security coordinator: aead@min.io
-   - Secondary coordinator: harsha@min.io
-   - If you receive no response: dev@min.io
+3. [MinioClient](/client-api/README.md) is the component that will communicate directly to the zs3server and it is protected using access and secret key. 
 
-### Disclosure Process
 
-MinIO uses the following disclosure process:
+# Run zs3-server
+As a prerequisite to run MinIO ZCN gateway, you need 0chain credentials; wallet.json, config.yaml and allocation.txt.
 
-1. Once the security report is received one member of the security team tries to verify and reproduce
-   the issue and determines the impact it has.
-2. A member of the security team will respond and either confirm or reject the security report.
-   If the report is rejected the response explains why.
-3. Code is audited to find any potential similar problems.
-4. Fixes are prepared for the latest release.
-5. On the date that the fixes are applied a security advisory will be published on https://blog.min.io.
-   Please inform us in your report email whether MinIO should mention your contribution w.r.t. fixing
-   the security issue. By default MinIO will **not** publish this information to protect your privacy.
+## Run using docker 
 
-This process can take some time, especially when coordination is required with maintainers of other projects.
-Every effort will be made to handle the bug in as timely a manner as possible, however it's important that we
-follow the process described above to ensure that disclosures are handled consistently.
+To build and run minio sevrer component in any machine you will need first to install docker and docker-compose 
+
+1. Make sure docker and docker-compose in your machine
+
+2. Make sure you have the allocation ready in the default folder ``~/.zcn``
+
+3. Run docker-compose command like the following
+
+```
+docker-compose up -d
+```
+
+4. Now you can interact with the clint API follow this [doc](/client-api/README.md)
+
+5. You can also interact with the logsearch API by following this [doc](/logsearchapi/README.md)
+
+## Test using MinIO Client `mc`
+
+`mc` provides a modern alternative to UNIX commands such as ls, cat, cp, mirror, diff etc. It supports filesystems and Amazon S3 compatible cloud storage services.
+
+### Configure `mc`
+```
+mc config host add zcn http://localhost:9000 miniouser miniopassword
+mc ls zcn //List your buckets
+
+[2017-02-22 01:50:43 PST]     0B user/
+[2017-02-26 21:43:51 PST]     0B datasets/
+[2017-02-26 22:10:11 PST]     0B assets/
+```

@@ -1,17 +1,17 @@
 # Minio ClientAPI
 ![Main-architecture](../assets/main-struture.png)
 
-This the only component that can communicate with ZS2server and it is protected using API key and API secret Key. 
+This is the only component that can communicate with ZS2server and it is protected using the API key and API secret Key. 
 
-It will be used also by the UI component to do al the required function like create bucket, delete bucket and put object etc ....
+It will be used also by the UI component to do al the required function like creating a bucket, deleting a bucket and putting an object, etc ....
 
-If you are running the components using ``docker-compose`` the client API will be running on port ``3001`` so to access it from your local you can visite ``localhost:3001``
+If you are running the components using ``docker-compose`` the client API will be running on port ``3001`` so to access it from your local you can visit ``localhost:3001``
 
 This component is also based on the minio Client SDK you can find it [here](https://github.com/minio/minio-go)
 
 # How to use it?
 
-There are a couple of function that has been already implementd but we can add more.
+There is a couple of function that has been already implemented but we can add more.
 
 1. CreateBucket
 2. listBuckets
@@ -36,7 +36,7 @@ curl -X GET -i 'http://localhost:3001/?action=createBucket&bucketName=${bucketna
 ```
 Param:
 
-* Action: is what are you trying to do
+* Action: "createBucket"
 * bucketName: is the desired bucket name should be unique
 
 Output:
@@ -60,7 +60,7 @@ curl -X GET -i 'http://localhost:3001/?action=listBuckets'
 
 Param:
 
-* ``action`` : "listnuckets"
+* ``action`` : "listBuckets"
 
 Output:
 * Array of buckets 
@@ -97,7 +97,7 @@ curl -X GET -i 'http://localhost:3001/?action=listBucketsObjects'
 
 Param:
 
-* ``action`` : "listbucketsObjest"
+* ``action`` : "listBucketsObjects"
 
 Output:
 
@@ -137,7 +137,7 @@ curl -X GET -i 'http://localhost:3001/?action=listObjects&bucketName=mybucketnam
 
 Param:
 
-* ``action`` : "listbucketsObjest"
+* ``action`` : "listObjects"
 * ``bucketName``: the bucket name that you want to list its objects
 
 Output:
@@ -166,7 +166,7 @@ curl -X GET -i 'http://localhost:3001/?action=getObject&bucketName=mybucketname&
 
 Param:
 
-* ``action`` : "listbucketsObjest"
+* ``action`` : "getObject"
 * ``bucketName``: the bucket name that you want to list its objects
 * ``objectName``: the object name that you want to download it.
 
@@ -184,7 +184,7 @@ File: from form
 
 Param:
 
-* ``action`` : "listbucketsObjest"
+* ``action`` : "putObject"
 * ``bucketName``: the bucket name that you want to list its objects
 
 Form:
@@ -193,7 +193,7 @@ Form:
 
 ## removeObject
 
-this API is to remove object from zs3server
+this API is to remove an object from zs3server
 
 
 ```shell 
@@ -203,7 +203,7 @@ curl -X GET -i 'http://localhost:3001/?action=removeObject&bucketName=mybucketna
 
 Param:
 
-* ``action`` : "listbucketsObjest"
+* ``action`` : "removeObject"
 * ``bucketName``: the bucket name that you want to list its objects
 * ``objectName``: the object name that you want to remove it.
 
