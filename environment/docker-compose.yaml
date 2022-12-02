@@ -13,8 +13,8 @@ services:
     volumes:
       - db:/var/lib/postgresql/data
 
-  api:
-    image: ahmedzidan204/logsearchapi:v1.0.0 #change to 0chain registry
+  logsearchapi:
+    image: 0chaindev/blimp-logsearchapi:v0.0.1
     depends_on:
       - db
     ports:
@@ -28,31 +28,30 @@ services:
       - db
   minioserver:
     image: 0chaindev/zs3server:update-gosdk-fd4a580b
-    container_name: miniserver
+    container_name: minioserver
     ports:
       - 9000:9000
-      - 34871:34871
     command: ["minio", "gateway", "zcn"]
     environment:
-      MINIO_AUDIT_WEBHOOK_ENDPOINT: http://api:8080/api/ingest?token=1234
+      MINIO_AUDIT_WEBHOOK_ENDPOINT: http://logsearchapi:8080/api/ingest?token=1234
       MINIO_AUDIT_WEBHOOK_AUTH_TOKEN: 1234
       MINIO_AUDIT_WEBHOOK_ENABLE: "on"
       MINIO_ROOT_USER: rootroot
       MINIO_ROOT_PASSWORD: rootroot
       MINIO_BROWSER: "OFF"
     links:
-      - api:api
+      - logsearchapi:logsearchapi
     volumes:
       - ~/.zcn:/root/.zcn
   minioclinet:
-    image: myeasyploy/minio-client:v1.0.0
-    container_name: miniclient
+    image: 0chaindev/blimp-clientapi:v0.0.1
+    container_name: minioclient
     depends_on:
       - minioserver
     ports:
       - 3001:3001
     environment:
-      MINIO_SERVER: "miniserver:9000"
+      MINIO_SERVER: "minioserver:9000"
 volumes:
   db:
     driver: local
