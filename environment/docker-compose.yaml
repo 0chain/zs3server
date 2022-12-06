@@ -27,7 +27,7 @@ services:
     links:
       - db
   minioserver:
-    image: 0chaindev/zs3server:update-gosdk-fd4a580b
+    image: 0chaindev/blimp-minioserver:v0.0.1
     container_name: minioserver
     ports:
       - 9000:9000
