@@ -116,6 +116,27 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		}
 		JSON(w, 200, removeObjectResponse)
 
+	case "copyObject":
+		sourceBucket := r.URL.Query().Get("sourceBucket")
+		desBucket := r.URL.Query().Get("desBucket")
+		sourceObject := r.URL.Query().Get("sourceObject")
+		desObject := r.URL.Query().Get("desObject")
+		copyObjectResponse, err := copyObject(sourceBucket, desBucket, sourceObject, desObject, minioCredentials)
+		if err != nil {
+			JSON(w, 500, map[string]string{"error": err.Error()})
+			break
+		}
+		JSON(w, 200, copyObjectResponse)
+
+	case "statObject":
+		bucketName := r.URL.Query().Get("bucketName")
+		objectName := r.URL.Query().Get("objectName")
+		statObjectResponse, err := statObject(bucketName, objectName, minioCredentials)
+		if err != nil {
+			JSON(w, 500, map[string]string{"error": err.Error()})
+			break
+		}
+		JSON(w, 200, statObjectResponse)
 	default:
 		JSON(w, 500, map[string]string{"message": "feature not avaliable"})
 	}
@@ -125,7 +146,6 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 func JSON(w http.ResponseWriter, code int, payload interface{}) {
 	response, err := json.Marshal(payload)
 	if err != nil {
-		//log.Fatalln(err)
 		w.WriteHeader(500)
 		return
 	}
