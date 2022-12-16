@@ -125,7 +125,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 func JSON(w http.ResponseWriter, code int, payload interface{}) {
 	response, err := json.Marshal(payload)
 	if err != nil {
-		log.Fatalln(err)
+		//log.Fatalln(err)
 		w.WriteHeader(500)
 		return
 	}

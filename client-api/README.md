@@ -181,9 +181,8 @@ This function is to upload object to zs3server
 Example:
 
 ```shell 
-curl -X GET -i 'http://localhost:3001/?action=putObject&bucketName=mybucketname'
+curl -X GET -F 'file=@path-to-file' http://localhost:3001/?action=putObject\&accessKey=rootroot\&secretAccessKey=rootroot\&bucketName=test2
 
-File: from form
 ```
 
 Param:

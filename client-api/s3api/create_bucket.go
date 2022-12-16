@@ -21,7 +21,7 @@ func createBucket(bucketName string, location string, minioCredentials MinioCred
 	})
 	createBucketResponse := CreateBucketResponse{}
 	if err != nil {
-		log.Fatalln(err)
+		//log.Fatalln(err)
 		return createBucketResponse, err
 	}
 
