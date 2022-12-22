@@ -17,7 +17,6 @@ We have built this API from the latest vesion of the official github repo you ca
 
 2. Attached the docker file from [here](./Dockerfile)
 
-3- Build the logsearch API using this command
 ```
 docker build -t logsearchapi .
 ``
@@ -29,20 +28,10 @@ docker build -t logsearchapi .
 The full API Reference is available [here](https://github.com/minio/operator/tree/master/logsearchapi).
 
 
-Example 1: Filter and export request info logs of Put operations on the bucket `photos` in last 24 hours
+Example 1: Filter for the first 1000 raw audit logs of decommissioning operations in the last 1000 hours
 
 ```shell
-curl -XGET -s \
-   'http://logsearch:8080/api/query?q=reqinfo&timeAsc&export=ndjson&last=24h&fp=bucket:photos&fp=api_name:Put*' \
-   --data-urlencode 'token=xxx' > output.ndjson
-```
-
-Example 2: Filter for the first 1000 raw audit logs of decommissioning operations in the last 1000 hours
-
-```shell
-curl -XGET -s \
-   'http://logsearch:8080/api/query?q=raw&timeAsc&pageSize=1000&last=1000h&fp=api_name:*Decom*' \
-   --data-urlencode 'token=xxx'
+http://localhost:8080/api/query?token=12345&q=raw&timeDesc&fp=api_name:Put*&pageSize=1000&last=1000h
 ```
 
 ## Development setup
@@ -68,13 +57,9 @@ export MINIO_BROWSER=OFF
 ./minio gateway zcn
 ```
 
-## sample api call to get the audit log.
 ```
 http://localhost:8080/api/query?token=12345&q=raw&timeAsc&fp=api_name:Put*&pageSize=1000&last=1000h
 ```
-## API reference
-
-- API is coming from the minio operator for audit logs you can read more about it from here https://github.com/minio/operator/tree/master/logsearchapi
 
 
 ## How to interact with minio Server
