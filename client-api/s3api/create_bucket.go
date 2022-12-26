@@ -31,8 +31,9 @@ func createBucket(bucketName string, location string, minioCredentials MinioCred
 		exists, errBucketExists := minioClient.BucketExists(ctx, bucketName)
 		if errBucketExists == nil && exists {
 			log.Printf("We already own %s\n", bucketName)
+			return createBucketResponse, nil
 		} else {
-			log.Fatalln(err)
+			//log.Fatalln(err)
 			return createBucketResponse, err
 		}
 	}
