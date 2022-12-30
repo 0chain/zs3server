@@ -16,6 +16,10 @@ func addUser(minioCredentials MinioCredentials, accessKey string, secretKey stri
 	if err != nil {
 		return nil, err
 	}
+	err = madmClnt.SetPolicy(context.Background(), "readwrite", accessKey, false)
+	if err != nil {
+		return nil, err
+	}
 	addUserResponse := AddUserResponse{}
 	addUserResponse.Success = true
 	addUserResponse.AccessKey = accessKey
