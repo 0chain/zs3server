@@ -39,6 +39,7 @@ services:
       MINIO_ROOT_USER: rootroot
       MINIO_ROOT_PASSWORD: rootroot
       MINIO_BROWSER: "OFF"
+      MINIO_ETCD_ENDPOINTS: http://etcd:2379
     links:
       - logsearchapi:logsearchapi
     volumes:
@@ -52,6 +53,15 @@ services:
       - 3001:3001
     environment:
       MINIO_SERVER: "minioserver:9000"
+  Etcd:
+    image: 'bitnami/etcd:latest'
+    container_name: etcd
+    environment:
+      - ALLOW_NONE_AUTHENTICATION=yes
+      - ETCD_ADVERTISE_CLIENT_URLS=http://etcd:2379
+    ports:
+      - 2379:2379
+      - 2380:2380      
 volumes:
   db:
     driver: local

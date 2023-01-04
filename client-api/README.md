@@ -218,3 +218,132 @@ Output:
   "ObjectName": "ObjectName"
 }
 ```
+
+## Admin APIs 
+
+Admin apis are there to manage the users access, we are using the madmin-go sdk https://github.com/minio/madmin-go#AddUser
+
+## What user can do
+User can use this admin api to do couple of functionalities.
+
+1. listUsers
+2. addUser
+3. removeUser
+4. setUser
+
+### ListUsers 
+
+To list all the users that has been created by the user, this doesn't consider the root user.
+
+API parameter:
+
+- ``action``: the action is case senstive and it should be ``listUsers``
+
+- ``accessKey`` the root access key to be able to call the API
+
+- ``secretAccessKey``: The root secret access key to b able to call the API.
+
+API Response:
+
+- ``Success``: if the API call success it will return ``200`` with a list of users
+```json 
+[
+  {
+    SecretKey: "" #user secret key
+    AccessKey: "" #user access key
+    Status: "" #user status enabled or disabled
+    PolicyName: "" #policy name that has assigned to the user by default it is readwrite
+    MemberOf: "" # member of which group if there is any
+    UpdatedAt; "" # when the user has been updated
+  }
+]
+```
+
+- ``fail``; if the API fail will return ``500`` with the error message
+
+Example:
+
+```bash
+curl -X GET -i http://localhost:3001/admin/?action=listUsers&accessKey=rootroot&secretAccessKey=rootroot
+```
+
+### addUser API
+
+This API is implemented to add a new user by default this user will have ``readwrite`` access which will allow him to call any API except the admin APIs
+
+
+API parameter:
+
+- ``action``: the action is case senstive and it should be ``addUser``
+
+- ``accessKey`` the root access key to be able to call the API
+
+- ``secretAccessKey``: The root secret access key to b able to call the API.
+
+- ``userAccessKey``: The new user access key that we want to add it.
+
+- ``userSecretKey``: The new user secret key that we want to add it. 
+
+API Response:
+
+- ``Success``: If the request has been successed you will get the following response
+
+```bash
+{
+  "Success":true, # status success true
+  "AccessKey":"rootroot3" # the user access key that has been created
+}
+```
+
+- ``Fail``; if the request fail you will get the following response 
+```bash
+{
+  "error":"" #error message
+}
+```
+
+Example:
+```bash
+curl -X GET -i http://localhost:3001/admin/?action=addUser&accessKey=rootroot&secretAccessKey=rootroot&userAccessKey=rootroot3&userSecretKey=rootroot3
+```
+
+## RemoveUser API
+
+This API has been implemented to remove the user credentials from minio
+
+API Param;
+
+API parameter:
+
+- ``action``: the action is case senstive and it should be ``removeUser``
+
+- ``accessKey`` the root access key to be able to call the API
+
+- ``secretAccessKey``: The root secret access key to b able to call the API.
+
+- ``userAccessKey``: The user access key that we want to remove it.
+
+API Response:
+
+- ``Success``: if the request has been success you will get the following response 
+```json
+{"Success":true}
+```
+- ``Fail``; if the request fail you will get the following response 
+```bash
+{
+  "error":"" #error message
+}
+```
+
+Example:
+
+```bash
+curl -X GET -i http://localhost:3001/admin/?action=removeUser&accessKey=rootroot&secretAccessKey=rootroot&userAccessKey=rootroot3
+```
+
+## SetUser API
+
+his API has been implemented to update user ``secretKey`` and|or the user ``status`` 
+
+
