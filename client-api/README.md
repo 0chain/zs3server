@@ -311,8 +311,6 @@ curl -X GET -i http://localhost:3001/admin/?action=addUser&accessKey=rootroot&se
 
 This API has been implemented to remove the user credentials from minio
 
-API Param;
-
 API parameter:
 
 - ``action``: the action is case senstive and it should be ``removeUser``
@@ -344,6 +342,35 @@ curl -X GET -i http://localhost:3001/admin/?action=removeUser&accessKey=rootroot
 
 ## SetUser API
 
-his API has been implemented to update user ``secretKey`` and|or the user ``status`` 
+This API has been implemented to update user ``secretKey`` and|or the user ``status`` (enabled, disabled) 
 
+API parameter:
 
+- ``action``: the action is case senstive and it should be ``setUser``
+
+- ``accessKey`` the root access key to be able to call the API
+
+- ``secretAccessKey``: The root secret access key to b able to call the API.
+
+- ``userAccessKey``: The user access key that we want to change.
+- ``userSecretKey``: The user secrey key that we want to change.
+- ``status``: the user status that we want to change it, it accept one of these values (enabled, disabled)
+
+API Response:
+
+- ``Success``: if the request has been success you will get the following response 
+```json
+{"Success":true}
+```
+- ``Fail``; if the request fail you will get the following response 
+```bash
+{
+  "error":"" #error message
+}
+```
+
+Example:
+
+```bash
+curl -X GET -i http://localhost:3001/admin/?action=setUser&accessKey=rootroot&secretAccessKey=rootroot&userAccessKey=rootroot3&userSecretKey=rootroot3&status=disabled
+```
