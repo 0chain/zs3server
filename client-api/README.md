@@ -231,7 +231,7 @@ User can use this admin api to do couple of functionalities.
 3. removeUser
 4. setUser
 
-### ListUsers 
+### ListUsers
 
 To list all the users that has been created by the user, this doesn't consider the root user.
 
