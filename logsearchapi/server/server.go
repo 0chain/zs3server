@@ -25,6 +25,8 @@ import (
 	"os/signal"
 	"strconv"
 	"syscall"
+
+	"github.com/rs/cors"
 )
 
 var (
@@ -115,9 +117,16 @@ func NewLogSearch(pgConnStr, auditAuthToken string, queryAuthToken string, diskC
 
 // StartServer starts the webserver.
 func (ls *LogSearch) StartServer() {
+	c := cors.New(cors.Options{
+		AllowedOrigins:   []string{"*"},
+		AllowCredentials: true,
+		AllowedHeaders:   []string{"Authorization", "Content-Type", "Access-Control-Allow-Origin"},
+		AllowedMethods:   []string{"GET", "UPDATE", "PUT", "POST", "DELETE"},
+		Debug:            false,
+	})
 	s := &http.Server{
 		Addr:    ":8080",
-		Handler: ls,
+		Handler: c.Handler(ls),
 	}
 
 	go func() {

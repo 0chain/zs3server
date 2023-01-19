@@ -14,7 +14,8 @@ services:
       - db:/var/lib/postgresql/data
 
   logsearchapi:
-    image: 0chaindev/blimp-logsearchapi:v0.0.1
+    build: ../logsearchapi
+    container_name: logsearchapi
     depends_on:
       - db
     ports:
