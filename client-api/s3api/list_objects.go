@@ -2,6 +2,7 @@ package s3api
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/minio/minio-go/v7"
@@ -25,12 +26,15 @@ func listobjects(bucketName string, minioCredentials MinioCredentials) ([]ListOb
 	}
 	listObjectsResponse := []ListObjectResponse{}
 	for object := range minioClient.ListObjects(ctx, bucketName, minio.ListObjectsOptions{Recursive: true}) {
+		if object.Err != nil {
+			fmt.Println(object.Err.Error())
+			return nil, object.Err
+		}
 		listObject := ListObjectResponse{}
 		listObject.Name = object.Key
 		listObject.LastModified = object.LastModified
 
 		listObjectsResponse = append(listObjectsResponse, listObject)
 	}
-
 	return listObjectsResponse, nil
 }
