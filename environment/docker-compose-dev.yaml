@@ -28,7 +28,9 @@ services:
     links:
       - db
   minioserver:
-    image: 0chaindev/zs3server:update-gosdk-fd4a580b
+    build:
+      context: ../
+      dockerfile: Dockerfile
     container_name: miniserver
     ports:
       - 9000:9000
@@ -45,24 +47,6 @@ services:
       - logsearchapi:logsearchapi
     volumes:
       - ~/.zcn:/root/.zcn
-  minioclinet:
-    build: ../client-api
-    container_name: miniclient
-    depends_on:
-      - minioserver
-    ports:
-      - 3001:3001
-    environment:
-      MINIO_SERVER: "miniserver:9000"
-  Etcd:
-    image: 'bitnami/etcd:latest'
-    container_name: etcd
-    environment:
-      - ALLOW_NONE_AUTHENTICATION=yes
-      - ETCD_ADVERTISE_CLIENT_URLS=http://etcd:2379
-    ports:
-      - 2379:2379
-      - 2380:2380
 volumes:
   db:
     driver: local

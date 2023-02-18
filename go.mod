@@ -4,8 +4,6 @@ go 1.16
 
 require (
 	cloud.google.com/go/storage v1.23.0
-	github.com/0chain/errors v1.0.3
-	github.com/0chain/gosdk v1.8.12
 	github.com/Azure/azure-pipeline-go v0.2.2
 	github.com/Azure/azure-storage-blob-go v0.10.0
 	github.com/Shopify/sarama v1.28.0
@@ -95,4 +93,8 @@ require (
 	gopkg.in/yaml.v2 v2.4.0
 )
 
-require github.com/nats-io/nats-streaming-server v0.21.2 // indirect
+require (
+	github.com/0chain/errors v1.0.3
+	github.com/0chain/gosdk v1.8.12
+	github.com/nats-io/nats-streaming-server v0.21.2 // indirect
+)
