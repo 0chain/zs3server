@@ -23,7 +23,7 @@ jobs:
             BRANCH=$(echo ${GITHUB_REF#refs/heads/} | sed 's/\//-/g')
             SHORT_SHA=$(echo $GITHUB_SHA | head -c 8)
             echo ::set-output name=BRANCH::${BRANCH}
-            echo ::set-output name=VERSION::${BRANCH}-${SHORT_SHA}    
+            echo ::set-output name=VERSION::${BRANCH}-${SHORT_SHA}
        - name: Login to Docker Hub
          uses: docker/login-action@v1
          with:
@@ -32,7 +32,7 @@ jobs:
 
        - name: Build minio Docker Image
          run: |
-            docker run --rm -v $PWD:/minio --workdir=/minio golang:1.16.15 go build
+            docker run --rm -v $PWD:/minio --workdir=/minio golang:1.19.2 go build
             docker build -t $MINIO_REGISTRY:$TAG .
          env:
            TAG: ${{ steps.get_version.outputs.VERSION }}

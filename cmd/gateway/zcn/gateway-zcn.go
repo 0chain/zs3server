@@ -47,7 +47,7 @@ var zFlags = []cli.Flag{
 func init() {
 	const zcnGateWayTemplate = `NAME:
 	{{.HelpName}} - {{.Usage}}
-  
+
   USAGE:
 	{{.HelpName}} {{if .VisibleFlags}}[FLAGS]{{end}} ZCN-NAMENODE [ZCN-NAMENODE...]
   {{if .VisibleFlags}}
@@ -56,13 +56,13 @@ func init() {
 	{{end}}{{end}}
   ZCN-NAMENODE:
 	ZCN namenode URI
-  
+
   EXAMPLES:
 	1. Start minio gateway server for ZeroChain backend
 	   {{.Prompt}} {{.EnvVarSetCommand}} MINIO_ROOT_USER{{.AssignmentOperator}}accesskey
 	   {{.Prompt}} {{.EnvVarSetCommand}} MINIO_ROOT_PASSWORD{{.AssignmentOperator}}secretkey
 	   {{.Prompt}} {{.HelpName}} zcn://namenode:8200
-  
+
 	2. Start minio gateway server for ZCN with edge caching enabled
 	   {{.Prompt}} {{.EnvVarSetCommand}} MINIO_ROOT_USER{{.AssignmentOperator}}accesskey
 	   {{.Prompt}} {{.EnvVarSetCommand}} MINIO_ROOT_PASSWORD{{.AssignmentOperator}}secretkey
@@ -242,7 +242,7 @@ func (zob *zcnObjects) GetBucketInfo(ctx context.Context, bucket string) (bi min
 		return
 	}
 
-	return minio.BucketInfo{Name: ref.Name, Created: ref.CreatedAt}, nil
+	return minio.BucketInfo{Name: ref.Name, Created: ref.CreatedAt.ToTime()}, nil
 }
 
 // GetObjectInfo Get file meta data and respond it as minio.ObjectInfo
@@ -266,7 +266,7 @@ func (zob *zcnObjects) GetObjectInfo(ctx context.Context, bucket, object string,
 	return minio.ObjectInfo{
 		Bucket:      bucket,
 		Name:        getCommonPrefix(remotePath),
-		ModTime:     ref.UpdatedAt,
+		ModTime:     ref.UpdatedAt.ToTime(),
 		Size:        ref.ActualFileSize,
 		IsDir:       ref.Type == dirType,
 		AccTime:     time.Now(),
@@ -294,7 +294,7 @@ func (zob *zcnObjects) GetObjectNInfo(ctx context.Context, bucket, object string
 	objectInfo := minio.ObjectInfo{
 		Bucket:  bucket,
 		Name:    ref.Name,
-		ModTime: ref.UpdatedAt,
+		ModTime: ref.UpdatedAt.ToTime(),
 		Size:    ref.ActualFileSize,
 		IsDir:   ref.Type == dirType,
 	}
@@ -345,13 +345,13 @@ func (zob *zcnObjects) ListBuckets(ctx context.Context) (buckets []minio.BucketI
 	// Consider root path as bucket as well.
 	buckets = append(buckets, minio.BucketInfo{
 		Name:    rootBucketName,
-		Created: rootRef.CreatedAt,
+		Created: rootRef.CreatedAt.ToTime(),
 	})
 
 	for _, dirRef := range dirRefs {
 		buckets = append(buckets, minio.BucketInfo{
 			Name:    dirRef.Name,
-			Created: dirRef.CreatedAt,
+			Created: dirRef.CreatedAt.ToTime(),
 		})
 	}
 	return
@@ -424,7 +424,7 @@ func (zob *zcnObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 						Name:         objName,
 						Size:         ref.ActualFileSize,
 						IsDir:        false,
-						ModTime:      ref.UpdatedAt,
+						ModTime:      ref.UpdatedAt.ToTime(),
 						ETag:         ref.ActualFileHash,
 						ContentType:  ref.MimeType,
 						AccTime:      time.Now(),
@@ -458,7 +458,7 @@ func (zob *zcnObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 		objects = append(objects, minio.ObjectInfo{
 			Bucket:       bucket,
 			Name:         ref.Name,
-			ModTime:      ref.UpdatedAt,
+			ModTime:      ref.UpdatedAt.ToTime(),
 			Size:         ref.ActualFileSize,
 			IsDir:        false,
 			ContentType:  ref.MimeType,
@@ -548,7 +548,7 @@ func (zob *zcnObjects) CopyObject(ctx context.Context, srcBucket, srcObject, des
 	return minio.ObjectInfo{
 		Bucket:  destBucket,
 		Name:    destObject,
-		ModTime: ref.UpdatedAt,
+		ModTime: ref.UpdatedAt.ToTime(),
 		Size:    ref.ActualFileSize,
 	}, nil
 }

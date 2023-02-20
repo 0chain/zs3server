@@ -28,7 +28,7 @@ linters:
 
 linters-settings:
   gofumpt:
-    lang-version: "1.17"
+    lang-version: "1.19"
 
     # Choose whether or not to use the extra rules that are disabled
     # by default
