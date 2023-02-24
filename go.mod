@@ -4,8 +4,6 @@ go 1.16
 
 require (
 	cloud.google.com/go/storage v1.23.0
-	github.com/0chain/errors v1.0.3
-	github.com/0chain/gosdk v1.8.12
 	github.com/Azure/azure-pipeline-go v0.2.2
 	github.com/Azure/azure-storage-blob-go v0.10.0
 	github.com/Shopify/sarama v1.28.0
@@ -73,7 +71,7 @@ require (
 	github.com/prometheus/client_golang v1.11.1
 	github.com/prometheus/client_model v0.2.0
 	github.com/prometheus/procfs v0.7.3
-	github.com/rs/cors v1.7.0
+	github.com/rs/cors v1.8.3
 	github.com/rs/dnscache v0.0.0-20210201191234-295bba877686
 	github.com/secure-io/sio-go v0.3.1
 	github.com/shirou/gopsutil/v3 v3.21.9
@@ -95,4 +93,8 @@ require (
 	gopkg.in/yaml.v2 v2.4.0
 )
 
-require github.com/nats-io/nats-streaming-server v0.21.2 // indirect
+require (
+	github.com/0chain/errors v1.0.3
+	github.com/0chain/gosdk v1.8.12
+	github.com/nats-io/nats-streaming-server v0.21.2 // indirect
+)
