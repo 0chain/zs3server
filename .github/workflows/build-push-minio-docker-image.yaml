@@ -67,8 +67,9 @@ jobs:
         - name: Push latest
           if: ${{ github.event.inputs.branch }} == 'master' || ${{ github.event.inputs.branch }} == 'staging'
           run: |
-            docker push ${{ secrets.MINIO_SERVER_REGISTRY }}:staging
-            docker push ${{ secrets.MINIO_SERVER_REGISTRY }}:latest
+            docker push $MINIO_SERVER_REGISTRY:latest
+            docker tag $MINIO_SERVER_REGISTRY:latest $MINIO_SERVER_REGISTRY:staging
+            docker push $MINIO_SERVER_REGISTRY:staging
 
       #  - name: Build minio Docker Image
       #    run: |
