@@ -1,4 +1,4 @@
-name: build-&-publish-minio-docker-image
+name: build-&-publish-minio-client-docker-image
 
 on:
   workflow_dispatch:
@@ -9,7 +9,7 @@ on:
         required: true
 
 env:
-  MINIO_REGISTRY: ${{ secrets.MINIO_REGISTRY }}
+  MINIO_CLIENT_REGISTRY: ${{ secrets.MINIO_CLIENT_REGISTRY }}
 
 jobs:
    dockerize_minio:
@@ -31,7 +31,7 @@ jobs:
           else
             echo "TAG=$(echo ${GITHUB_REF#refs/*/} | sed 's/\//-/g')" >> $GITHUB_ENV
           fi
-
+      
       #  - name: Get the version
       #    id: get_version
       #    run: |
@@ -50,17 +50,18 @@ jobs:
         id: docker_build
         run: |
           # docker run --rm -v $PWD:/minio --workdir=/minio golang:1.19 go build -buildvcs=false
-          docker build -t $MINIO_REGISTRY:latest .
+          cd client-api
+          docker build -t $MINIO_CLIENT_REGISTRY:latest .
           echo $TAG-$SHORT_SHA
           echo "COMMIT_TAG=$TAG-$SHORT_SHA" >>$GITHUB_OUTPUT
-          docker tag $MINIO_REGISTRY:latest $MINIO_REGISTRY:$TAG-$SHORT_SHA
-          docker push $MINIO_REGISTRY:$TAG-$SHORT_SHA
+          docker tag $MINIO_CLIENT_REGISTRY:latest $MINIO_CLIENT_REGISTRY:$TAG-$SHORT_SHA
+          docker push $MINIO_CLIENT_REGISTRY:$TAG-$SHORT_SHA
       
       - name: Push latest
         if: ${{ github.event.inputs.branch }} == 'master' || ${{ github.event.inputs.branch }} == 'staging'
         run: |
-          docker push ${{ secrets.MINIO_REGISTRY }}:staging
-          docker push ${{ secrets.MINIO_REGISTRY }}:latest
+          docker push ${{ secrets.MINIO_CLIENT_REGISTRY }}:staging
+          docker push ${{ secrets.MINIO_CLIENT_REGISTRY }}:latest
 
       #  - name: Build minio Docker Image
       #    run: |
@@ -84,7 +85,7 @@ jobs:
       #      PUSH_STAGING: ${{ github.event.inputs.staging_tag }}
       #      TAG: ${{ steps.get_version.outputs.VERSION }}
       #      BRANCH: ${{ steps.get_version.outputs.BRANCH }}
-
+            
       - name: Clean Up The Workspace.
         if: ${{ always() }}
         run: |
