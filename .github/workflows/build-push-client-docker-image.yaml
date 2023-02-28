@@ -1,6 +1,15 @@
 name: build-&-publish-minio-client-docker-image
 
+
+concurrency:
+  group: "publish-${{ github.ref }}"
+  cancel-in-progress: true
+
 on:
+  push:
+    branches: [ master,staging ]
+    tags: [ "v*.*.*" ]
+  pull_request:
   workflow_dispatch:
     inputs:
       staging_tag:
