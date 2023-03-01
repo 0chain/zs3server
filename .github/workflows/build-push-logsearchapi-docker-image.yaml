@@ -1,4 +1,4 @@
-name: build-&-publish-minio-docker-image
+name: build-&-publish-minio-logsearchapi-docker-image
 
 concurrency:
   group: "publish-${{ github.ref }}"
