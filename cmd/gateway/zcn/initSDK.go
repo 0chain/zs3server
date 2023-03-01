@@ -39,7 +39,7 @@ func initializeSDK(configDir, allocid string, nonce int64) error {
 		allocationID = strings.ReplaceAll(allocationID, "\n", "")
 
 		if len(allocationID) != 64 {
-			return fmt.Errorf("allocation id has length %q, should be 64", len(allocationID))
+			return fmt.Errorf("allocation id has length %d, should be 64", len(allocationID))
 		}
 	}
 
