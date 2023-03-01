@@ -1,8 +1,8 @@
 name: build-&-publish-minio-docker-image
 
-concurrency:
-  group: "publish-${{ github.ref }}"
-  cancel-in-progress: true
+# concurrency:
+#   group: "publish-${{ github.ref }}"
+#   cancel-in-progress: true
 
 on:
   push:
