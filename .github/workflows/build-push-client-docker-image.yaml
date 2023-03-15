@@ -192,6 +192,33 @@ jobs:
     needs: [dockerize_client, dockerize_logsearchapi, dockerize_minio]
     runs-on: [ tests-suite ]
     steps:
+      - uses: actions/checkout@v1
+
+      - name: "Setup"
+        run: |
+          # if [[ "${{github.ref}}" == refs/pull/* ]]; then
+          #   tag=${GITHUB_REF/\/merge/}
+          #   echo "TAG=$(echo pr-${tag:10})" >> $GITHUB_ENV
+          # else
+          #   echo "TAG=$(echo ${GITHUB_REF#refs/*/} | sed 's/\//-/g')" >> $GITHUB_ENV
+          # fi
+
+
+          echo "SHORT_SHA=$(git rev-parse --short=8 HEAD)" >> $GITHUB_ENV
+          if [[ "${{github.ref}}" == refs/pull/* ]]; then
+            tag=${GITHUB_REF/\/merge/}
+            echo "TAG=$(echo pr-${tag:10})" >> $GITHUB_ENV
+          else
+            echo "TAG=$(echo ${GITHUB_REF#refs/*/} | sed 's/\//-/g')" >> $GITHUB_ENV
+          fi
+
+          echo "COMMIT_TAG=$TAG-$SHORT_SHA" >>$GITHUB_OUTPUT
+
+          # echo "BRANCH=$([ -z '${{ github.event.pull_request.head.sha }}' ] && echo ${GITHUB_REF#refs/*/} || echo $GITHUB_HEAD_REF)" >> $GITHUB_ENV
+          # echo "SHORT_SHA=$(([ -z '${{ github.event.pull_request.head.sha }}' ] && echo $GITHUB_SHA || echo '${{ github.event.pull_request.head.sha }}') | head -c 8)" >> $GITHUB_ENV
+          echo "NETWORK_URL=$(echo dev-${RUNNER_NAME:(-1)}.devnet-0chain.net)" >> $GITHUB_ENV
+          echo "RUNNER_NUMBER=${RUNNER_NAME:(-1)}" >> $GITHUB_ENV
+      
       - name: "Get current PR"
         uses: jwalton/gh-find-current-pr@v1
         id: findPr
@@ -209,19 +236,6 @@ jobs:
           status_name: "0Chain System Tests"
           target_url: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
           github_token: ${{ github.token }}
-
-      - name: "Setup"
-        run: |
-          if [[ "${{github.ref}}" == refs/pull/* ]]; then
-            tag=${GITHUB_REF/\/merge/}
-            echo "TAG=$(echo pr-${tag:10})" >> $GITHUB_ENV
-          else
-            echo "TAG=$(echo ${GITHUB_REF#refs/*/} | sed 's/\//-/g')" >> $GITHUB_ENV
-          fi
-          echo "BRANCH=$([ -z '${{ github.event.pull_request.head.sha }}' ] && echo ${GITHUB_REF#refs/*/} || echo $GITHUB_HEAD_REF)" >> $GITHUB_ENV
-          echo "SHORT_SHA=$(([ -z '${{ github.event.pull_request.head.sha }}' ] && echo $GITHUB_SHA || echo '${{ github.event.pull_request.head.sha }}') | head -c 8)" >> $GITHUB_ENV
-          echo "NETWORK_URL=$(echo dev-${RUNNER_NAME:(-1)}.devnet-0chain.net)" >> $GITHUB_ENV
-          echo "RUNNER_NUMBER=${RUNNER_NAME:(-1)}" >> $GITHUB_ENV
 
       - name: "Deploy 0Chain"
         uses: 0chain/actions/deploy-0chain@master
