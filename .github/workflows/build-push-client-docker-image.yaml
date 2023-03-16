@@ -1,9 +1,9 @@
 name: build-&-publish-minio-client-docker-image
 
 
-# concurrency:
-#   group: "publish-${{ github.ref }}"
-#   cancel-in-progress: true
+concurrency:
+  group: "publish-${{ github.ref }}"
+  cancel-in-progress: true
 
 on:
   push:
@@ -62,13 +62,13 @@ jobs:
           docker push $MINIO_CLIENT_REGISTRY:$TAG-$SHORT_SHA
       
       - name: Push staging tag
-        if: ${{ github.event.inputs.tag }} == 'yes' || github.ref == 'refs/heads/staging'
+        if: ${{ github.event.inputs.tag == 'yes' || github.ref == 'refs/heads/staging' }}
         run: |
           docker tag $MINIO_CLIENT_REGISTRY:latest $MINIO_CLIENT_REGISTRY:staging
           docker push ${{ secrets.MINIO_CLIENT_REGISTRY }}:staging
 
       - name: Push latest tag
-        if: ${{ github.event.inputs.tag }} == 'yes' || github.ref == 'refs/heads/master'
+        if: ${{ github.event.inputs.tag == 'yes' || github.ref == 'refs/heads/master' }}
         run: |
           docker push ${{ secrets.MINIO_CLIENT_REGISTRY }}:latest
           
@@ -115,13 +115,13 @@ jobs:
           docker push $MINIO_LOGSEARCHAPI_REGISTRY:$TAG-$SHORT_SHA
       
       - name: Push staging tag
-        if: ${{ github.event.inputs.tag }} == 'yes' || github.ref == 'refs/heads/staging'
+        if: ${{ github.event.inputs.tag == 'yes' || github.ref == 'refs/heads/staging' }}
         run: |
           docker tag $MINIO_LOGSEARCHAPI_REGISTRY:latest $MINIO_LOGSEARCHAPI_REGISTRY:staging
           docker push ${{ secrets.MINIO_LOGSEARCHAPI_REGISTRY }}:staging
 
       - name: Push latest tag
-        if: ${{ github.event.inputs.tag }} == 'yes' || github.ref == 'refs/heads/master'
+        if: ${{ github.event.inputs.tag == 'yes' || github.ref == 'refs/heads/master' }}
         run: |
           docker push ${{ secrets.MINIO_LOGSEARCHAPI_REGISTRY }}:latest
 
@@ -175,13 +175,13 @@ jobs:
           docker push $MINIO_SERVER_REGISTRY:staging
 
       - name: Push staging tag
-        if: ${{ github.event.inputs.tag }} == 'yes' || github.ref == 'refs/heads/staging'
+        if: ${{ github.event.inputs.tag == 'yes' || github.ref == 'refs/heads/staging' }}
         run: |
           docker tag $MINIO_SERVER_REGISTRY:latest $MINIO_SERVER_REGISTRY:staging
           docker push ${{ secrets.MINIO_SERVER_REGISTRY }}:staging
 
       - name: Push latest tag
-        if: ${{ github.event.inputs.tag }} == 'yes' || github.ref == 'refs/heads/master'
+        if: ${{ github.event.inputs.tag == 'yes' || github.ref == 'refs/heads/master' }}
         run: |
           docker push ${{ secrets.MINIO_SERVER_REGISTRY }}:latest
 
