@@ -241,7 +241,6 @@ jobs:
           zdns_image: staging
           zbox_cli_branch: staging
           zwallet_cli_branch: staging
-          custom_go_sdk_version: staging
           SUBGRAPH_API_URL: ${{ secrets.SUBGRAPH_API_URL }}
           TENDERLY_FORK_ID: ${{ secrets.TENDERLY_FORK_ID }}
           zs3_client: ${{ env.TAG }}-${{ env.SHORT_SHA }}
