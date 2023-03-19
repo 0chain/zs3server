@@ -262,6 +262,7 @@ jobs:
           archive_results: true
           run_flaky_tests: false
           retry_failures: true
+          run_cli_system_tests: false
           TENDERLY_FORK_ID: ${{ secrets.TENDERLY_FORK_ID }}
           DEVOPS_CHANNEL_WEBHOOK_URL: ${{ secrets.DEVOPS_CHANNEL_WEBHOOK_URL }}
 
