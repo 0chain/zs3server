@@ -238,7 +238,10 @@ jobs:
           blobber_image: staging
           validator_image: staging
           zbox_image: staging
+          zblock_image: staging
           zdns_image: staging
+          explorer_image: latest
+          zsearch_image: staging
           zbox_cli_branch: staging
           zwallet_cli_branch: staging
           SUBGRAPH_API_URL: ${{ secrets.SUBGRAPH_API_URL }}
