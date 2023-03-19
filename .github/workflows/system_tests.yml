@@ -60,6 +60,7 @@ jobs:
       explorer_branch: master
       test_file_filter: ${{ github.event.inputs.test_file_filter }}
       zsearch_branch: staging
+      run_cli_system_tests: false
       zdns_branch: staging
       skip_tests: ${{ github.event.inputs.skip_tests }}
     secrets:
