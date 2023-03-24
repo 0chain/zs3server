@@ -3,7 +3,7 @@ module github.com/minio/minio
 go 1.16
 
 require (
-	cloud.google.com/go/storage v1.23.0
+	cloud.google.com/go/storage v1.27.0
 	github.com/Azure/azure-pipeline-go v0.2.2
 	github.com/Azure/azure-storage-blob-go v0.10.0
 	github.com/Shopify/sarama v1.28.0
@@ -13,7 +13,7 @@ require (
 	github.com/beevik/ntp v0.3.0
 	github.com/bits-and-blooms/bloom/v3 v3.0.1
 	github.com/buger/jsonparser v1.1.1
-	github.com/cespare/xxhash/v2 v2.1.2
+	github.com/cespare/xxhash/v2 v2.2.0
 	github.com/cheggaaa/pb v1.0.29
 	github.com/colinmarc/hdfs/v2 v2.2.0
 	github.com/coredns/coredns v1.4.0
@@ -22,7 +22,7 @@ require (
 	github.com/dchest/siphash v1.2.1
 	github.com/djherbis/atime v1.0.0
 	github.com/dswarbrick/smart v0.0.0-20190505152634-909a45200d6d
-	github.com/dustin/go-humanize v1.0.0
+	github.com/dustin/go-humanize v1.0.1
 	github.com/eclipse/paho.mqtt.golang v1.3.5
 	github.com/elastic/go-elasticsearch/v7 v7.12.0
 	github.com/fatih/color v1.13.0
@@ -37,11 +37,11 @@ require (
 	github.com/inconshreveable/mousetrap v1.0.0
 	github.com/jcmturner/gokrb5/v8 v8.4.2
 	github.com/json-iterator/go v1.1.12
-	github.com/klauspost/compress v1.15.11
-	github.com/klauspost/cpuid/v2 v2.1.2
+	github.com/klauspost/compress v1.16.0
+	github.com/klauspost/cpuid/v2 v2.2.4
 	github.com/klauspost/pgzip v1.2.5
 	github.com/klauspost/readahead v1.4.0
-	github.com/klauspost/reedsolomon v1.11.1
+	github.com/klauspost/reedsolomon v1.11.7
 	github.com/lib/pq v1.9.0
 	github.com/miekg/dns v1.1.43
 	github.com/minio/cli v1.22.0
@@ -81,20 +81,20 @@ require (
 	github.com/xdg/scram v0.0.0-20180814205039-7eeb5667e42c
 	github.com/yargevad/filepathx v1.0.0
 	github.com/zeebo/xxh3 v1.0.0
-	go.etcd.io/etcd/api/v3 v3.5.4
-	go.etcd.io/etcd/client/v3 v3.5.4
+	go.etcd.io/etcd/api/v3 v3.5.6
+	go.etcd.io/etcd/client/v3 v3.5.6
 	go.uber.org/atomic v1.10.0
-	go.uber.org/zap v1.23.0
-	golang.org/x/crypto v0.0.0-20221012134737-56aed061732a
-	golang.org/x/oauth2 v0.0.0-20220909003341-f21342109be1
-	golang.org/x/sys v0.1.0
-	golang.org/x/time v0.1.0
-	google.golang.org/api v0.97.0
+	go.uber.org/zap v1.24.0
+	golang.org/x/crypto v0.6.0
+	golang.org/x/oauth2 v0.5.0
+	golang.org/x/sys v0.5.0
+	golang.org/x/time v0.3.0
+	google.golang.org/api v0.110.0
 	gopkg.in/yaml.v2 v2.4.0
 )
 
 require (
 	github.com/0chain/errors v1.0.3
-	github.com/0chain/gosdk v1.8.14
+	github.com/0chain/gosdk v1.8.15
 	github.com/nats-io/nats-streaming-server v0.21.2 // indirect
 )
