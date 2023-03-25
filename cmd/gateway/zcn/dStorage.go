@@ -183,6 +183,7 @@ func getFileReader(ctx context.Context, alloc *sdk.Allocation, remotePath string
 }
 
 func putFile(ctx context.Context, alloc *sdk.Allocation, remotePath, contentType string, r io.Reader, size int64, isUpdate, shouldEncrypt bool) (err error) {
+	logger.Info("started PutFile")
 	cb := &statusCB{
 		doneCh: make(chan struct{}, 1),
 		errCh:  make(chan error, 1),
@@ -203,17 +204,20 @@ func putFile(ctx context.Context, alloc *sdk.Allocation, remotePath, contentType
 		return err
 	}
 
+	logger.Info("creating chunked upload")
 	chunkUpload, err := sdk.CreateChunkedUpload(workDir, alloc, fileMeta, newMinioReader(r), isUpdate, false,
 		sdk.WithStatusCallback(cb),
 	)
 
 	if err != nil {
+		logger.Info("error from PutFile")
 		logger.Error(err.Error())
 		return
 	}
 
 	err = chunkUpload.Start()
 	if err != nil {
+		logger.Info("error from PutFile")
 		logger.Error(err.Error())
 		return
 	}
