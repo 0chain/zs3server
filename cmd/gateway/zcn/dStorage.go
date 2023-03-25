@@ -12,6 +12,7 @@ import (
 
 	zerror "github.com/0chain/errors"
 	"github.com/0chain/gosdk/zboxcore/sdk"
+	"github.com/minio/minio/internal/logger"
 	"github.com/mitchellh/go-homedir"
 )
 
@@ -198,6 +199,7 @@ func putFile(ctx context.Context, alloc *sdk.Allocation, remotePath, contentType
 
 	workDir, err := homedir.Dir()
 	if err != nil {
+		logger.Error(err.Error())
 		return err
 	}
 
@@ -206,11 +208,13 @@ func putFile(ctx context.Context, alloc *sdk.Allocation, remotePath, contentType
 	)
 
 	if err != nil {
+		logger.Error(err.Error())
 		return
 	}
 
 	err = chunkUpload.Start()
 	if err != nil {
+		logger.Error(err.Error())
 		return
 	}
 
