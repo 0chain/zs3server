@@ -130,12 +130,17 @@ func getSingleRegularRef(alloc *sdk.Allocation, remotePath string) (*sdk.ORef, e
 	level := len(strings.Split(strings.TrimSuffix(remotePath, "/"), "/"))
 	oREsult, err := alloc.GetRefs(remotePath, "", "", "", "", "regular", level, 1)
 	if err != nil {
-		logger.Error("error with GetRefs", err.Error())
+		logger.Error("error with GetRefs", err.Error(), " this is the error")
+		fmt.Println("error with GetRefs", err.Error(), " this is the error")
+		fmt.Println("error with GetRefs", err)
 		if isConsensusFailedError(err) {
 			time.Sleep(retryWaitTime)
 			oREsult, err = alloc.GetRefs(remotePath, "", "", "", "", "regular", level, 1)
 			if err != nil {
-				return nil, err
+				//  alloc.GetRefs returns consensus error when the file doesn't exist
+				if isConsensusFailedError(err) {
+					return nil, zerror.New(pathDoesNotExist, fmt.Sprintf("remotepath %v does not exist", remotePath))
+				}
 			}
 		} else {
 			return nil, err
