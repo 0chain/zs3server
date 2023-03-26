@@ -130,6 +130,7 @@ func getSingleRegularRef(alloc *sdk.Allocation, remotePath string) (*sdk.ORef, e
 	level := len(strings.Split(strings.TrimSuffix(remotePath, "/"), "/"))
 	oREsult, err := alloc.GetRefs(remotePath, "", "", "", "", "regular", level, 1)
 	if err != nil {
+		logger.Error("error with GetRefs", err.Error())
 		if isConsensusFailedError(err) {
 			time.Sleep(retryWaitTime)
 			oREsult, err = alloc.GetRefs(remotePath, "", "", "", "", "regular", level, 1)
