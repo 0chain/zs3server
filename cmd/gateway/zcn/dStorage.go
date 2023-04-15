@@ -141,6 +141,7 @@ func getSingleRegularRef(alloc *sdk.Allocation, remotePath string) (*sdk.ORef, e
 				if isConsensusFailedError(err) {
 					return nil, zerror.New(pathDoesNotExist, fmt.Sprintf("remotepath %v does not exist", remotePath))
 				}
+				return nil, err
 			}
 		} else {
 			return nil, err
