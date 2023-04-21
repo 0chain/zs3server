@@ -1,9 +1,9 @@
 name: build-&-publish-minio-client-docker-image
 
 
-# concurrency:
-#   group: "publish-${{ github.ref }}"
-#   cancel-in-progress: true
+concurrency:
+  group: "publish-${{ github.ref }}"
+  cancel-in-progress: true
 
 on:
   push:
@@ -12,91 +12,268 @@ on:
   pull_request:
   workflow_dispatch:
     inputs:
-      staging_tag:
+      tag:
         description: 'type yes for building staging tag'
         default: 'no'
         required: true
 
 env:
   MINIO_CLIENT_REGISTRY: ${{ secrets.MINIO_CLIENT_REGISTRY }}
+  MINIO_LOGSEARCHAPI_REGISTRY: ${{ secrets.MINIO_LOGSEARCHAPI_REGISTRY }}
+  MINIO_SERVER_REGISTRY: ${{ secrets.MINIO_SERVER_REGISTRY }}
 
 jobs:
-    dockerize_minio:
-      runs-on: [self-hosted, arc-runner]
+  dockerize_client:
+    runs-on: [self-hosted, arc-runner]
 
-      outputs:
-        output1: ${{ steps.docker_build.outputs.COMMIT_TAG }}
+    outputs:
+      output1: ${{ steps.docker_build.outputs.COMMIT_TAG }}
 
-      steps:
-        - uses: actions/checkout@v1
+    steps:
+      - uses: actions/checkout@v1
 
-        - name: Set Docker Image Tags.
-          id: get_info
-          run: |
-            echo "SHORT_SHA=$(git rev-parse --short=8 HEAD)" >> $GITHUB_ENV
-            if [[ "${{github.ref}}" == refs/pull/* ]]; then
-              tag=${GITHUB_REF/\/merge/}
-              echo "TAG=$(echo pr-${tag:10})" >> $GITHUB_ENV
-            else
-              echo "TAG=$(echo ${GITHUB_REF#refs/*/} | sed 's/\//-/g')" >> $GITHUB_ENV
-            fi
+      - name: Set Docker Image Tags.
+        id: get_info
+        run: |
+          if [[ "${{github.ref}}" == refs/pull/* ]]; then
+            tag=${GITHUB_REF/\/merge/}
+            echo "TAG=$(echo pr-${tag:10})" >> $GITHUB_ENV
+          else
+            echo "TAG=$(echo ${GITHUB_REF#refs/*/} | sed 's/\//-/g')" >> $GITHUB_ENV
+          fi
+          echo "BRANCH=$([ -z '${{ github.event.pull_request.head.sha }}' ] && echo ${GITHUB_REF#refs/*/} || echo $GITHUB_HEAD_REF)" >> $GITHUB_ENV
+          echo "SHA=$([ -z '${{ github.event.pull_request.head.sha }}' ] && echo $GITHUB_SHA || echo '${{ github.event.pull_request.head.sha }}')" >> $GITHUB_ENV
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+            username: ${{ secrets.DOCKERHUB_USERNAME }}
+            password: ${{ secrets.DOCKERHUB_PASSWORD }}
+
+      - name: Build & Push Docker Image.
+        id: docker_build
+        run: |
+          # docker run --rm -v $PWD:/minio --workdir=/minio golang:1.19 go build -buildvcs=false
+          cd client-api
+          docker build -t $MINIO_CLIENT_REGISTRY:latest .
+          SHORT_SHA=$(echo ${{ env.SHA }} | head -c 8)
+
+          docker tag $MINIO_CLIENT_REGISTRY:latest $MINIO_CLIENT_REGISTRY:$TAG-$SHORT_SHA
+          docker push $MINIO_CLIENT_REGISTRY:$TAG-$SHORT_SHA
       
-      #  - name: Get the version
-      #    id: get_version
-      #    run: |
-      #       BRANCH=$(echo ${GITHUB_REF#refs/heads/} | sed 's/\//-/g')
-      #       SHORT_SHA=$(echo $GITHUB_SHA | head -c 8)
-      #       echo ::set-output name=BRANCH::${BRANCH}
-      #       echo ::set-output name=VERSION::${BRANCH}-${SHORT_SHA}
+      - name: Push staging tag
+        if: ${{ github.event.inputs.tag == 'yes' || github.ref == 'refs/heads/staging' }}
+        run: |
+          docker tag $MINIO_CLIENT_REGISTRY:latest $MINIO_CLIENT_REGISTRY:staging
+          docker push ${{ secrets.MINIO_CLIENT_REGISTRY }}:staging
 
-        - name: Login to Docker Hub
-          uses: docker/login-action@v2
-          with:
-              username: ${{ secrets.DOCKERHUB_USERNAME }}
-              password: ${{ secrets.DOCKERHUB_PASSWORD }}
+      - name: Push latest tag
+        if: ${{ github.event.inputs.tag == 'yes' || github.ref == 'refs/heads/master' }}
+        run: |
+          docker push ${{ secrets.MINIO_CLIENT_REGISTRY }}:latest
+          
+      - name: Clean Up The Workspace.
+        if: ${{ always() }}
+        run: |
+          rm -rf ./*
 
-        - name: Build & Push Docker Image.
-          id: docker_build
-          run: |
-            # docker run --rm -v $PWD:/minio --workdir=/minio golang:1.19 go build -buildvcs=false
-            cd client-api
-            docker build -t $MINIO_CLIENT_REGISTRY:latest .
-            echo $TAG-$SHORT_SHA
-            echo "COMMIT_TAG=$TAG-$SHORT_SHA" >>$GITHUB_OUTPUT
-            docker tag $MINIO_CLIENT_REGISTRY:latest $MINIO_CLIENT_REGISTRY:$TAG-$SHORT_SHA
-            docker push $MINIO_CLIENT_REGISTRY:$TAG-$SHORT_SHA
-        
-        - name: Push latest
-          if: ${{ github.event.inputs.branch }} == 'master' || ${{ github.event.inputs.branch }} == 'staging'
-          run: |
-            docker push ${{ secrets.MINIO_CLIENT_REGISTRY }}:latest
-            docker tag $MINIO_CLIENT_REGISTRY:latest $MINIO_CLIENT_REGISTRY:staging
-            docker push ${{ secrets.MINIO_CLIENT_REGISTRY }}:staging
+  dockerize_logsearchapi:
+    runs-on: [self-hosted, arc-runner]
 
-      #  - name: Build minio Docker Image
-      #    run: |
-      #       docker run --rm -v $PWD:/minio --workdir=/minio golang:1.19 go build -buildvcs=false
-      #       docker build -t $MINIO_REGISTRY:$TAG .
-      #    env:
-      #      TAG: ${{ steps.get_version.outputs.VERSION }}
+    outputs:
+      output1: ${{ steps.docker_build.outputs.COMMIT_TAG }}
 
-      #  - name: Push minio Docker Image
-      #    run: |
-      #      if [[ "$PUSH_STAGING" == "yes" ]] && [[ "$BRANCH" == "staging" ]]; then
-      #        SHORT_SHA=$(echo $GITHUB_SHA | head -c 8)
-      #        docker tag $MINIO_REGISTRY:$TAG $MINIO_REGISTRY:staging-${SHORT_SHA}
-      #        docker tag $MINIO_REGISTRY:$TAG $MINIO_REGISTRY:staging
-      #        docker push $MINIO_REGISTRY:staging
-      #        docker push $MINIO_REGISTRY:staging-${SHORT_SHA}
-      #      elif [[ "$BRANCH" != "staging" ]]; then
-      #        docker push $MINIO_REGISTRY:$TAG
-      #      fi
-      #    env:
-      #      PUSH_STAGING: ${{ github.event.inputs.staging_tag }}
-      #      TAG: ${{ steps.get_version.outputs.VERSION }}
-      #      BRANCH: ${{ steps.get_version.outputs.BRANCH }}
-            
-        - name: Clean Up The Workspace.
-          if: ${{ always() }}
-          run: |
-            rm -rf ./*
+    steps:
+      - uses: actions/checkout@v1
+
+      - name: Set Docker Image Tags.
+        id: get_info
+        run: |
+          if [[ "${{github.ref}}" == refs/pull/* ]]; then
+            tag=${GITHUB_REF/\/merge/}
+            echo "TAG=$(echo pr-${tag:10})" >> $GITHUB_ENV
+          else
+            echo "TAG=$(echo ${GITHUB_REF#refs/*/} | sed 's/\//-/g')" >> $GITHUB_ENV
+          fi
+          echo "BRANCH=$([ -z '${{ github.event.pull_request.head.sha }}' ] && echo ${GITHUB_REF#refs/*/} || echo $GITHUB_HEAD_REF)" >> $GITHUB_ENV
+          echo "SHA=$([ -z '${{ github.event.pull_request.head.sha }}' ] && echo $GITHUB_SHA || echo '${{ github.event.pull_request.head.sha }}')" >> $GITHUB_ENV
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+            username: ${{ secrets.DOCKERHUB_USERNAME }}
+            password: ${{ secrets.DOCKERHUB_PASSWORD }}
+
+      - name: Build & Push Docker Image.
+        id: docker_build
+        run: |
+          cd logsearchapi
+          docker build -t $MINIO_LOGSEARCHAPI_REGISTRY:latest .
+          echo $TAG-$SHORT_SHA
+          SHORT_SHA=$(echo ${{ env.SHA }} | head -c 8)
+          docker tag $MINIO_LOGSEARCHAPI_REGISTRY:latest $MINIO_LOGSEARCHAPI_REGISTRY:$TAG-$SHORT_SHA
+          docker push $MINIO_LOGSEARCHAPI_REGISTRY:$TAG-$SHORT_SHA
+      
+      - name: Push staging tag
+        if: ${{ github.event.inputs.tag == 'yes' || github.ref == 'refs/heads/staging' }}
+        run: |
+          docker tag $MINIO_LOGSEARCHAPI_REGISTRY:latest $MINIO_LOGSEARCHAPI_REGISTRY:staging
+          docker push ${{ secrets.MINIO_LOGSEARCHAPI_REGISTRY }}:staging
+
+      - name: Push latest tag
+        if: ${{ github.event.inputs.tag == 'yes' || github.ref == 'refs/heads/master' }}
+        run: |
+          docker push ${{ secrets.MINIO_LOGSEARCHAPI_REGISTRY }}:latest
+
+      - name: Clean Up The Workspace.
+        if: ${{ always() }}
+        run: |
+          rm -rf ./*
+
+  dockerize_minio:
+    runs-on: [self-hosted, arc-runner]
+
+    outputs:
+      output1: ${{ steps.docker_build.outputs.COMMIT_TAG }}
+
+    steps:
+      - uses: actions/checkout@v1
+
+      - name: Set Docker Image Tags.
+        id: get_info
+        run: |
+          if [[ "${{github.ref}}" == refs/pull/* ]]; then
+            tag=${GITHUB_REF/\/merge/}
+            echo "TAG=$(echo pr-${tag:10})" >> $GITHUB_ENV
+          else
+            echo "TAG=$(echo ${GITHUB_REF#refs/*/} | sed 's/\//-/g')" >> $GITHUB_ENV
+          fi
+          echo "BRANCH=$([ -z '${{ github.event.pull_request.head.sha }}' ] && echo ${GITHUB_REF#refs/*/} || echo $GITHUB_HEAD_REF)" >> $GITHUB_ENV
+          echo "SHA=$([ -z '${{ github.event.pull_request.head.sha }}' ] && echo $GITHUB_SHA || echo '${{ github.event.pull_request.head.sha }}')" >> $GITHUB_ENV
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+            username: ${{ secrets.DOCKERHUB_USERNAME }}
+            password: ${{ secrets.DOCKERHUB_PASSWORD }}
+
+      - name: Build & Push Docker Image.
+        id: docker_build
+        run: |
+          docker run --rm -v $PWD:/minio --workdir=/minio golang:1.19 go build -buildvcs=false
+          docker build -t $MINIO_SERVER_REGISTRY:latest .
+          echo $TAG-$SHORT_SHA
+          SHORT_SHA=$(echo ${{ env.SHA }} | head -c 8)
+          docker tag $MINIO_SERVER_REGISTRY:latest $MINIO_SERVER_REGISTRY:$TAG-$SHORT_SHA
+          docker push $MINIO_SERVER_REGISTRY:$TAG-$SHORT_SHA
+      
+      - name: Push latest
+        if: ${{ github.event.inputs.branch }} == 'master' || ${{ github.event.inputs.branch }} == 'staging'
+        run: |
+          docker push $MINIO_SERVER_REGISTRY:latest
+          docker tag $MINIO_SERVER_REGISTRY:latest $MINIO_SERVER_REGISTRY:staging
+          docker push $MINIO_SERVER_REGISTRY:staging
+
+      - name: Push staging tag
+        if: ${{ github.event.inputs.tag == 'yes' || github.ref == 'refs/heads/staging' }}
+        run: |
+          docker tag $MINIO_SERVER_REGISTRY:latest $MINIO_SERVER_REGISTRY:staging
+          docker push ${{ secrets.MINIO_SERVER_REGISTRY }}:staging
+
+      - name: Push latest tag
+        if: ${{ github.event.inputs.tag == 'yes' || github.ref == 'refs/heads/master' }}
+        run: |
+          docker push ${{ secrets.MINIO_SERVER_REGISTRY }}:latest
+
+      - name: Clean Up The Workspace.
+        if: ${{ always() }}
+        run: |
+          rm -rf ./*
+
+  system-tests:
+    if: github.event_name != 'workflow_dispatch'
+    needs: [dockerize_client, dockerize_logsearchapi, dockerize_minio]
+    runs-on: [ tests-suite ]
+    steps:
+      - name: "Get current PR"
+        uses: jwalton/gh-find-current-pr@v1
+        id: findPr
+        with:
+          github-token: ${{ github.token }}
+
+      - name: "Set PR status as pending"
+        uses: 0chain/actions/set-pr-status@master
+        if: steps.findPr.outputs.number
+        with:
+          pr_number: ${{ steps.findPr.outputs.pr }}
+          description: "System tests running with default config..."
+          state: "pending"
+          repository: ${{ github.repository }}
+          status_name: "0Chain System Tests"
+          target_url: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          github_token: ${{ github.token }}
+
+      - name: "Setup"
+        run: |
+          if [[ "${{github.ref}}" == refs/pull/* ]]; then
+            tag=${GITHUB_REF/\/merge/}
+            echo "TAG=$(echo pr-${tag:10})" >> $GITHUB_ENV
+          else
+            echo "TAG=$(echo ${GITHUB_REF#refs/*/} | sed 's/\//-/g')" >> $GITHUB_ENV
+          fi
+
+          echo "BRANCH=$([ -z '${{ github.event.pull_request.head.sha }}' ] && echo ${GITHUB_REF#refs/*/} || echo $GITHUB_HEAD_REF)" >> $GITHUB_ENV
+          echo "SHORT_SHA=$(([ -z '${{ github.event.pull_request.head.sha }}' ] && echo $GITHUB_SHA || echo '${{ github.event.pull_request.head.sha }}') | head -c 8)" >> $GITHUB_ENV
+
+          echo "NETWORK_URL=$(echo dev-${RUNNER_NAME:(-1)}.devnet-0chain.net)" >> $GITHUB_ENV
+          echo "RUNNER_NUMBER=${RUNNER_NAME:(-1)}" >> $GITHUB_ENV
+
+      - name: "Deploy 0Chain"
+        uses: 0chain/actions/deploy-0chain@master
+        with:
+          kube_config: ${{ secrets[format('DEV{0}KC', env.RUNNER_NUMBER)] }}
+          teardown_condition: "TESTS_PASSED"
+          miner_image:  staging
+          sharder_image: staging
+          blobber_image: staging
+          validator_image: staging
+          zbox_image: staging
+          zblock_image: staging
+          zdns_image: staging
+          explorer_image: latest
+          zsearch_image: staging
+          zbox_cli_branch: staging
+          zwallet_cli_branch: staging
+          SUBGRAPH_API_URL: ${{ secrets.SUBGRAPH_API_URL }}
+          TENDERLY_FORK_ID: ${{ secrets.TENDERLY_FORK_ID }}
+          zs3_client: ${{ env.TAG }}-${{ env.SHORT_SHA }}
+          zs3_logsearchapi: ${{ env.TAG }}-${{ env.SHORT_SHA }}
+          zs3_minio: ${{ env.TAG }}-${{ env.SHORT_SHA }}
+
+      - name: "Run System tests"
+        uses: 0chain/actions/run-system-tests@master
+        with:
+          system_tests_branch: master
+          network: ${{ env.NETWORK_URL }}
+          zbox_cli_branch: staging
+          zwallet_cli_branch: staging
+          svc_account_secret: ${{ github.token }}
+          deploy_report_page: false
+          archive_results: true
+          run_flaky_tests: false
+          retry_failures: true
+          run_cli_system_tests: false
+          TENDERLY_FORK_ID: ${{ secrets.TENDERLY_FORK_ID }}
+          DEVOPS_CHANNEL_WEBHOOK_URL: ${{ secrets.DEVOPS_CHANNEL_WEBHOOK_URL }}
+
+      - name: "Set PR status as ${{ job.status }}"
+        if: ${{ (success() || failure()) && steps.findPr.outputs.number }}
+        uses: 0chain/actions/set-pr-status@master
+        with:
+          pr_number: ${{ steps.findPr.outputs.pr }}
+          description: "System tests with default config ${{ job.status }}"
+          state: ${{ job.status }}
+          repository: ${{ github.repository }}
+          status_name: "0Chain System Tests"
+          target_url: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          github_token: ${{ github.token }}
