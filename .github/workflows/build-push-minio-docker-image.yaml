@@ -1,8 +1,8 @@
 name: build-&-publish-minio-docker-image
 
-# concurrency:
-#   group: "publish-${{ github.ref }}"
-#   cancel-in-progress: true
+concurrency:
+  group: "publish-${{ github.ref }}"
+  cancel-in-progress: true
 
 on:
   push:
@@ -59,6 +59,7 @@ jobs:
         - name: Push latest
           if: ${{ github.event.inputs.latest_tag == 'yes' || github.ref == 'refs/heads/master' }}
           run: |
+            docker push $MINIO_SERVER_REGISTRY:latest
 
         - name: Push staging
           if: ${{ github.event.inputs.latest_tag == 'yes' || github.ref == 'refs/heads/staging' }}
