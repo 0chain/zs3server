@@ -95,6 +95,6 @@ require (
 
 require (
 	github.com/0chain/errors v1.0.3
-	github.com/0chain/gosdk v1.8.15
+	github.com/0chain/gosdk v1.8.16-0.20230427161011-6fb50cdcb352
 	github.com/nats-io/nats-streaming-server v0.21.2 // indirect
 )

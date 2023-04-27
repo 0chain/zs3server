@@ -28,7 +28,6 @@ jobs:
 
       steps:
         - uses: actions/checkout@v1
-
         - name: Set Docker Image Tags.
           id: get_info
           run: |
