@@ -1,6 +1,5 @@
 name: build-&-publish-minio-client-docker-image
 
-
 # concurrency:
 #   group: "publish-${{ github.ref }}"
 #   cancel-in-progress: true
@@ -29,25 +28,17 @@ jobs:
 
       steps:
         - uses: actions/checkout@v1
-
         - name: Set Docker Image Tags.
           id: get_info
           run: |
-            echo "SHORT_SHA=$(git rev-parse --short=8 HEAD)" >> $GITHUB_ENV
             if [[ "${{github.ref}}" == refs/pull/* ]]; then
               tag=${GITHUB_REF/\/merge/}
               echo "TAG=$(echo pr-${tag:10})" >> $GITHUB_ENV
             else
               echo "TAG=$(echo ${GITHUB_REF#refs/*/} | sed 's/\//-/g')" >> $GITHUB_ENV
             fi
-      
-      #  - name: Get the version
-      #    id: get_version
-      #    run: |
-      #       BRANCH=$(echo ${GITHUB_REF#refs/heads/} | sed 's/\//-/g')
-      #       SHORT_SHA=$(echo $GITHUB_SHA | head -c 8)
-      #       echo ::set-output name=BRANCH::${BRANCH}
-      #       echo ::set-output name=VERSION::${BRANCH}-${SHORT_SHA}
+            echo "BRANCH=$([ -z '${{ github.event.pull_request.head.sha }}' ] && echo ${GITHUB_REF#refs/*/} || echo $GITHUB_HEAD_REF)" >> $GITHUB_ENV
+            echo "SHA=$([ -z '${{ github.event.pull_request.head.sha }}' ] && echo $GITHUB_SHA || echo '${{ github.event.pull_request.head.sha }}')" >> $GITHUB_ENV
 
         - name: Login to Docker Hub
           uses: docker/login-action@v2
@@ -58,44 +49,23 @@ jobs:
         - name: Build & Push Docker Image.
           id: docker_build
           run: |
-            # docker run --rm -v $PWD:/minio --workdir=/minio golang:1.19 go build -buildvcs=false
+            SHORT_SHA=$(echo ${{ env.SHA }} | head -c 8)
             cd client-api
             docker build -t $MINIO_CLIENT_REGISTRY:latest .
-            echo $TAG-$SHORT_SHA
-            echo "COMMIT_TAG=$TAG-$SHORT_SHA" >>$GITHUB_OUTPUT
             docker tag $MINIO_CLIENT_REGISTRY:latest $MINIO_CLIENT_REGISTRY:$TAG-$SHORT_SHA
             docker push $MINIO_CLIENT_REGISTRY:$TAG-$SHORT_SHA
         
         - name: Push latest
-          if: ${{ github.event.inputs.branch }} == 'master' || ${{ github.event.inputs.branch }} == 'staging'
+          if: ${{ github.event.inputs.latest_tag == 'yes' || github.ref == 'refs/heads/master' }}
           run: |
             docker push ${{ secrets.MINIO_CLIENT_REGISTRY }}:latest
+
+        - name: Push staging
+          if: ${{ github.event.inputs.latest_tag == 'yes' || github.ref == 'refs/heads/staging' }}
+          run: |
             docker tag $MINIO_CLIENT_REGISTRY:latest $MINIO_CLIENT_REGISTRY:staging
             docker push ${{ secrets.MINIO_CLIENT_REGISTRY }}:staging
 
-      #  - name: Build minio Docker Image
-      #    run: |
-      #       docker run --rm -v $PWD:/minio --workdir=/minio golang:1.19 go build -buildvcs=false
-      #       docker build -t $MINIO_REGISTRY:$TAG .
-      #    env:
-      #      TAG: ${{ steps.get_version.outputs.VERSION }}
-
-      #  - name: Push minio Docker Image
-      #    run: |
-      #      if [[ "$PUSH_STAGING" == "yes" ]] && [[ "$BRANCH" == "staging" ]]; then
-      #        SHORT_SHA=$(echo $GITHUB_SHA | head -c 8)
-      #        docker tag $MINIO_REGISTRY:$TAG $MINIO_REGISTRY:staging-${SHORT_SHA}
-      #        docker tag $MINIO_REGISTRY:$TAG $MINIO_REGISTRY:staging
-      #        docker push $MINIO_REGISTRY:staging
-      #        docker push $MINIO_REGISTRY:staging-${SHORT_SHA}
-      #      elif [[ "$BRANCH" != "staging" ]]; then
-      #        docker push $MINIO_REGISTRY:$TAG
-      #      fi
-      #    env:
-      #      PUSH_STAGING: ${{ github.event.inputs.staging_tag }}
-      #      TAG: ${{ steps.get_version.outputs.VERSION }}
-      #      BRANCH: ${{ steps.get_version.outputs.BRANCH }}
-            
         - name: Clean Up The Workspace.
           if: ${{ always() }}
           run: |
