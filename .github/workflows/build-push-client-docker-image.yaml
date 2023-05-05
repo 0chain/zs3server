@@ -111,4 +111,4 @@ jobs:
             -H "Authorization: Bearer ${{secrets.ACCESS_TOKEN}}" \
             -H "Accept: application/vnd.github.v3+json" \
             https://api.github.com/repos/0chain/zcnwebappscripts/actions/workflows/raise_pr.yaml/dispatches \
-            -d '{"ref": "staging"}'
+            -d '{"ref": "main"}'
