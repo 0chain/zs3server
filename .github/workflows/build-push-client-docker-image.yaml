@@ -68,6 +68,7 @@ jobs:
 
         - name: Change Binary
           run: |
+            SHORT_SHA=$(echo ${{ env.SHA }} | head -c 8)
             echo $TAG-$SHORT_SHA
 
         - name: Clean Up The Workspace.
