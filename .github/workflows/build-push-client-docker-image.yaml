@@ -88,7 +88,7 @@ jobs:
           uses: peaceiris/actions-gh-pages@v3
           with:
             personal_token: ${{ secrets.ACCESS_TOKEN }}
-            publish_dir: ./zs3server/zcnwebappscripts
+            publish_dir: ./zs3server/zcnwebappscripts/
             destination_dir: ./
             publish_branch: update/image-tag-script
             keep_files: true
