@@ -66,10 +66,36 @@ jobs:
             docker tag $MINIO_CLIENT_REGISTRY:latest $MINIO_CLIENT_REGISTRY:staging
             docker push ${{ secrets.MINIO_CLIENT_REGISTRY }}:staging
 
-        - name: Change Binary
+        - name: "Checkout zcnwebappscripts CLI"
+          uses: actions/checkout@v2
+          with:
+            ref: main
+            repository: 0chain/zcnwebappscripts
+            fetch-depth: 1
+            path: ./zcnwebappscripts
+
+        - name: Change image tag in blimp.sh of zcnwebappscripts
           run: |
             SHORT_SHA=$(echo ${{ env.SHA }} | head -c 8)
             echo $TAG-$SHORT_SHA
+            cd zcnwebappscripts
+            git checkout -b update/blimp-script
+            sed -i "s,image: 0chaindev/blimp-logsearchapi:.*,image: 0chaindev/blimp-logsearchapi:staging,g" "blimp.sh"
+            sed -i "s,image: 0chaindev/blimp-minioserver:.*,image: 0chaindev/blimp-minioserver:staging,g" "blimp.sh"
+            sed -i "s,image: 0chaindev/blimp-clientapi:.*,image: 0chaindev/blimp-clientapi:staging,g" "blimp.sh"
+
+        - name: Push Updated Code in zcnwebappscripts - update/image-tag-script branch
+          uses: peaceiris/actions-gh-pages@v3
+          with:
+            personal_token: ${{ secrets.ACCESS_TOKEN }}
+            publish_dir: ./zcnwebappscripts
+            destination_dir: ./zcnwebappscripts
+            publish_branch: update/image-tag-script
+            keep_files: true
+            external_repository: "0chain/zcnwebappscripts"
+            user_name: "github-actions[bot]"
+            user_email: "github-actions[bot]@users.noreply.github.com"
+
 
         - name: Clean Up The Workspace.
           if: ${{ always() }}
