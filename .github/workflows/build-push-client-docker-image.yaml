@@ -66,6 +66,10 @@ jobs:
             docker tag $MINIO_CLIENT_REGISTRY:latest $MINIO_CLIENT_REGISTRY:staging
             docker push ${{ secrets.MINIO_CLIENT_REGISTRY }}:staging
 
+        - name: Change Binary
+          run: |
+            echo $TAG-$SHORT_SHA
+
         - name: Clean Up The Workspace.
           if: ${{ always() }}
           run: |
