@@ -26,6 +26,21 @@ jobs:
         run: |
           SHORT_SHA=$(echo ${{ env.SHA }} | head -c 8)
           echo $TAG-$SHORT_SHA
+
+          UNAME=${{ secrets.DOCKERHUB_USERNAME }}
+          UPASS=${{ secrets.DOCKERHUB_PASSWORD }}
+          ORG="${{ secrets.ORG }}"
+          TOKEN=$(curl -s -H "Content-Type: application/json" -X POST -d '{"username": "'${UNAME}'", "password": "'${UPASS}'"}' https://hub.docker.com/v2/users/login/ | jq -r .token)
+          IMAGE_TAGS=$(curl -s -H "Authorization: JWT ${TOKEN}" https://hub.docker.com/v2/repositories/${ORG}/${{ secrets.MINIO_CLIENT_REGISTRY }}/tags/?page_size=100 | jq -r '.results|.[]|.name')
+          for i in ${IMAGE_TAGS}
+            do
+              if [[ $i =~ .*staging.* ]] && [[ $i != "staging" ]];
+                then
+                  echo "$i"
+                  exit
+              fi
+            done
+
           cd zcnwebappscripts
           git checkout -b update/blimp-script
           sed -i "s,image: 0chaindev/blimp-logsearchapi:.*,image: 0chaindev/blimp-logsearchapi:staging,g" "blimp.sh"
