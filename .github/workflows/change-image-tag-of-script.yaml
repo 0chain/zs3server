@@ -30,6 +30,8 @@ jobs:
           UNAME=${{ secrets.DOCKERHUB_USERNAME }}
           UPASS=${{ secrets.DOCKERHUB_PASSWORD }}
           ORG="${{ secrets.ORG }}"
+          cd zcnwebappscripts
+          git checkout -b update/blimp-script
           TOKEN=$(curl -s -H "Content-Type: application/json" -X POST -d '{"username": "'${UNAME}'", "password": "'${UPASS}'"}' https://hub.docker.com/v2/users/login/ | jq -r .token)
           IMAGE_TAGS=$(curl -s -H "Authorization: JWT ${TOKEN}" https://hub.docker.com/v2/repositories/${ORG}/${{ secrets.MINIO_CLIENT_REGISTRY }}/tags/?page_size=100 | jq -r '.results|.[]|.name')
           for i in ${IMAGE_TAGS}
@@ -37,15 +39,32 @@ jobs:
               if [[ $i =~ .*staging.* ]] && [[ $i != "staging" ]];
                 then
                   echo "$i"
+                  sed -i "s,image: 0chaindev/blimp-minioserver:.*,image: 0chaindev/blimp-minioserver:$i,g" "blimp.sh"
                   exit
               fi
             done
 
-          cd zcnwebappscripts
-          git checkout -b update/blimp-script
-          sed -i "s,image: 0chaindev/blimp-logsearchapi:.*,image: 0chaindev/blimp-logsearchapi:staging,g" "blimp.sh"
-          sed -i "s,image: 0chaindev/blimp-minioserver:.*,image: 0chaindev/blimp-minioserver:staging,g" "blimp.sh"
-          sed -i "s,image: 0chaindev/blimp-clientapi:.*,image: 0chaindev/blimp-clientapi:staging,g" "blimp.sh"
+          IMAGE_TAGS=$(curl -s -H "Authorization: JWT ${TOKEN}" https://hub.docker.com/v2/repositories/${ORG}/${{ secrets.MINIO_LOGSEARCHAPI_REGISTRY }}/tags/?page_size=100 | jq -r '.results|.[]|.name')
+          for i in ${IMAGE_TAGS}
+            do
+              if [[ $i =~ .*staging.* ]] && [[ $i != "staging" ]];
+                then
+                  echo "$i"
+                  sed -i "s,image: 0chaindev/blimp-logsearchapi:.*,image: 0chaindev/blimp-logsearchapi:$i,g" "blimp.sh"
+                  exit
+              fi
+            done
+
+          IMAGE_TAGS=$(curl -s -H "Authorization: JWT ${TOKEN}" https://hub.docker.com/v2/repositories/${ORG}/${{ secrets.MINIO_SERVER_REGISTRY }}/tags/?page_size=100 | jq -r '.results|.[]|.name')
+          for i in ${IMAGE_TAGS}
+            do
+              if [[ $i =~ .*staging.* ]] && [[ $i != "staging" ]];
+                then
+                  echo "$i"
+                  sed -i "s,image: 0chaindev/blimp-clientapi:.*,image: 0chaindev/blimp-clientapi:$i,g" "blimp.sh"
+                  exit
+              fi
+            done
 
       - name: Push Updated Code in zcnwebappscripts - update/image-tag-script branch
         uses: peaceiris/actions-gh-pages@v3
