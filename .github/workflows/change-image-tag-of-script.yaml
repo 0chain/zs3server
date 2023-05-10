@@ -1,6 +1,6 @@
 name: Change Script Image Tag
 
-# Only trigger, when the build workflow succeeded
+# Only trigger, when the build workflow succeeded !
 on:
   workflow_run:
     workflows: ["build-&-publish-minio-client-docker-image", "build-&-publish-minio-logsearchapi-docker-image", "build-&-publish-minio-docker-image"]
