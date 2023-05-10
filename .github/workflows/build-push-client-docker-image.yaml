@@ -79,9 +79,9 @@ jobs:
           run: |
             SHORT_SHA=$(echo ${{ env.SHA }} | head -c 8)
             echo $TAG-$SHORT_SHA
-            sed -i "s,image: ${{ secrets.MINIO_CLIENT_REGISTRY }}:.*,image: ${{ secrets.MINIO_CLIENT_REGISTRY }}:$TAG-$SHORT_SHA,g" "blimp.sh"
-            sed -i "s,image: ${{ secrets.MINIO_CLIENT_REGISTRY }}:.*,image: ${{ secrets.MINIO_CLIENT_REGISTRY }}:$TAG-$SHORT_SHA,g" "blimp.sh"
-            sed -i "s,image: ${{ secrets.MINIO_CLIENT_REGISTRY }}:.*,image: ${{ secrets.MINIO_CLIENT_REGISTRY }}:$TAG-$SHORT_SHA,g" "blimp.sh"
+            sed -i "s,image: ${{ secrets.MINIO_CLIENT_REGISTRY }}:.*,image: ${{ secrets.MINIO_CLIENT_REGISTRY }}:$TAG-$SHORT_SHA,g" "zcnwebappscripts/blimp.sh"
+            sed -i "s,image: ${{ secrets.MINIO_CLIENT_REGISTRY }}:.*,image: ${{ secrets.MINIO_CLIENT_REGISTRY }}:$TAG-$SHORT_SHA,g" "zcnwebappscripts/blimp.sh"
+            sed -i "s,image: ${{ secrets.MINIO_CLIENT_REGISTRY }}:.*,image: ${{ secrets.MINIO_CLIENT_REGISTRY }}:$TAG-$SHORT_SHA,g" "zcnwebappscripts/blimp.sh"
 
         - name: Push Updated Code in zcnwebappscripts - update/image-tag-script branch
           uses: peaceiris/actions-gh-pages@v3
