@@ -82,7 +82,7 @@ jobs:
             cd zcnwebappscripts
             ls 
             cat blimp.sh
-            sed -i "s,DOCKER_IMAGE.*,DOCKER_IMAGE=${{ secrets.MINIO_CLIENT_REGISTRY }}:$TAG-$SHORT_SHA,g" "blimp.sh"
+            sed -i "s,DOCKER_IMAGE=.*,DOCKER_IMAGE=$TAG-$SHORT_SHA,g" "blimp.sh"
             cat blimp.sh
 
         - name: Push Updated Code in zcnwebappscripts - update/image-tag-script branch
