@@ -69,7 +69,7 @@ jobs:
         - name: "Checkout zcnwebappscripts CLI"
           uses: actions/checkout@v2
           with:
-            ref: update/blimp-script
+            ref: update/image-tag-script
             repository: 0chain/zcnwebappscripts
             fetch-depth: 1
             path: ./zcnwebappscripts
