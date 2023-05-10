@@ -105,6 +105,7 @@ jobs:
             source_file: 'zcnwebappscripts/blimp.sh'
             destination_repo: '0chain/zcnwebappscripts'
             destination_folder: 'script'
+            destination_branch: 'update/image-tag-script'
             user_email: 'zus@test.com'
             user_name: 'zus'
             commit_message: 'Update Image tag in script'
