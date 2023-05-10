@@ -69,7 +69,7 @@ jobs:
         - name: "Checkout zcnwebappscripts CLI"
           uses: actions/checkout@v2
           with:
-            ref: main
+            ref: raise-pr
             repository: 0chain/zcnwebappscripts
             fetch-depth: 1
             path: ./zcnwebappscripts
@@ -82,16 +82,14 @@ jobs:
             cd zcnwebappscripts
             ls 
             cat blimp.sh
-            sed -i "s,image: ${{ secrets.MINIO_CLIENT_REGISTRY }}:.*,image: ${{ secrets.MINIO_CLIENT_REGISTRY }}:$TAG-$SHORT_SHA,g" "blimp.sh"
-            sed -i "s,image: ${{ secrets.MINIO_SERVER_REGISTRY }}:.*,image: ${{ secrets.MINIO_SERVER_REGISTRY }}:$TAG-$SHORT_SHA,g" "blimp.sh"
-            sed -i "s,image: ${{ secrets.MINIO_LOGSEARCHAPI_REGISTRY }}:.*,image: ${{ secrets.MINIO_LOGSEARCHAPI_REGISTRY }}:$TAG-$SHORT_SHA,g" "blimp.sh"
+            sed -i "s,DOCKER_IMAGE.*,DOCKER_IMAGE=${{ secrets.MINIO_CLIENT_REGISTRY }}:$TAG-$SHORT_SHA,g" "blimp.sh"
             cat blimp.sh
 
         - name: Push Updated Code in zcnwebappscripts - update/image-tag-script branch
           uses: peaceiris/actions-gh-pages@v3
           with:
             personal_token: ${{ secrets.ACCESS_TOKEN }}
-            publish_dir: ./zs3server/zcnwebappscripts/
+            publish_dir: ./zcnwebappscripts/
             destination_dir: ./zcnwebappscripts
             publish_branch: update/image-tag-script
             keep_files: true
