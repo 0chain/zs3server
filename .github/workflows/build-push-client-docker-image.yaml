@@ -79,8 +79,7 @@ jobs:
           run: |
             SHORT_SHA=$(echo ${{ env.SHA }} | head -c 8)
             echo $TAG-$SHORT_SHA
-            ls
-            cd zcnwebappscripts && git checkout update/image-tag-script
+            cd zcnwebappscripts
             sed -i "s,image: ${{ secrets.MINIO_CLIENT_REGISTRY }}:.*,image: ${{ secrets.MINIO_CLIENT_REGISTRY }}:$TAG-$SHORT_SHA,g" "blimp.sh"
             sed -i "s,image: ${{ secrets.MINIO_SERVER_REGISTRY }}:.*,image: ${{ secrets.MINIO_SERVER_REGISTRY }}:$TAG-$SHORT_SHA,g" "blimp.sh"
             sed -i "s,image: ${{ secrets.MINIO_LOGSEARCHAPI_REGISTRY }}:.*,image: ${{ secrets.MINIO_LOGSEARCHAPI_REGISTRY }}:$TAG-$SHORT_SHA,g" "blimp.sh"
