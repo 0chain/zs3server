@@ -75,7 +75,7 @@ jobs:
             path: ./zcnwebappscripts
 
         - name: Change image tag in blimp.sh of zcnwebappscripts
-          if: github.ref == 'refs/heads/update/image-tag-script'
+          # if: github.ref == 'refs/heads/staging'
           run: |
             SHORT_SHA=$(echo ${{ env.SHA }} | head -c 8)
             echo $TAG-$SHORT_SHA
