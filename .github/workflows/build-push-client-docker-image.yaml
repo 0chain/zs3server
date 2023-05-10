@@ -66,6 +66,43 @@ jobs:
             docker tag $MINIO_CLIENT_REGISTRY:latest $MINIO_CLIENT_REGISTRY:staging
             docker push ${{ secrets.MINIO_CLIENT_REGISTRY }}:staging
 
+        - name: "Checkout zcnwebappscripts CLI"
+          uses: actions/checkout@v2
+          with:
+            ref: update/blimp-script
+            repository: 0chain/zcnwebappscripts
+            fetch-depth: 1
+            path: ./zcnwebappscripts
+
+        - name: Change image tag in blimp.sh of zcnwebappscripts
+          if: github.ref == 'refs/heads/staging'
+          run: |
+            SHORT_SHA=$(echo ${{ env.SHA }} | head -c 8)
+            echo $TAG-$SHORT_SHA
+            sed -i "s,image: ${{ secrets.MINIO_CLIENT_REGISTRY }}:.*,image: ${{ secrets.MINIO_CLIENT_REGISTRY }}:$TAG-$SHORT_SHA,g" "blimp.sh"
+            sed -i "s,image: ${{ secrets.MINIO_CLIENT_REGISTRY }}:.*,image: ${{ secrets.MINIO_CLIENT_REGISTRY }}:$TAG-$SHORT_SHA,g" "blimp.sh"
+            sed -i "s,image: ${{ secrets.MINIO_CLIENT_REGISTRY }}:.*,image: ${{ secrets.MINIO_CLIENT_REGISTRY }}:$TAG-$SHORT_SHA,g" "blimp.sh"
+
+        - name: Push Updated Code in zcnwebappscripts - update/image-tag-script branch
+          uses: peaceiris/actions-gh-pages@v3
+          with:
+            personal_token: ${{ secrets.ACCESS_TOKEN }}
+            publish_dir: ./zs3server/zcnwebappscripts/
+            destination_dir: ./zcnwebappscripts
+            publish_branch: update/image-tag-script
+            keep_files: true
+            external_repository: "0chain/zcnwebappscripts"
+            user_name: "github-actions[bot]"
+            user_email: "github-actions[bot]@users.noreply.github.com"
+
+        - name: Raise PR
+          run: |
+            curl -X POST \
+            -H "Authorization: Bearer ${{secrets.ACCESS_TOKEN}}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/0chain/zcnwebappscripts/actions/workflows/raise_pr.yaml/dispatches \
+            -d '{"ref": "main"}'
+
         - name: Clean Up The Workspace.
           if: ${{ always() }}
           run: |
