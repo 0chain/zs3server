@@ -69,7 +69,7 @@ jobs:
         - name: "Checkout zcnwebappscripts CLI"
           uses: actions/checkout@v2
           with:
-            ref: raise-pr
+            ref: main
             repository: 0chain/zcnwebappscripts
             fetch-depth: 1
             path: ./zcnwebappscripts
@@ -85,17 +85,29 @@ jobs:
             sed -i "s,DOCKER_IMAGE=.*,DOCKER_IMAGE=$TAG-$SHORT_SHA,g" "blimp.sh"
             cat blimp.sh
 
-        - name: Push Updated Code in zcnwebappscripts - update/image-tag-script branch
-          uses: peaceiris/actions-gh-pages@v3
+        # - name: Push Updated Code in zcnwebappscripts - update/image-tag-script branch
+        #   uses: peaceiris/actions-gh-pages@v3
+        #   with:
+        #     personal_token: ${{ secrets.ACCESS_TOKEN }}
+        #     publish_dir: ./zcnwebappscripts/
+        #     destination_dir: ./zcnwebappscripts
+        #     publish_branch: update/image-tag-script
+        #     keep_files: true
+        #     external_repository: "0chain/zcnwebappscripts"
+        #     user_name: "github-actions[bot]"
+        #     user_email: "github-actions[bot]@users.noreply.github.com"
+
+        - name: Pushes blimp.sh file
+          uses: dmnemec/copy_file_to_another_repo_action@main
+          env:
+            API_TOKEN_GITHUB: ${{ secrets.ACCESS_TOKEN }}
           with:
-            personal_token: ${{ secrets.ACCESS_TOKEN }}
-            publish_dir: ./zcnwebappscripts/
-            destination_dir: ./zcnwebappscripts
-            publish_branch: update/image-tag-script
-            keep_files: true
-            external_repository: "0chain/zcnwebappscripts"
-            user_name: "github-actions[bot]"
-            user_email: "github-actions[bot]@users.noreply.github.com"
+            source_file: 'zcnwebappscripts/blimp.sh'
+            destination_repo: '0chain/zcnwebappscripts'
+            destination_folder: 'script'
+            user_email: 'zus@test.com'
+            user_name: 'zus'
+            commit_message: 'Update Image tag in script'
 
         - name: Raise PR
           run: |
