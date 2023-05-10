@@ -67,6 +67,7 @@ jobs:
             docker push ${{ secrets.MINIO_CLIENT_REGISTRY }}:staging
 
         - name: "Checkout zcnwebappscripts CLI"
+          if: github.ref == 'refs/heads/staging'
           uses: actions/checkout@v2
           with:
             ref: main
@@ -80,12 +81,10 @@ jobs:
             SHORT_SHA=$(echo ${{ env.SHA }} | head -c 8)
             echo $TAG-$SHORT_SHA
             cd zcnwebappscripts
-            ls 
-            cat blimp.sh
             sed -i "s,DOCKER_IMAGE=.*,DOCKER_IMAGE=$TAG-$SHORT_SHA,g" "blimp.sh"
-            cat blimp.sh
 
         - name: Pushes blimp.sh file
+          if: github.ref == 'refs/heads/staging'
           uses: dmnemec/copy_file_to_another_repo_action@main
           env:
             API_TOKEN_GITHUB: ${{ secrets.ACCESS_TOKEN }}
@@ -99,6 +98,7 @@ jobs:
             commit_message: 'Update Image tag in script'
 
         - name: Raise PR
+          if: github.ref == 'refs/heads/staging'
           run: |
             curl -X POST \
             -H "Authorization: Bearer ${{secrets.ACCESS_TOKEN}}" \
