@@ -66,6 +66,46 @@ jobs:
             docker tag $MINIO_CLIENT_REGISTRY:latest $MINIO_CLIENT_REGISTRY:staging
             docker push ${{ secrets.MINIO_CLIENT_REGISTRY }}:staging
 
+        - name: "Checkout zcnwebappscripts CLI"
+          if: github.ref == 'refs/heads/staging'
+          uses: actions/checkout@v2
+          with:
+            ref: main
+            repository: 0chain/zcnwebappscripts
+            fetch-depth: 1
+            path: ./zcnwebappscripts
+
+        - name: Change image tag in blimp.sh of zcnwebappscripts
+          if: github.ref == 'refs/heads/staging'
+          run: |
+            SHORT_SHA=$(echo ${{ env.SHA }} | head -c 8)
+            echo $TAG-$SHORT_SHA
+            cd zcnwebappscripts
+            sed -i "s,DOCKER_IMAGE=.*,DOCKER_IMAGE=$TAG-$SHORT_SHA,g" "blimp.sh"
+
+        - name: Pushes blimp.sh file
+          if: github.ref == 'refs/heads/staging'
+          uses: dmnemec/copy_file_to_another_repo_action@main
+          env:
+            API_TOKEN_GITHUB: ${{ secrets.ACCESS_TOKEN }}
+          with:
+            source_file: 'zcnwebappscripts/blimp.sh'
+            destination_repo: '0chain/zcnwebappscripts'
+            destination_folder: 'script'
+            destination_branch: 'update/image-tag-script'
+            user_email: 'zus@test.com'
+            user_name: 'zus'
+            commit_message: 'Update Image tag in script'
+
+        - name: Raise PR
+          if: github.ref == 'refs/heads/staging'
+          run: |
+            curl -X POST \
+            -H "Authorization: Bearer ${{secrets.ACCESS_TOKEN}}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/0chain/zcnwebappscripts/actions/workflows/raise_pr.yaml/dispatches \
+            -d '{"ref": "main"}'
+
         - name: Clean Up The Workspace.
           if: ${{ always() }}
           run: |
