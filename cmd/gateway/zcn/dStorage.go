@@ -212,7 +212,7 @@ func putFile(ctx context.Context, alloc *sdk.Allocation, remotePath, contentType
 	}
 
 	logger.Info("creating chunked upload")
-	chunkUpload, err := sdk.CreateChunkedUpload(workDir, alloc, fileMeta, newMinioReader(r), isUpdate, false,
+	chunkUpload, err := sdk.CreateChunkedUpload(workDir, alloc, fileMeta, newMinioReader(r), isUpdate, false, false,
 		sdk.WithStatusCallback(cb),
 	)
 
