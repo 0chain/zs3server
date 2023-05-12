@@ -131,7 +131,6 @@ func getSingleRegularRef(alloc *sdk.Allocation, remotePath string) (*sdk.ORef, e
 	oREsult, err := alloc.GetRefs(remotePath, "", "", "", "", "regular", level, 1)
 	if err != nil {
 		logger.Error("error with GetRefs", err.Error(), " this is the error")
-		fmt.Println("error with GetRefs", err.Error(), " this is the error")
 		fmt.Println("error with GetRefs", err)
 		if isConsensusFailedError(err) {
 			time.Sleep(retryWaitTime)
@@ -217,7 +216,6 @@ func putFile(ctx context.Context, alloc *sdk.Allocation, remotePath, contentType
 	)
 
 	if err != nil {
-		logger.Info("error from PutFile")
 		logger.Error(err.Error())
 		return
 	}
