@@ -42,7 +42,7 @@ func putObject(bucketName string, objectName string, minioCredentials MinioCrede
 
 	uploadInfo, err := minioClient.PutObject(ctx, bucketName, objectName, file, fileStat.Size(), minio.PutObjectOptions{ContentType: "application/octet-stream"})
 	if err != nil {
-		fmt.Println(err)
+		fmt.Println("error from PutObject", err)
 		return putObjectResponse, err
 	}
 

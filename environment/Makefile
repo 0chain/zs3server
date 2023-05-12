@@ -1,5 +1,5 @@
 dev:
-	docker-compose -f docker-compose-dev.yaml up --build
+	docker-compose -f docker-compose-dev.yaml up -d --build
 
 prd:
 	docker-compose up

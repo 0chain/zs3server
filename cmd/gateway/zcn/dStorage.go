@@ -12,6 +12,7 @@ import (
 
 	zerror "github.com/0chain/errors"
 	"github.com/0chain/gosdk/zboxcore/sdk"
+	"github.com/minio/minio/internal/logger"
 	"github.com/mitchellh/go-homedir"
 )
 
@@ -129,10 +130,16 @@ func getSingleRegularRef(alloc *sdk.Allocation, remotePath string) (*sdk.ORef, e
 	level := len(strings.Split(strings.TrimSuffix(remotePath, "/"), "/"))
 	oREsult, err := alloc.GetRefs(remotePath, "", "", "", "", "regular", level, 1)
 	if err != nil {
+		logger.Error("error with GetRefs", err.Error(), " this is the error")
+		fmt.Println("error with GetRefs", err)
 		if isConsensusFailedError(err) {
 			time.Sleep(retryWaitTime)
 			oREsult, err = alloc.GetRefs(remotePath, "", "", "", "", "regular", level, 1)
 			if err != nil {
+				//  alloc.GetRefs returns consensus error when the file doesn't exist
+				if isConsensusFailedError(err) {
+					return nil, zerror.New(pathDoesNotExist, fmt.Sprintf("remotepath %v does not exist", remotePath))
+				}
 				return nil, err
 			}
 		} else {
@@ -182,6 +189,7 @@ func getFileReader(ctx context.Context, alloc *sdk.Allocation, remotePath string
 }
 
 func putFile(ctx context.Context, alloc *sdk.Allocation, remotePath, contentType string, r io.Reader, size int64, isUpdate, shouldEncrypt bool) (err error) {
+	logger.Info("started PutFile")
 	cb := &statusCB{
 		doneCh: make(chan struct{}, 1),
 		errCh:  make(chan error, 1),
@@ -198,19 +206,24 @@ func putFile(ctx context.Context, alloc *sdk.Allocation, remotePath, contentType
 
 	workDir, err := homedir.Dir()
 	if err != nil {
+		logger.Error(err.Error())
 		return err
 	}
 
-	chunkUpload, err := sdk.CreateChunkedUpload(workDir, alloc, fileMeta, newMinioReader(r), isUpdate, false,
+	logger.Info("creating chunked upload")
+	chunkUpload, err := sdk.CreateChunkedUpload(workDir, alloc, fileMeta, newMinioReader(r), isUpdate, false, false,
 		sdk.WithStatusCallback(cb),
 	)
 
 	if err != nil {
+		logger.Error(err.Error())
 		return
 	}
 
 	err = chunkUpload.Start()
 	if err != nil {
+		logger.Info("error from PutFile")
+		logger.Error(err.Error())
 		return
 	}
 
