@@ -4,6 +4,8 @@ go 1.20
 
 require (
 	cloud.google.com/go/storage v1.27.0
+	github.com/0chain/errors v1.0.3
+	github.com/0chain/gosdk v1.8.17-0.20230516190838-4cc68095eb5f
 	github.com/Azure/azure-pipeline-go v0.2.2
 	github.com/Azure/azure-storage-blob-go v0.10.0
 	github.com/Shopify/sarama v1.28.0
@@ -91,8 +93,6 @@ require (
 	golang.org/x/time v0.3.0
 	google.golang.org/api v0.110.0
 	gopkg.in/yaml.v2 v2.4.0
-	github.com/0chain/errors v1.0.3
-	github.com/0chain/gosdk v1.8.16
 )
 
 require (
@@ -196,6 +196,7 @@ require (
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/nats-io/jwt/v2 v2.0.2 // indirect
+	github.com/nats-io/nats-streaming-server v0.21.2 // indirect
 	github.com/nats-io/nkeys v0.3.0 // indirect
 	github.com/nats-io/nuid v1.0.1 // indirect
 	github.com/pelletier/go-toml/v2 v2.0.6 // indirect
@@ -261,7 +262,6 @@ require (
 	sigs.k8s.io/controller-runtime v0.8.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.1.0 // indirect
 	sigs.k8s.io/yaml v1.2.0 // indirect
-	github.com/nats-io/nats-streaming-server v0.21.2 // indirect
 )
 
 //  replace github.com/0chain/gosdk => ../gosdk
