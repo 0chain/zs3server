@@ -12,6 +12,7 @@ import (
 
 	zerror "github.com/0chain/errors"
 	"github.com/0chain/gosdk/zboxcore/sdk"
+	"github.com/0chain/gosdk/zboxcore/zboxutil"
 	"github.com/minio/minio/internal/logger"
 	"github.com/mitchellh/go-homedir"
 )
@@ -211,7 +212,7 @@ func putFile(ctx context.Context, alloc *sdk.Allocation, remotePath, contentType
 	}
 
 	logger.Info("creating chunked upload")
-	chunkUpload, err := sdk.CreateChunkedUpload(workDir, alloc, fileMeta, newMinioReader(r), isUpdate, false, false,
+	chunkUpload, err := sdk.CreateChunkedUpload(workDir, alloc, fileMeta, newMinioReader(r), isUpdate, false, false, zboxutil.NewConnectionId(),
 		sdk.WithStatusCallback(cb),
 	)
 
