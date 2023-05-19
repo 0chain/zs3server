@@ -84,7 +84,7 @@ verify-healing: ## verify healing and replacing disks with minio binary
 
 build: checks ## builds minio to $(PWD)
 	@echo "Building minio binary to './minio'"
-	docker run --rm -v $PWD:/minio --workdir=/minio golang:1.19 go build -buildvcs=false
+	docker run --rm -v $(PWD):/minio --workdir=/minio golang:1.20 go build -buildvcs=false
 
 hotfix-vars:
 	$(eval LDFLAGS := $(shell MINIO_RELEASE="RELEASE" MINIO_HOTFIX="hotfix.$(shell git rev-parse --short HEAD)" go run buildscripts/gen-ldflags.go $(shell git describe --tags --abbrev=0 | \
