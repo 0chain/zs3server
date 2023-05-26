@@ -83,19 +83,19 @@ jobs:
             cd zcnwebappscripts
             sed -i "s,DOCKER_IMAGE=.*,DOCKER_IMAGE=$TAG-$SHORT_SHA,g" "blimp.sh"
 
-        - name: Pushes blimp.sh file
-          if: github.ref == 'refs/heads/staging'
-          uses: dmnemec/copy_file_to_another_repo_action@main
-          env:
-            API_TOKEN_GITHUB: ${{ secrets.ACCESS_TOKEN }}
-          with:
-            source_file: 'zcnwebappscripts/blimp.sh'
-            destination_repo: '0chain/zcnwebappscripts'
-            destination_folder: 'script'
-            destination_branch: 'update/image-tag-script'
-            user_email: 'zus@test.com'
-            user_name: 'zus'
-            commit_message: 'Update Image tag in script'
+#         - name: Pushes blimp.sh file
+#           if: github.ref == 'refs/heads/staging'
+#           uses: dmnemec/copy_file_to_another_repo_action@main
+#           env:
+#             API_TOKEN_GITHUB: ${{ secrets.ACCESS_TOKEN }}
+#           with:
+#             source_file: 'zcnwebappscripts/blimp.sh'
+#             destination_repo: '0chain/zcnwebappscripts'
+#             destination_folder: 'script'
+#             destination_branch: 'update/image-tag-script'
+#             user_email: 'zus@test.com'
+#             user_name: 'zus'
+#             commit_message: 'Update Image tag in script'
 
         - name: Raise PR
           if: github.ref == 'refs/heads/staging'
