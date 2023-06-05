@@ -51,7 +51,7 @@ jobs:
           id: docker_build
           run: |
             SHORT_SHA=$(echo ${{ env.SHA }} | head -c 8)
-            docker run --rm -v $PWD:/minio --workdir=/minio golang:1.20 go build -buildvcs=false
+            docker run --rm -v $PWD:/minio --workdir=/minio golang:1.19 go build -buildvcs=false
             docker build -t $MINIO_SERVER_REGISTRY:latest .
             docker tag $MINIO_SERVER_REGISTRY:latest $MINIO_SERVER_REGISTRY:$TAG-$SHORT_SHA
             docker push $MINIO_SERVER_REGISTRY:$TAG-$SHORT_SHA
