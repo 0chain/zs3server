@@ -61,9 +61,7 @@ jobs:
           id: docker_build
           run: |
             SHORT_SHA=$(echo ${{ env.SHA }} | head -c 8)
-            ls -lha
             go build -buildvcs=false
-            ls -lha
             docker build -t $MINIO_SERVER_REGISTRY:latest .
             docker tag $MINIO_SERVER_REGISTRY:latest $MINIO_SERVER_REGISTRY:$TAG-$SHORT_SHA
             docker push $MINIO_SERVER_REGISTRY:$TAG-$SHORT_SHA
