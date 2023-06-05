@@ -29,6 +29,11 @@ jobs:
       steps:
         - uses: actions/checkout@v1
 
+        - name: Set up Go
+          uses: actions/setup-go@v3
+          with:
+            go-version: ^1.20.0
+        
         - name: Set Docker Image Tags.
           id: get_info
           run: |
@@ -47,11 +52,16 @@ jobs:
               username: ${{ secrets.DOCKERHUB_USERNAME }}
               password: ${{ secrets.DOCKERHUB_PASSWORD }}
 
+        - name: Install Dependencies
+          run: |
+            sudo apt update -y
+            sudo apt -y install build-essential nghttp2 libnghttp2-dev libssl-dev wget
+
         - name: Build & Push Docker Image.
           id: docker_build
           run: |
             SHORT_SHA=$(echo ${{ env.SHA }} | head -c 8)
-            docker run --rm -v $PWD:/minio --workdir=/minio golang:1.20 go build -buildvcs=false
+            go build -buildvcs=false
             docker build -t $MINIO_SERVER_REGISTRY:latest .
             docker tag $MINIO_SERVER_REGISTRY:latest $MINIO_SERVER_REGISTRY:$TAG-$SHORT_SHA
             docker push $MINIO_SERVER_REGISTRY:$TAG-$SHORT_SHA
