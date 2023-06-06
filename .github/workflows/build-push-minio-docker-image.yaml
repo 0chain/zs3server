@@ -33,7 +33,7 @@ jobs:
           uses: actions/setup-go@v3
           with:
             go-version: ^1.20.0
-        
+
         - name: Set Docker Image Tags.
           id: get_info
           run: |
@@ -61,7 +61,7 @@ jobs:
           id: docker_build
           run: |
             SHORT_SHA=$(echo ${{ env.SHA }} | head -c 8)
-            go build -buildvcs=false
+            make build
             docker build -t $MINIO_SERVER_REGISTRY:latest .
             docker tag $MINIO_SERVER_REGISTRY:latest $MINIO_SERVER_REGISTRY:$TAG-$SHORT_SHA
             docker push $MINIO_SERVER_REGISTRY:$TAG-$SHORT_SHA
