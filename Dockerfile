@@ -27,6 +27,7 @@ COPY --from=zbox_build  /usr/local/lib/libmcl*.so \
     /usr/local/lib/libbls*.so \
     /usr/local/lib/
 
+ENV PATH="${PATH}:/opt/bin"
 
 COPY --from=zbox_build /minio/minio /opt/bin/minio
 
@@ -36,4 +37,4 @@ COPY dockerscripts/docker-entrypoint.sh /usr/bin/docker-entrypoint.sh
 
 VOLUME ["/data"]
 
-CMD ["/opt/bin/minio"]
+CMD ["minio"]
