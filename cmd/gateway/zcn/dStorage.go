@@ -168,7 +168,7 @@ func getFileReader(ctx context.Context, alloc *sdk.Allocation, remotePath string
 	ctx, ctxCncl = context.WithTimeout(ctx, getTimeOut(fileSize))
 	defer ctxCncl()
 
-	err := alloc.DownloadFile(localFilePath, remotePath, false, &cb)
+	err := alloc.DownloadFile(localFilePath, remotePath, false, &cb, true)
 	if err != nil {
 		return nil, "", err
 	}
