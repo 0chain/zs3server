@@ -28,7 +28,7 @@ COPY --from=zbox_build  /usr/local/lib/libmcl*.so \
     /usr/local/lib/
 
 
-COPY --from=zbox_build /minio/minio /minio/minio
+COPY --from=zbox_build /minio/minio /opt/bin/minio
 
 COPY dockerscripts/docker-entrypoint.sh /usr/bin/docker-entrypoint.sh
 
