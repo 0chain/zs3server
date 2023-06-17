@@ -33,7 +33,7 @@ COPY --from=zbox_build /minio/minio /opt/bin/minio
 
 COPY dockerscripts/docker-entrypoint.sh /usr/bin/docker-entrypoint.sh
 
-# ENTRYPOINT ["/usr/bin/docker-entrypoint.sh"]
+ENTRYPOINT ["/usr/bin/docker-entrypoint.sh"]
 
 VOLUME ["/data"]
 
