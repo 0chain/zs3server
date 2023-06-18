@@ -61,7 +61,7 @@ jobs:
           id: docker_build
           run: |
             SHORT_SHA=$(echo ${{ env.SHA }} | head -c 8)
-            make build
+            docker build -t zbox_base -f docker.local/base.Dockerfile .
             docker build -t $MINIO_SERVER_REGISTRY:latest .
             docker tag $MINIO_SERVER_REGISTRY:latest $MINIO_SERVER_REGISTRY:$TAG-$SHORT_SHA
             docker push $MINIO_SERVER_REGISTRY:$TAG-$SHORT_SHA
