@@ -5,7 +5,7 @@ go 1.20
 require (
 	cloud.google.com/go/storage v1.27.0
 	github.com/0chain/errors v1.0.3
-	github.com/0chain/gosdk v1.8.17-0.20230615184135-73273a090e23
+	github.com/0chain/gosdk v1.8.17-0.20230712162558-d293d7d8d0df
 	github.com/Azure/azure-pipeline-go v0.2.2
 	github.com/Azure/azure-storage-blob-go v0.10.0
 	github.com/Shopify/sarama v1.28.0
@@ -160,7 +160,7 @@ require (
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/hashicorp/go-uuid v1.0.2 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
-	github.com/herumi/bls-go-binary v1.30.4 // indirect
+	github.com/herumi/bls-go-binary v1.31.0 // indirect
 	github.com/jcmturner/aescts/v2 v2.0.0 // indirect
 	github.com/jcmturner/dnsutils/v2 v2.0.0 // indirect
 	github.com/jcmturner/gofork v1.0.0 // indirect
@@ -249,6 +249,7 @@ require (
 	gopkg.in/h2non/filetype.v1 v1.0.5 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
+	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	gopkg.in/natefinch/npipe.v2 v2.0.0-20160621034901-c1b8fa8bdcce // indirect
 	gopkg.in/square/go-jose.v2 v2.3.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
