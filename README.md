@@ -27,8 +27,7 @@ go build .
 export MINIO_ROOT_USER=someminiouser
 export MINIO_ROOT_PASSWORD=someminiopassword
 ./minio gateway zcn --configDir /path/to/config/dir
-Note: allocation and configDir both are optional. By default configDir takes ~/.zcn as configDir and if allocation is
- not provided in command then it will look for allocation.txt file in configDir directory.
+Note: allocation and configDir both are optional. By default configDir takes ~/.zcn as configDir and if allocation is not provided in command then it will look for allocation.txt file in configDir directory.
 ```
 
 > If you want to debug on local you might want to build with `-gcflags="all=-N -l"` flag to view all the objects during debugging.
