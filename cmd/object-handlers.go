@@ -1872,12 +1872,6 @@ func (api objectAPIHandlers) PutMultipleObjectsHandler(w http.ResponseWriter, r 
 	vars := mux.Vars(r)
 	bucket := vars["bucket"]
 
-	// parse the multipart form to retrieve the file data.
-	if err := r.ParseMultipartForm(32 << 20); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
 	objectAPI := api.ObjectAPI()
 	if objectAPI == nil {
 		writeErrorResponse(ctx, w, errorCodes.ToAPIErr(ErrServerNotInitialized), r.URL)
@@ -1890,9 +1884,6 @@ func (api objectAPIHandlers) PutMultipleObjectsHandler(w http.ResponseWriter, r 
 		return
 	}
 
-	// Get the files from the request
-	files := r.MultipartForm.File
-	putErrors := make(map[string]error)
 	rAuthType := getRequestAuthType(r)
 	switch rAuthType {
 	case authTypeStreamingSigned:
@@ -1915,6 +1906,15 @@ func (api objectAPIHandlers) PutMultipleObjectsHandler(w http.ResponseWriter, r 
 			return
 		}
 	}
+
+	// parse the multipart form to retrieve the file data. This parses in 32 MB memory.
+	if err := r.ParseMultipartForm(32 << 20); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	// Get the files from the request
+	files := r.MultipartForm.File
+	putErrors := make(map[string]error)
 	for objectKey, fileHeaders := range files {
 		// check if put is allowed
 		if s3Err := isPutActionAllowed(ctx, rAuthType, bucket, objectKey, r, iampolicy.PutObjectAction); s3Err != ErrNone {
