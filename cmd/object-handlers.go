@@ -1861,6 +1861,139 @@ func (api objectAPIHandlers) PutObjectHandler(w http.ResponseWriter, r *http.Req
 	}
 }
 
+// PutMultipleObjectsHandler - PUT multiple objects
+// ----------
+// This implementation of the PUT operation adds multiple objects to a bucket.
+
+func (api objectAPIHandlers) PutMultipleObjectsHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := newContext(r, w, "PutMultipleObjects")
+	defer logger.AuditLog(ctx, w, r, mustGetClaimsFromToken(r))
+
+	vars := mux.Vars(r)
+	bucket := vars["bucket"]
+
+	// parse the multipart form to retrieve the file data.
+	if err := r.ParseMultipartForm(32 << 20); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	objectAPI := api.ObjectAPI()
+	if objectAPI == nil {
+		writeErrorResponse(ctx, w, errorCodes.ToAPIErr(ErrServerNotInitialized), r.URL)
+		return
+	}
+
+	metadata, err := extractMetadata(ctx, r)
+	if err != nil {
+		writeErrorResponse(ctx, w, toAPIError(ctx, err), r.URL)
+		return
+	}
+
+	// Get the files from the request
+	files := r.MultipartForm.File
+	putErrors := make(map[string]error)
+	rAuthType := getRequestAuthType(r)
+	switch rAuthType {
+	case authTypeStreamingSigned:
+		// Initialize stream signature verifier.
+		_, s3Err := newSignV4ChunkedReader(r)
+		if s3Err != ErrNone {
+			writeErrorResponse(ctx, w, errorCodes.ToAPIErr(s3Err), r.URL)
+			return
+		}
+	case authTypeSignedV2, authTypePresignedV2:
+		s3Err := isReqAuthenticatedV2(r)
+		if s3Err != ErrNone {
+			writeErrorResponse(ctx, w, errorCodes.ToAPIErr(s3Err), r.URL)
+			return
+		}
+
+	case authTypePresigned, authTypeSigned:
+		if s3Err := reqSignatureV4Verify(r, globalSite.Region, serviceS3); s3Err != ErrNone {
+			writeErrorResponse(ctx, w, errorCodes.ToAPIErr(s3Err), r.URL)
+			return
+		}
+	}
+	for objectKey, fileHeaders := range files {
+		// check if put is allowed
+		if s3Err := isPutActionAllowed(ctx, rAuthType, bucket, objectKey, r, iampolicy.PutObjectAction); s3Err != ErrNone {
+			writeErrorResponse(ctx, w, errorCodes.ToAPIErr(s3Err), r.URL)
+			return
+		}
+
+		for _, fileHeader := range fileHeaders {
+			file, err := fileHeader.Open()
+			if err != nil {
+				putErrors[objectKey] = err
+				continue
+			}
+			defer file.Close()
+
+			var (
+				md5hex              = ""
+				sha256hex           = ""
+				reader    io.Reader = file
+				putObject           = objectAPI.PutObject
+			)
+
+			size := fileHeader.Size
+			actualSize := size
+			hashReader, err := hash.NewReader(reader, size, md5hex, sha256hex, actualSize)
+			if err != nil {
+				putErrors[objectKey] = err
+				continue
+			}
+
+			rawReader := hashReader
+			pReader := NewPutObjReader(rawReader)
+
+			var opts ObjectOptions
+			opts, err = putOpts(ctx, r, bucket, objectKey, metadata)
+			if err != nil {
+				putErrors[objectKey] = err
+				continue
+			}
+			objectInfo, err := putObject(ctx, bucket, objectKey, pReader, opts)
+			if err != nil {
+				putErrors[objectKey] = err
+				continue
+			}
+			setPutObjHeaders(w, objectInfo, false)
+		}
+	}
+
+	if len(putErrors) == 0 {
+		writeSuccessResponseHeadersOnly(w)
+	} else {
+		var apiErrors []APIErrorResponse
+		for objectKey, err := range putErrors {
+			apiError := toAPIError(ctx, err)
+			a := APIErrorResponse{
+				Code:       apiError.Code,
+				Message:    apiError.Description,
+				BucketName: bucket,
+				Key:        objectKey,
+				Resource:   bucket + "/" + objectKey,
+				Region:     globalSite.Region,
+				RequestID:  w.Header().Get(xhttp.AmzRequestID),
+				HostID:     globalDeploymentID,
+			}
+			apiErrors = append(apiErrors, a)
+		}
+
+		errorsElem := struct {
+			XMLName xml.Name           `xml:"Errors"`
+			Errors  []APIErrorResponse `xml:"Error"`
+		}{
+			Errors: apiErrors,
+		}
+		encodedErrorResponse := encodeResponse(errorsElem)
+		writeResponse(w, http.StatusInternalServerError, encodedErrorResponse, mimeXML)
+	}
+
+}
+
 // PutObjectExtractHandler - PUT Object extract is an extended API
 // based off from AWS Snowball feature to auto extract compressed
 // stream will be extracted in the same directory it is stored in
