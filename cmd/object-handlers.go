@@ -1861,7 +1861,8 @@ func (api objectAPIHandlers) PutObjectHandler(w http.ResponseWriter, r *http.Req
 	}
 }
 
-// PutMultipleObjectsHandler - PUT multiple objects
+// PutMultipleObjectsHandler - PUT multiple objects in the object storage. Greedily checks for each file if PUT is
+// allowed or not. If not allowed on one file, it tries to upload the other files.
 // ----------
 // This implementation of the PUT operation adds multiple objects to a bucket.
 
@@ -1907,21 +1908,24 @@ func (api objectAPIHandlers) PutMultipleObjectsHandler(w http.ResponseWriter, r 
 		}
 	}
 
-	// parse the multipart form to retrieve the file data. This parses in 32 MB memory.
+	// parses the multipart form to retrieve the file data. This parses in 32 MB memory.
 	if err := r.ParseMultipartForm(32 << 20); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	// Get the files from the request
-	files := r.MultipartForm.File
 	putErrors := make(map[string]error)
+	var objectKeys []string
+	var pReaders []*PutObjReader
+	var opts []ObjectOptions
+
+	// get the files from the request
+	files := r.MultipartForm.File
 	for objectKey, fileHeaders := range files {
 		// check if put is allowed
 		if s3Err := isPutActionAllowed(ctx, rAuthType, bucket, objectKey, r, iampolicy.PutObjectAction); s3Err != ErrNone {
 			writeErrorResponse(ctx, w, errorCodes.ToAPIErr(s3Err), r.URL)
 			return
 		}
-
 		for _, fileHeader := range fileHeaders {
 			file, err := fileHeader.Open()
 			if err != nil {
@@ -1930,16 +1934,10 @@ func (api objectAPIHandlers) PutMultipleObjectsHandler(w http.ResponseWriter, r 
 			}
 			defer file.Close()
 
-			var (
-				md5hex              = ""
-				sha256hex           = ""
-				reader    io.Reader = file
-				putObject           = objectAPI.PutObject
-			)
-
+			var reader io.Reader = file
 			size := fileHeader.Size
 			actualSize := size
-			hashReader, err := hash.NewReader(reader, size, md5hex, sha256hex, actualSize)
+			hashReader, err := hash.NewReader(reader, size, "", "", actualSize)
 			if err != nil {
 				putErrors[objectKey] = err
 				continue
@@ -1948,24 +1946,54 @@ func (api objectAPIHandlers) PutMultipleObjectsHandler(w http.ResponseWriter, r 
 			rawReader := hashReader
 			pReader := NewPutObjReader(rawReader)
 
-			var opts ObjectOptions
-			opts, err = putOpts(ctx, r, bucket, objectKey, metadata)
+			putOptions, err := putOpts(ctx, r, bucket, objectKey, metadata)
 			if err != nil {
 				putErrors[objectKey] = err
 				continue
 			}
-			objectInfo, err := putObject(ctx, bucket, objectKey, pReader, opts)
-			if err != nil {
-				putErrors[objectKey] = err
-				continue
-			}
-			setPutObjHeaders(w, objectInfo, false)
+
+			// append these values in the last to upload only non-errored objects
+			objectKeys = append(objectKeys, objectKey)
+			opts = append(opts, putOptions)
+			pReaders = append(pReaders, pReader)
 		}
 	}
 
-	if len(putErrors) == 0 {
-		writeSuccessResponseHeadersOnly(w)
-	} else {
+	serializeErrors := func(apiErrors []APIErrorResponse) []byte {
+		errorsElem := struct {
+			XMLName xml.Name           `xml:"Errors"`
+			Errors  []APIErrorResponse `xml:"Error"`
+		}{
+			Errors: apiErrors,
+		}
+		return encodeResponse(errorsElem)
+	}
+
+	// try uploading if at least one valid file is present
+	if pReaders != nil && len(pReaders) > 0 {
+		_, errs := objectAPI.PutMultipleObjects(ctx, bucket, objectKeys, pReaders, opts)
+		if errs != nil && len(errs) > 0 {
+			logger.LogIf(ctx, fmt.Errorf("error during put multi objects"), logger.Application)
+			var apiErrors []APIErrorResponse
+			for _, err := range errs {
+				apiError := toAPIError(ctx, err)
+				a := APIErrorResponse{
+					Code:       apiError.Code,
+					Message:    apiError.Description,
+					BucketName: bucket,
+					Resource:   bucket,
+					Region:     globalSite.Region,
+					RequestID:  w.Header().Get(xhttp.AmzRequestID),
+					HostID:     globalDeploymentID,
+				}
+				apiErrors = append(apiErrors, a)
+			}
+			writeResponse(w, http.StatusInternalServerError, serializeErrors(apiErrors), mimeXML)
+			return
+		}
+	}
+
+	if len(putErrors) > 0 {
 		var apiErrors []APIErrorResponse
 		for objectKey, err := range putErrors {
 			apiError := toAPIError(ctx, err)
@@ -1982,16 +2010,11 @@ func (api objectAPIHandlers) PutMultipleObjectsHandler(w http.ResponseWriter, r 
 			apiErrors = append(apiErrors, a)
 		}
 
-		errorsElem := struct {
-			XMLName xml.Name           `xml:"Errors"`
-			Errors  []APIErrorResponse `xml:"Error"`
-		}{
-			Errors: apiErrors,
-		}
-		encodedErrorResponse := encodeResponse(errorsElem)
-		writeResponse(w, http.StatusInternalServerError, encodedErrorResponse, mimeXML)
+		writeResponse(w, http.StatusInternalServerError, serializeErrors(apiErrors), mimeXML)
+		return
 	}
 
+	writeSuccessResponseHeadersOnly(w)
 }
 
 // PutObjectExtractHandler - PUT Object extract is an extended API

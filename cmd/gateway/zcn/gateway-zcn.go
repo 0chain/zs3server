@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/0chain/gosdk/constants"
+	"github.com/minio/minio/internal/logger"
 	"io"
 	"net/http"
 	"os"
@@ -520,6 +522,103 @@ func (zob *zcnObjects) PutObject(ctx context.Context, bucket, object string, r *
 	return
 }
 
+func (zob *zcnObjects) PutMultipleObjects(
+	ctx context.Context,
+	bucket string,
+	objects []string,
+	r []*minio.PutObjReader,
+	opts []minio.ObjectOptions,
+) ([]minio.ObjectInfo, []error) {
+	total := len(objects)
+	if total <= 0 {
+		return nil, []error{fmt.Errorf("no files to upload")}
+	}
+
+	if total != len(r) || total != len(opts) {
+		return nil, []error{fmt.Errorf("length mismatch of objects with file readers or with options")}
+	}
+
+	remotePaths := make([]string, total)
+	for i, object := range objects {
+		if bucket == rootBucketName {
+			remotePaths[i] = filepath.Join(rootPath, object)
+		} else {
+			remotePaths[i] = filepath.Join(rootPath, bucket, object)
+		}
+	}
+	operationRequests := make([]sdk.OperationRequest, total)
+	objectInfo := make([]minio.ObjectInfo, total)
+	cbs := make([]*statusCB, total)
+	for i := 0; i < total; i++ {
+		var ref *sdk.ORef
+		ref, err := getSingleRegularRef(zob.alloc, remotePaths[i])
+		if err != nil {
+			if !isPathNoExistError(err) {
+				return nil, []error{err}
+			}
+		}
+
+		var isUpdate bool
+		if ref != nil {
+			isUpdate = true
+		}
+
+		contentType := opts[i].UserDefined["content-type"]
+		if contentType == "" {
+			contentType = "application/octet-stream"
+		}
+
+		_, fileName := filepath.Split(remotePaths[i])
+		fileMeta := sdk.FileMeta{
+			Path:       "",
+			RemotePath: remotePaths[i],
+			ActualSize: r[i].Size(),
+			MimeType:   contentType,
+			RemoteName: fileName,
+		}
+
+		cbs[i] = &statusCB{
+			doneCh: make(chan struct{}, 1),
+			errCh:  make(chan error, 1),
+		}
+		options := []sdk.ChunkedUploadOption{
+			sdk.WithStatusCallback(cbs[i]),
+			sdk.WithEncrypt(false),
+		}
+		operationRequests[i] = sdk.OperationRequest{
+			FileMeta:      fileMeta,
+			FileReader:    newMinioReader(r[i]),
+			OperationType: constants.FileOperationInsert,
+			Opts:          options,
+		}
+		if isUpdate {
+			operationRequests[i].OperationType = constants.FileOperationUpdate
+		}
+		objectInfo[i] = minio.ObjectInfo{
+			Bucket:  bucket,
+			Name:    objects[i],
+			Size:    r[i].Size(),
+			ModTime: time.Now(),
+		}
+	}
+
+	errn := zob.alloc.DoMultiOperation(operationRequests)
+	if errn != nil {
+		logger.Error("error in sending multioperation to gosdk: %v", errn)
+		return nil, []error{errn}
+	}
+
+	var errs []error
+	for i, cb := range cbs {
+		select {
+		case <-cb.doneCh:
+		case err := <-cb.errCh:
+			errs = append(errs, fmt.Errorf("error for object %s: %v", objects[i], err)) // store the error in case of unsuccessful upload for ith object
+		}
+	}
+
+	return objectInfo, errs
+}
 func (zob *zcnObjects) CopyObject(ctx context.Context, srcBucket, srcObject, destBucket, destObject string, srcInfo minio.ObjectInfo, srcOpts, dstOpts minio.ObjectOptions) (objInfo minio.ObjectInfo, err error) {
 	var srcRemotePath, dstRemotePath string
 	if srcBucket == rootBucketName {

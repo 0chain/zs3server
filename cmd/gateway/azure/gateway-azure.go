@@ -645,12 +645,12 @@ func (a *azureObjects) DeleteBucket(ctx context.Context, bucket string, opts min
 // distinguish between Azure continuation tokens and application
 // supplied markers.
 //
-// - NextMarker in ListObjectsV1 response is constructed by
-//   prefixing "{minio}" to the Azure continuation token,
-//   e.g, "{minio}CgRvYmoz"
+//   - NextMarker in ListObjectsV1 response is constructed by
+//     prefixing "{minio}" to the Azure continuation token,
+//     e.g, "{minio}CgRvYmoz"
 //
-// - Application supplied markers are used as-is to list
-//   object keys that appear after it in the lexicographical order.
+//   - Application supplied markers are used as-is to list
+//     object keys that appear after it in the lexicographical order.
 func (a *azureObjects) ListObjects(ctx context.Context, bucket, prefix, marker, delimiter string, maxKeys int) (result minio.ListObjectsInfo, err error) {
 	var objects []minio.ObjectInfo
 	var prefixes []string
@@ -911,6 +911,16 @@ func (a *azureObjects) PutObject(ctx context.Context, bucket, object string, r *
 		return objInfo, azureToObjectError(err, bucket, object)
 	}
 	return a.GetObjectInfo(ctx, bucket, object, opts)
+}
+
+func (a *azureObjects) PutMultipleObjects(
+	ctx context.Context,
+	bucket string,
+	objects []string,
+	r []*minio.PutObjReader,
+	opts []minio.ObjectOptions,
+) (objInfo []minio.ObjectInfo, err []error) {
+	return nil, []error{minio.NotImplemented{}}
 }
 
 // CopyObject - Copies a blob from source container to destination container.

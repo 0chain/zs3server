@@ -196,6 +196,7 @@ type ObjectLayer interface {
 	GetObjectNInfo(ctx context.Context, bucket, object string, rs *HTTPRangeSpec, h http.Header, lockType LockType, opts ObjectOptions) (reader *GetObjectReader, err error)
 	GetObjectInfo(ctx context.Context, bucket, object string, opts ObjectOptions) (objInfo ObjectInfo, err error)
 	PutObject(ctx context.Context, bucket, object string, data *PutObjReader, opts ObjectOptions) (objInfo ObjectInfo, err error)
+	PutMultipleObjects(ctx context.Context, bucket string, object []string, data []*PutObjReader, opts []ObjectOptions) (objInfo []ObjectInfo, err []error)
 	CopyObject(ctx context.Context, srcBucket, srcObject, destBucket, destObject string, srcInfo ObjectInfo, srcOpts, dstOpts ObjectOptions) (objInfo ObjectInfo, err error)
 	DeleteObject(ctx context.Context, bucket, object string, opts ObjectOptions) (ObjectInfo, error)
 	DeleteObjects(ctx context.Context, bucket string, objects []ObjectToDelete, opts ObjectOptions) ([]DeletedObject, []error)
@@ -267,3 +268,7 @@ func GetObject(ctx context.Context, api ObjectLayer, bucket, object string, star
 	_, err = xioutil.Copy(writer, reader)
 	return err
 }
+
+// type ExtendedObjectLayer interface {
+// 	PutMultipleObjects(ctx context.Context, bucket string, object []string, data []*PutObjReader, opts []ObjectOptions) (objInfo []ObjectInfo, err []error)
+// }

@@ -1463,3 +1463,13 @@ func (fs *FSObjects) GetRawData(ctx context.Context, volume, file string, fn fun
 	}
 	return fn(f, "fs", fs.fsUUID, file, st.Size(), st.ModTime(), st.IsDir())
 }
+
+func (fs *FSObjects) PutMultipleObjects(
+	ctx context.Context,
+	bucket string,
+	objects []string,
+	r []*PutObjReader,
+	opts []ObjectOptions,
+) (objInfo []ObjectInfo, err []error) {
+	return nil, []error{NotImplemented{}}
+}
