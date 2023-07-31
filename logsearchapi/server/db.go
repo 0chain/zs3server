@@ -84,15 +84,37 @@ type DBClient struct {
 
 // NewDBClient creates a new DBClient.
 func NewDBClient(ctx context.Context, connStr string) (*DBClient, error) {
-	db, err := sql.Open("postgres", connStr)
-	if err != nil {
-		return nil, err
-	}
-	if err := db.PingContext(ctx); err != nil {
-		return nil, err
-	}
-	log.Print("Connected to db.")
+	var db *sql.DB
+	var err error
 
+	retryInterval := time.Second * 5
+	timeout := time.Minute * 2
+
+	// create a new context with timeout
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	startTime := time.Now()
+
+	for {
+		db, err = sql.Open("postgres", connStr)
+		if err != nil {
+			log.Printf("Failed to connect to db: %v. Retrying in 5 seconds.", err)
+			time.Sleep(retryInterval)
+		} else if err = db.PingContext(ctx); err != nil {
+			log.Printf("Failed to ping db: %v. Retrying in 5 seconds.", err)
+			time.Sleep(retryInterval)
+		} else {
+			break
+		}
+
+		if time.Since(startTime) > timeout {
+			log.Printf("Could not connect to db within the specified timeout of %v", timeout)
+			return nil, err
+		}
+	}
+
+	log.Print("Connected to db.")
 	return &DBClient{db}, nil
 }
 
