@@ -2144,3 +2144,13 @@ func (z *erasureServerPools) RestoreTransitionedObject(ctx context.Context, buck
 
 	return z.serverPools[idx].RestoreTransitionedObject(ctx, bucket, object, opts)
 }
+
+func (z *erasureServerPools) PutMultipleObjects(
+	ctx context.Context,
+	bucket string,
+	objects []string,
+	r []*PutObjReader,
+	opts []ObjectOptions,
+) (objInfo []ObjectInfo, err []error) {
+	return nil, []error{NotImplemented{}}
+}

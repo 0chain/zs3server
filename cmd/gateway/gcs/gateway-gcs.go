@@ -927,6 +927,16 @@ func (l *gcsGateway) PutObject(ctx context.Context, bucket string, key string, r
 	return fromGCSAttrsToObjectInfo(w.Attrs()), nil
 }
 
+func (l *gcsGateway) PutMultipleObjects(
+	ctx context.Context,
+	bucket string,
+	objects []string,
+	r []*minio.PutObjReader,
+	opts []minio.ObjectOptions,
+) (objInfo []minio.ObjectInfo, err []error) {
+	return nil, []error{minio.NotImplemented{}}
+}
+
 // CopyObject - Copies a blob from source container to destination container.
 func (l *gcsGateway) CopyObject(ctx context.Context, srcBucket string, srcObject string, destBucket string, destObject string,
 	srcInfo minio.ObjectInfo, srcOpts, dstOpts minio.ObjectOptions) (minio.ObjectInfo, error) {
@@ -1159,7 +1169,7 @@ func (l *gcsGateway) GetMultipartInfo(ctx context.Context, bucket, object, uploa
 	return result, nil
 }
 
-//  ListObjectParts returns all object parts for specified object in specified bucket
+// ListObjectParts returns all object parts for specified object in specified bucket
 func (l *gcsGateway) ListObjectParts(ctx context.Context, bucket string, key string, uploadID string, partNumberMarker int, maxParts int, opts minio.ObjectOptions) (minio.ListPartsInfo, error) {
 	it := l.client.Bucket(bucket).Objects(ctx, &storage.Query{
 		Prefix: path.Join(gcsMinioMultipartPathV1, uploadID),
