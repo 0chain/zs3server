@@ -43,7 +43,7 @@ To build and run minio sevrer component in any machine you will need first to in
 3. Run docker-compose command like the following
 
 ```
-docker-compose up -d
+docker-compose -f environment/docker-compose.yaml up -d
 ```
 
 4. Now you can interact with the clint API follow this [doc](/client-api/README.md)
