@@ -6,8 +6,8 @@ zs3server provides a no-code s3-compatible decentralized storage server on Züs 
   - [Architecture](#architecture)
   - [Building zs3 server](#building-zs3-server)
   - [Running zs3 server](#running-zs3-server)
-  - [Test Minio client](#running-zs3-server)
-  - [Configure Minio client](#running-zs3-server)
+  - [Test MinIO client](#testing-minIO-client)
+  - [Configure MinIO client](#configure-minIO-client)
   
 ## Züs Overview
 [Züs](https://zus.network/) is a high-performance cloud on a fast blockchain offering privacy and configurable uptime. It is an alternative to traditional cloud S3 and has shown better performance on a test network due to its parallel data architecture. The technology uses erasure code to distribute the data between data and parity servers. Züs storage is configurable to provide flexibility for IT managers to design for desired security and uptime, and can design a hybrid or a multi-cloud architecture with a few clicks using [Blimp's](https://blimp.software/) workflow, and can change redundancy and providers on the fly.
@@ -62,11 +62,11 @@ To build and run minio server component you need to first install [docker](https
 ```
 docker-compose up -d
 ```
-## Test MinIO Client `mc`
+## Test MinIO Client 
 
-`mc` provides a modern alternative to UNIX commands such as ls, cat, cp, mirror, diff, etc. It supports filesystems and Amazon S3-compatible cloud storage services. To interact with the client API follow this [doc](/client-api/README.md). You can also interact with the log search API by following this [doc.](/logsearchapi/README.md)
+MinIO client `mc` provides a modern alternative to UNIX commands such as ls, cat, cp, mirror, diff, etc. It supports filesystems and Amazon S3-compatible cloud storage services. To interact with the client API follow this [doc](/client-api/README.md). You can also interact with the log search API by following this [doc.](/logsearchapi/README.md)
 
-## Configure `mc`
+## Configure MinIO Client
 ```
 mc config host add zcn http://localhost:9000 miniouser miniopassword
 mc ls zcn //List your buckets
