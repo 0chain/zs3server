@@ -919,8 +919,8 @@ func (a *azureObjects) PutMultipleObjects(
 	objects []string,
 	r []*minio.PutObjReader,
 	opts []minio.ObjectOptions,
-) (objInfo []minio.ObjectInfo, err []error) {
-	return nil, []error{minio.NotImplemented{}}
+) (objInfo []minio.ObjectInfo, err error) {
+	return nil, minio.NotImplemented{}
 }
 
 // CopyObject - Copies a blob from source container to destination container.
