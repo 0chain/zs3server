@@ -2151,6 +2151,6 @@ func (z *erasureServerPools) PutMultipleObjects(
 	objects []string,
 	r []*PutObjReader,
 	opts []ObjectOptions,
-) (objInfo []ObjectInfo, err []error) {
-	return nil, []error{NotImplemented{}}
+) (objInfo []ObjectInfo, err error) {
+	return nil, NotImplemented{}
 }

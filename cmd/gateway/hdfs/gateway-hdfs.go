@@ -735,8 +735,8 @@ func (n *hdfsObjects) PutMultipleObjects(
 	objects []string,
 	r []*minio.PutObjReader,
 	opts []minio.ObjectOptions,
-) (objInfo []minio.ObjectInfo, err []error) {
-	return nil, []error{minio.NotImplemented{}}
+) (objInfo []minio.ObjectInfo, err error) {
+	return nil, minio.NotImplemented{}
 }
 
 func (n *hdfsObjects) NewMultipartUpload(ctx context.Context, bucket string, object string, opts minio.ObjectOptions) (uploadID string, err error) {

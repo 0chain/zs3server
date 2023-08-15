@@ -529,14 +529,14 @@ func (zob *zcnObjects) PutMultipleObjects(
 	objects []string,
 	r []*minio.PutObjReader,
 	opts []minio.ObjectOptions,
-) ([]minio.ObjectInfo, []error) {
+) ([]minio.ObjectInfo, error) {
 	total := len(objects)
 	if total <= 0 {
-		return nil, []error{fmt.Errorf("no files to upload")}
+		return nil, fmt.Errorf("no files to upload")
 	}
 
 	if total != len(r) || total != len(opts) {
-		return nil, []error{fmt.Errorf("length mismatch of objects with file readers or with options")}
+		return nil, fmt.Errorf("length mismatch of objects with file readers or with options")
 	}
 
 	remotePaths := make([]string, total)
@@ -549,13 +549,8 @@ func (zob *zcnObjects) PutMultipleObjects(
 	}
 	operationRequests := make([]sdk.OperationRequest, total)
 	objectInfo := make([]minio.ObjectInfo, total)
-	cb := &statusCB{
-		doneCh: make(chan struct{}, 1),
-		errCh:  make(chan error, 1),
-	}
-
 	var wg sync.WaitGroup
-	errCh := make(chan error, total)
+	errCh := make(chan error)
 	for i := 0; i < total; i++ {
 		wg.Add(1)
 		go func(idx int) {
@@ -574,22 +569,15 @@ func (zob *zcnObjects) PutMultipleObjects(
 				isUpdate = true
 			}
 
-			contentType := opts[idx].UserDefined["content-type"]
-			if contentType == "" {
-				contentType = "application/octet-stream"
-			}
-
 			_, fileName := filepath.Split(remotePaths[idx])
 			fileMeta := sdk.FileMeta{
 				Path:       "",
 				RemotePath: remotePaths[idx],
 				ActualSize: r[idx].Size(),
-				MimeType:   contentType,
 				RemoteName: fileName,
 			}
 
 			options := []sdk.ChunkedUploadOption{
-				sdk.WithStatusCallback(cb),
 				sdk.WithEncrypt(false),
 			}
 			operationRequests[idx] = sdk.OperationRequest{
@@ -608,30 +596,20 @@ func (zob *zcnObjects) PutMultipleObjects(
 				ModTime: time.Now(),
 			}
 		}(i)
+
+		select {
+		case err := <-errCh:
+			logger.Error("error while getting file ref and creating operationRequests.")
+			return nil, err
+		default:
+		}
 	}
 	wg.Wait()
-	close(errCh)
-
-	var errs []error
-	for err := range errCh {
-		errs = append(errs, err)
-	}
-
-	if errs != nil && len(errs) > 0 {
-		logger.Error("error while getting file ref and creating operationRequests.")
-		return nil, errs
-	}
 
 	errn := zob.alloc.DoMultiOperation(operationRequests)
 	if errn != nil {
 		logger.Error("error in sending multioperation to gosdk: %v", errn)
-		return nil, []error{errn}
-	}
-
-	select {
-	case <-cb.doneCh:
-	case err := <-cb.errCh:
-		return nil, []error{err}
+		return nil, errn
 	}
 
 	return objectInfo, nil
