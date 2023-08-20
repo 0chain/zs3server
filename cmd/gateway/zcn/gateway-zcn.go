@@ -245,6 +245,10 @@ func (zob *zcnObjects) GetBucketInfo(ctx context.Context, bucket string) (bi min
 		return
 	}
 
+	if ref.Type != dirType {
+		return bi, minio.BucketNotFound{Bucket: bucket}
+	}
+
 	return minio.BucketInfo{Name: ref.Name, Created: ref.CreatedAt.ToTime()}, nil
 }
 
@@ -258,7 +262,7 @@ func (zob *zcnObjects) GetObjectInfo(ctx context.Context, bucket, object string,
 	}
 
 	var ref *sdk.ORef
-	ref, err = getSingleRegularRef(zob.alloc, remotePath)
+	ref, err = getSingleRegularRef(zob.alloc, filepath.Clean(remotePath))
 	if err != nil {
 		if isPathNoExistError(err) {
 			return objInfo, minio.ObjectNotFound{Bucket: bucket, Object: object}
@@ -266,9 +270,13 @@ func (zob *zcnObjects) GetObjectInfo(ctx context.Context, bucket, object string,
 		return
 	}
 
+	if ref.Type == dirType {
+		return minio.ObjectInfo{}, minio.ObjectNotFound{Bucket: bucket, Object: object}
+	}
+
 	return minio.ObjectInfo{
 		Bucket:      bucket,
-		Name:        getCommonPrefix(remotePath),
+		Name:        getRelativePathOfObj(ref.Path, bucket),
 		ModTime:     ref.UpdatedAt.ToTime(),
 		Size:        ref.ActualFileSize,
 		IsDir:       ref.Type == dirType,
@@ -392,14 +400,8 @@ func (zob *zcnObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 		remotePath = filepath.Join(rootPath, bucket, prefix)
 	}
 
-	var isSuffix bool
-	if strings.HasSuffix(prefix, "/") {
-		remotePath = filepath.Clean(remotePath) + "/"
-		isSuffix = true
-	}
-
 	var ref *sdk.ORef
-	ref, err = getSingleRegularRef(zob.alloc, remotePath)
+	ref, err = getSingleRegularRef(zob.alloc, filepath.Clean(remotePath))
 	if err != nil {
 		if isPathNoExistError(err) {
 			return result, nil
@@ -408,7 +410,7 @@ func (zob *zcnObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 	}
 
 	if ref.Type == fileType {
-		if isSuffix {
+		if strings.HasSuffix(prefix, "/") {
 			return minio.ListObjectsInfo{
 					IsTruncated: false,
 					Objects:     []minio.ObjectInfo{},
@@ -416,15 +418,12 @@ func (zob *zcnObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 				},
 				nil
 		}
-		parentPath, fileName := filepath.Split(ref.Path)
-		commonPrefix := getCommonPrefix(parentPath)
-		objName := filepath.Join(commonPrefix, fileName)
 		return minio.ListObjectsInfo{
 				IsTruncated: false,
 				Objects: []minio.ObjectInfo{
 					{
 						Bucket:       bucket,
-						Name:         objName,
+						Name:         getRelativePathOfObj(ref.Path, bucket),
 						Size:         ref.ActualFileSize,
 						IsDir:        false,
 						ModTime:      ref.UpdatedAt.ToTime(),
@@ -460,7 +459,7 @@ func (zob *zcnObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 
 		objects = append(objects, minio.ObjectInfo{
 			Bucket:       bucket,
-			Name:         ref.Name,
+			Name:         getRelativePathOfObj(ref.Path, bucket),
 			ModTime:      ref.UpdatedAt.ToTime(),
 			Size:         ref.ActualFileSize,
 			IsDir:        false,
@@ -475,6 +474,20 @@ func (zob *zcnObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 	result.Objects = objects
 	result.Prefixes = prefixes
 	return
+}
+
+// getRelativePathOfObj returns the relative path of a file without the leading slash and without the name of the bucket
+func getRelativePathOfObj(refPath, bucketName string) string {
+	//eg: refPath = "/myFile.txt" bucketName = "/", return value = "myFile.txt"
+	//eg: refPath = "/buck1/myFile.txt" bucketName = anything other than "/" or "root", return value = "myFile.txt"
+	//eg: refPath = "/myFile.txt" bucketName = "abc", return value = "myFile.txt"
+	//remotePath = "/xyz/abc/def", return value = "abc/def"
+
+	if bucketName == rootPath || bucketName == rootBucketName {
+		return strings.TrimPrefix(refPath, rootPath)
+	}
+
+	return getCommonPrefix(refPath)
 }
 
 func (zob *zcnObjects) MakeBucketWithLocation(ctx context.Context, bucket string, opts minio.BucketOptions) error {
