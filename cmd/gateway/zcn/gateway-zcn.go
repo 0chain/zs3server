@@ -401,7 +401,7 @@ func (zob *zcnObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 	}
 
 	var ref *sdk.ORef
-	ref, err = getSingleRegularRef(zob.alloc, filepath.Clean(remotePath))
+	ref, err = getSingleRegularRef(zob.alloc, remotePath)
 	if err != nil {
 		if isPathNoExistError(err) {
 			return result, nil

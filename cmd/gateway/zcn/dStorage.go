@@ -130,12 +130,14 @@ func listRegularRefs(alloc *sdk.Allocation, remotePath, marker, fileType string,
 
 func getRegularRefs(alloc *sdk.Allocation, remotePath, offsetPath, fileType string, pageLimit int) (oResult *sdk.ObjectTreeResult, err error) {
 	level := len(strings.Split(strings.TrimSuffix(remotePath, "/"), "/")) + 1
+	remotePath = filepath.Clean(remotePath)
 	oResult, err = alloc.GetRefs(remotePath, offsetPath, "", "", fileType, "regular", level, pageLimit)
 	return
 }
 
 func getSingleRegularRef(alloc *sdk.Allocation, remotePath string) (*sdk.ORef, error) {
 	level := len(strings.Split(strings.TrimSuffix(remotePath, "/"), "/"))
+	remotePath = filepath.Clean(remotePath)
 	oREsult, err := alloc.GetRefs(remotePath, "", "", "", "", "regular", level, 1)
 	if err != nil {
 		logger.Error("error with GetRefs", err.Error(), " this is the error")
