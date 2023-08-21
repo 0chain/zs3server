@@ -77,43 +77,50 @@ func listRegularRefs(alloc *sdk.Allocation, remotePath, marker, fileType string,
 	var markedPath string
 
 	remotePath = filepath.Clean(remotePath)
-	commonPrefix := getCommonPrefix(remotePath)
-	offsetPath := filepath.Join(remotePath, marker)
-	for {
-		oResult, err := getRegularRefs(alloc, remotePath, offsetPath, fileType, pageLimit)
-		if err != nil {
-			return nil, true, "", nil, err
-		}
-		if len(oResult.Refs) == 0 {
-			break
-		}
 
-		for i := 0; i < len(oResult.Refs); i++ {
-			ref := oResult.Refs[i]
-			trimmedPath := strings.TrimPrefix(ref.Path, remotePath+"/")
-			if isDelimited {
-				if ref.Type == dirType {
-					dirPrefix := filepath.Join(commonPrefix, trimmedPath) + "/"
-					prefixes = append(prefixes, dirPrefix)
-					continue
-				}
+	directories := []string{remotePath}
+	var currentRemotePath string
+	for len(directories) > 0 && !isTruncated {
+		currentRemotePath = directories[0]
+		directories = directories[1:] // dequeue from the directories queue
+		commonPrefix := getCommonPrefix(currentRemotePath)
+		offsetPath := filepath.Join(currentRemotePath, marker)
+		for {
+			oResult, err := getRegularRefs(alloc, currentRemotePath, offsetPath, fileType, pageLimit)
+			if err != nil {
+				return nil, true, "", nil, err
 			}
-
-			ref.Name = filepath.Join(commonPrefix, trimmedPath)
-
-			refs = append(refs, ref)
-			if maxRefs != 0 && len(refs) >= maxRefs {
-				markedPath = ref.Path
-				isTruncated = true
+			if len(oResult.Refs) == 0 {
 				break
 			}
+
+			for i := 0; i < len(oResult.Refs); i++ {
+				ref := oResult.Refs[i]
+				trimmedPath := strings.TrimPrefix(ref.Path, currentRemotePath+"/")
+				if ref.Type == dirType {
+					if isDelimited {
+						dirPrefix := filepath.Join(commonPrefix, trimmedPath) + "/"
+						prefixes = append(prefixes, dirPrefix)
+						continue
+					} else {
+						directories = append(directories, ref.Path)
+					}
+				}
+
+				ref.Name = filepath.Join(commonPrefix, trimmedPath)
+
+				refs = append(refs, ref)
+				if maxRefs != 0 && len(refs) >= maxRefs {
+					markedPath = ref.Path
+					isTruncated = true
+					break
+				}
+			}
+			offsetPath = oResult.OffsetPath
 		}
-
-		offsetPath = oResult.OffsetPath
-
 	}
 	if isTruncated {
-		marker = strings.TrimPrefix(markedPath, remotePath+"/")
+		marker = strings.TrimPrefix(markedPath, currentRemotePath+"/")
 	} else {
 		marker = ""
 	}
@@ -123,12 +130,14 @@ func listRegularRefs(alloc *sdk.Allocation, remotePath, marker, fileType string,
 
 func getRegularRefs(alloc *sdk.Allocation, remotePath, offsetPath, fileType string, pageLimit int) (oResult *sdk.ObjectTreeResult, err error) {
 	level := len(strings.Split(strings.TrimSuffix(remotePath, "/"), "/")) + 1
+	remotePath = filepath.Clean(remotePath)
 	oResult, err = alloc.GetRefs(remotePath, offsetPath, "", "", fileType, "regular", level, pageLimit)
 	return
 }
 
 func getSingleRegularRef(alloc *sdk.Allocation, remotePath string) (*sdk.ORef, error) {
 	level := len(strings.Split(strings.TrimSuffix(remotePath, "/"), "/"))
+	remotePath = filepath.Clean(remotePath)
 	oREsult, err := alloc.GetRefs(remotePath, "", "", "", "", "regular", level, 1)
 	if err != nil {
 		logger.Error("error with GetRefs", err.Error(), " this is the error")
