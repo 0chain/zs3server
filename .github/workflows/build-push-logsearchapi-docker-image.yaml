@@ -20,7 +20,7 @@ env:
   MINIO_LOGSEARCHAPI_REGISTRY: ${{ secrets.MINIO_LOGSEARCHAPI_REGISTRY }}
 
 jobs:
-    dockerize_minio:
+    dockerize_logsearchapi:
       runs-on: [self-hosted, arc-runner]
 
       outputs:

@@ -5,17 +5,12 @@ ENV GO111MODULE=on
 
 # Download the dependencies:
 # Will be cached if we don't change mod/sum files
+WORKDIR $SRC_DIR
+COPY . .
 
-COPY ./go.mod $SRC_DIR/
-COPY ./go.sum $SRC_DIR/
-
-RUN cd $SRC_DIR && go mod download -x
-
-COPY . $SRC_DIR/
-
-WORKDIR /minio
-
-RUN go build -o minio -buildvcs=false
+RUN go mod download -x && \
+    go build -o minio -buildvcs=false && \
+    ls /usr/local/lib/
 
 # Copy the build artifact into a minimal runtime image:
 FROM alpine:3.18
