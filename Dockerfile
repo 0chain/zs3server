@@ -9,7 +9,8 @@ WORKDIR $SRC_DIR
 COPY . .
 
 RUN go mod download -x && \
-    go build -o minio -buildvcs=false
+    go build -o minio -buildvcs=false && \
+    ls /usr/local/lib/
 
 # Copy the build artifact into a minimal runtime image:
 FROM alpine:3.18
