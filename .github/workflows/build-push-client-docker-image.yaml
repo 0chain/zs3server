@@ -20,7 +20,7 @@ env:
   MINIO_CLIENT_REGISTRY: ${{ secrets.MINIO_CLIENT_REGISTRY }}
 
 jobs:
-    dockerize_minio:
+    dockerize_client:
       runs-on: [self-hosted, arc-runner]
 
       outputs:
