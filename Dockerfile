@@ -15,7 +15,7 @@ COPY . $SRC_DIR/
 
 WORKDIR /minio
 
-RUN go build -o minio -buildvcs=false
+RUN go build -o minio -buildvcs=false && ls /usr/local/lib/
 
 # Copy the build artifact into a minimal runtime image:
 FROM alpine:3.18
