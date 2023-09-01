@@ -1910,7 +1910,9 @@ func (api objectAPIHandlers) PutMultipleObjectsHandler(w http.ResponseWriter, r 
 
 	// parses the multipart form to retrieve the file data. This parses in 32 MB memory.
 	if err := r.ParseMultipartForm(32 << 20); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		e := fmt.Errorf("for PUT `/:bucket/:object?multiupload=true` api, body should be sent in a "+
+			"multipart/form-data type with key as objectKey and value as file object, error: %s", err.Error())
+		http.Error(w, e.Error(), http.StatusBadRequest)
 		return
 	}
 	var objectKeys []string
