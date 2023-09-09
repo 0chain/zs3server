@@ -14,7 +14,7 @@ services:
       - db:/var/lib/postgresql/data
 
   logsearchapi:
-    image: 0chaindev/blimp-logsearchapi:v0.0.3
+    image: 0chaindev/blimp-logsearchapi:staging
     depends_on:
       - db
     ports:
@@ -27,7 +27,7 @@ services:
     links:
       - db
   minioserver:
-    image: 0chaindev/blimp-minioserver:v0.0.2
+    image: 0chaindev/blimp-minioserver:staging
     container_name: minioserver
     ports:
       - 9000:9000
@@ -44,7 +44,7 @@ services:
     volumes:
       - ~/.zcn:/root/.zcn
   minioclinet:
-    image: 0chaindev/blimp-clientapi:v0.0.4
+    image: 0chaindev/blimp-clientapi:staging
     container_name: minioclient
     depends_on:
       - minioserver
