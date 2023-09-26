@@ -6,8 +6,8 @@ zs3server provides a no-code s3-compatible decentralized storage server on Züs 
   - [Architecture](#architecture)
   - [Building zs3 server](#building-zs3-server)
   - [Running zs3 server](#running-zs3-server)
-  - [Test MinIO client](#testing-minIO-client)
-  - [Configure MinIO client](#configure-minIO-client)
+  - [Test MiniO client](#test-minio-client)
+  - [Configure Minio client](#configure-minio-client)
   
 ## Züs Overview
 [Züs](https://zus.network/) is a high-performance cloud on a fast blockchain offering privacy and configurable uptime. It is an alternative to traditional cloud S3 and has shown better performance on a test network due to its parallel data architecture. The technology uses erasure code to distribute the data between data and parity servers. Züs storage is configurable to provide flexibility for IT managers to design for desired security and uptime, and can design a hybrid or a multi-cloud architecture with a few clicks using [Blimp's](https://blimp.software/) workflow, and can change redundancy and providers on the fly.
@@ -37,7 +37,10 @@ There are three main components that will be installed in the customer server.
 3. [MinioClient](/client-api/README.md) is the component that will communicate directly to the zs3server and it is protected using access and secret key. 
 
 ## Building zs3-server
-Prerequisites to run MinIO ZCN gateway: [wallet.json can be created using zwalletcli](https://github.com/0chain/zwalletcli#creating-and-restoring-wallets), [config.yaml](https://github.com/0chain/zboxcli/blob/staging/network/config.yaml), and [allocation.txt can be created using zboxcli](https://github.com/0chain/zboxcli/tree/staging#create-new-allocation).
+Prerequisites to run MinIO ZCN gateway: 
+- [A wallet.json created using zwalletcli](https://github.com/0chain/zwalletcli#creating-and-restoring-wallets)
+- [Config.yaml](https://github.com/0chain/zboxcli/blob/staging/network/config.yaml) 
+- [An allocation.txt created using zboxcli](https://github.com/0chain/zboxcli/tree/staging#create-new-allocation).
 
 ```
 git clone git@github.com:0chain/zs3server.git
@@ -53,15 +56,14 @@ Note: allocation and configDir both are optional. By default configDir takes ~/.
 
 ## Running zs3-server 
 
-To build and run minio server component you need to first install [docker](https://www.docker.com/products/docker-desktop/). 
+1. To build and run the minio server component you need to install [docker](https://www.docker.com/products/docker-desktop/). 
 
-1. Make sure you have the allocation ready in the default folder ``~/.zcn``
-
-3. Run the docker-compose command inside the zs3server directory.
-
+2. Run the docker-compose command inside the zs3server directory./
 ```
 docker-compose up -d
 ```
+3. Make sure allocation.txt file exist in the default folder ``~/.zcn``
+
 ## Test MinIO Client 
 
 MinIO client `mc` provides a modern alternative to UNIX commands such as ls, cat, cp, mirror, diff, etc. It supports filesystems and Amazon S3-compatible cloud storage services. To interact with the client API follow this [doc](/client-api/README.md). You can also interact with the log search API by following this [doc.](/logsearchapi/README.md)
