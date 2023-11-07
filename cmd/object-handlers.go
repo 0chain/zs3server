@@ -1910,10 +1910,11 @@ func (api objectAPIHandlers) PutMultipleObjectsHandler(w http.ResponseWriter, r 
 
 	// parses the multipart form to retrieve the file data. This parses in 32 MB memory.
 	if err := r.ParseMultipartForm(32 << 20); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		e := fmt.Errorf("for PUT `/:bucket/:object?multiupload=true` api, body should be sent in a "+
+			"multipart/form-data type with key as objectKey and value as file object, error: %s", err.Error())
+		http.Error(w, e.Error(), http.StatusBadRequest)
 		return
 	}
-	putErrors := make(map[string]error)
 	var objectKeys []string
 	var pReaders []*PutObjReader
 	var opts []ObjectOptions
@@ -1929,8 +1930,8 @@ func (api objectAPIHandlers) PutMultipleObjectsHandler(w http.ResponseWriter, r 
 		for _, fileHeader := range fileHeaders {
 			file, err := fileHeader.Open()
 			if err != nil {
-				putErrors[objectKey] = err
-				continue
+				writeErrorResponse(ctx, w, toAPIError(ctx, err), r.URL)
+				return
 			}
 			defer file.Close()
 
@@ -1939,8 +1940,8 @@ func (api objectAPIHandlers) PutMultipleObjectsHandler(w http.ResponseWriter, r 
 			actualSize := size
 			hashReader, err := hash.NewReader(reader, size, "", "", actualSize)
 			if err != nil {
-				putErrors[objectKey] = err
-				continue
+				writeErrorResponse(ctx, w, toAPIError(ctx, err), r.URL)
+				return
 			}
 
 			rawReader := hashReader
@@ -1948,8 +1949,8 @@ func (api objectAPIHandlers) PutMultipleObjectsHandler(w http.ResponseWriter, r 
 
 			putOptions, err := putOpts(ctx, r, bucket, objectKey, metadata)
 			if err != nil {
-				putErrors[objectKey] = err
-				continue
+				writeErrorResponse(ctx, w, toAPIError(ctx, err), r.URL)
+				return
 			}
 
 			// append these values in the last to upload only non-errored objects
@@ -1959,58 +1960,10 @@ func (api objectAPIHandlers) PutMultipleObjectsHandler(w http.ResponseWriter, r 
 		}
 	}
 
-	serializeErrors := func(apiErrors []APIErrorResponse) []byte {
-		errorsElem := struct {
-			XMLName xml.Name           `xml:"Errors"`
-			Errors  []APIErrorResponse `xml:"Error"`
-		}{
-			Errors: apiErrors,
-		}
-		return encodeResponse(errorsElem)
-	}
-
-	// try uploading if at least one valid file is present
-	if pReaders != nil && len(pReaders) > 0 {
-		_, errs := objectAPI.PutMultipleObjects(ctx, bucket, objectKeys, pReaders, opts)
-		if errs != nil && len(errs) > 0 {
-			logger.LogIf(ctx, fmt.Errorf("error during put multi objects"), logger.Application)
-			var apiErrors []APIErrorResponse
-			for _, err := range errs {
-				apiError := toAPIError(ctx, err)
-				a := APIErrorResponse{
-					Code:       apiError.Code,
-					Message:    apiError.Description,
-					BucketName: bucket,
-					Resource:   bucket,
-					Region:     globalSite.Region,
-					RequestID:  w.Header().Get(xhttp.AmzRequestID),
-					HostID:     globalDeploymentID,
-				}
-				apiErrors = append(apiErrors, a)
-			}
-			writeResponse(w, http.StatusInternalServerError, serializeErrors(apiErrors), mimeXML)
-			return
-		}
-	}
-
-	if len(putErrors) > 0 {
-		var apiErrors []APIErrorResponse
-		for objectKey, err := range putErrors {
-			apiError := toAPIError(ctx, err)
-			a := APIErrorResponse{
-				Code:       apiError.Code,
-				Message:    apiError.Description,
-				BucketName: bucket,
-				Key:        objectKey,
-				Resource:   bucket + "/" + objectKey,
-				Region:     globalSite.Region,
-				RequestID:  w.Header().Get(xhttp.AmzRequestID),
-				HostID:     globalDeploymentID,
-			}
-			apiErrors = append(apiErrors, a)
-		}
-
-		writeResponse(w, http.StatusInternalServerError, serializeErrors(apiErrors), mimeXML)
+	_, err = objectAPI.PutMultipleObjects(ctx, bucket, objectKeys, pReaders, opts)
+	if err != nil {
+		logger.LogIf(ctx, fmt.Errorf("error during put multi objects"), logger.Application)
+		writeErrorResponse(ctx, w, toAPIError(ctx, err), r.URL)
 		return
 	}
 

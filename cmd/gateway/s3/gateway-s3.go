@@ -541,8 +541,8 @@ func (l *s3Objects) PutMultipleObjects(
 	objects []string,
 	r []*minio.PutObjReader,
 	opts []minio.ObjectOptions,
-) (objInfo []minio.ObjectInfo, err []error) {
-	return nil, []error{minio.NotImplemented{}}
+) (objInfo []minio.ObjectInfo, err error) {
+	return nil, minio.NotImplemented{}
 }
 
 // CopyObject copies an object from source bucket to a destination bucket.

@@ -6,5 +6,6 @@ default.etcd
 *.tar.gz
 *.bzip2
 *.zip
+*.md
 browser/node_modules
 node_modules

@@ -302,12 +302,12 @@ func registerAPIRouter(router *mux.Router) {
 		router.Methods(http.MethodPut).Path("/{object:.+}").HeadersRegexp(xhttp.AmzSnowballExtract, "true").HandlerFunc(
 			collectAPIStats("putobject", maxClients(gz(httpTraceHdrs(api.PutObjectExtractHandler)))))
 
-		// PutObject
-		router.Methods(http.MethodPut).Path("/{object}").HandlerFunc(
-			collectAPIStats("putobject", maxClients(gz(httpTraceHdrs(api.PutObjectHandler)))))
 		// PutMultipleObjects
 		router.Methods(http.MethodPut).HandlerFunc(
 			collectAPIStats("putmultipleobjects", maxClients(gz(httpTraceHdrs(api.PutMultipleObjectsHandler))))).Queries("multiupload", "true")
+		// PutObject
+		router.Methods(http.MethodPut).Path("/{object:.+}").HandlerFunc(
+			collectAPIStats("putobject", maxClients(gz(httpTraceHdrs(api.PutObjectHandler)))))
 
 		// DeleteObject
 		router.Methods(http.MethodDelete).Path("/{object:.+}").HandlerFunc(
