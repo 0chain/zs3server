@@ -5,7 +5,7 @@ go 1.20
 require (
 	cloud.google.com/go/storage v1.27.0
 	github.com/0chain/errors v1.0.3
-	github.com/0chain/gosdk v1.8.17-0.20230727121421-5e33266bb815
+	github.com/0chain/gosdk v1.10.1-0.20231104150015-d3c786ac98c7
 	github.com/Azure/azure-pipeline-go v0.2.2
 	github.com/Azure/azure-storage-blob-go v0.10.0
 	github.com/Shopify/sarama v1.28.0
