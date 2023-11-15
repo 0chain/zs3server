@@ -11,8 +11,8 @@ import (
 	"time"
 
 	zerror "github.com/0chain/errors"
+	"github.com/0chain/gosdk/constants"
 	"github.com/0chain/gosdk/zboxcore/sdk"
-	"github.com/0chain/gosdk/zboxcore/zboxutil"
 	"github.com/minio/minio/internal/logger"
 	"github.com/mitchellh/go-homedir"
 )
@@ -200,11 +200,6 @@ func getFileReader(ctx context.Context, alloc *sdk.Allocation, remotePath string
 
 func putFile(ctx context.Context, alloc *sdk.Allocation, remotePath, contentType string, r io.Reader, size int64, isUpdate, shouldEncrypt bool) (err error) {
 	logger.Info("started PutFile")
-	cb := &statusCB{
-		doneCh: make(chan struct{}, 1),
-		errCh:  make(chan error, 1),
-	}
-
 	_, fileName := filepath.Split(remotePath)
 	fileMeta := sdk.FileMeta{
 		Path:       "",
@@ -220,26 +215,22 @@ func putFile(ctx context.Context, alloc *sdk.Allocation, remotePath, contentType
 		return err
 	}
 
-	logger.Info("creating chunked upload")
-	chunkUpload, err := sdk.CreateChunkedUpload(workDir, alloc, fileMeta, newMinioReader(r), isUpdate, false, false, zboxutil.NewConnectionId(),
-		sdk.WithStatusCallback(cb),
-	)
+	logger.Info("starting chunked upload")
+	opRequest := sdk.OperationRequest{
+		OperationType: constants.FileOperationInsert,
+		FileReader:    newMinioReader(r),
+		Workdir:       workDir,
+		RemotePath:    remotePath,
+		FileMeta:      fileMeta,
+		Opts: []sdk.ChunkedUploadOption{
+			sdk.WithChunkNumber(250),
+		},
+	}
 
+	err = alloc.DoMultiOperation([]sdk.OperationRequest{opRequest})
 	if err != nil {
 		logger.Error(err.Error())
 		return
-	}
-
-	err = chunkUpload.Start()
-	if err != nil {
-		logger.Info("error from PutFile")
-		logger.Error(err.Error())
-		return
-	}
-
-	select {
-	case <-cb.doneCh:
-	case err = <-cb.errCh:
 	}
 
 	return
