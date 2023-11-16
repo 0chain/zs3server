@@ -57,9 +57,37 @@ docker-compose up -d
 ### Configure `mc`
 ```
 mc config host add zcn http://localhost:9000 miniouser miniopassword
+
+-----Example 1-------
 mc ls zcn //List your buckets
 
+output:
 [2017-02-22 01:50:43 PST]     0B user/
 [2017-02-26 21:43:51 PST]     0B datasets/
 [2017-02-26 22:10:11 PST]     0B assets/
+
+-----Example 2-------
+Create a bucket named bucket1
+mc mb zcn/bucket1 
+
+-----Example 3-------
+Upload files to bucket1
+mc cp someLocalFilePath1 someLocalFilePath2 zcn/bucket1
+
+-----Example 4-------
+Delete file from bucket1
+mc rm zcn/bucket1/someLocalFilePath1
+---------------------
+
+Check mc --help for the exhaustive list of cmds available.
 ```
+
+
+## Test using Postman Using REST APIs
+- Add the following authorization settings
+![](./assets/postman-auth.png "Authorization settings")
+- The `AccessKey` would be the MINIO_ROOT_USER which you set earlier during zs3server deployment and `SecretKey` would be the MINIO_ROOT_PASSWORD.
+- If you do not want to share the MINIO_ROOT_USER and MINIO_ROOT_PASSWORD, you can also create a user from minio console and share their access key and secret instead.
+- Use the REST APIs to interact with the server. 
+- Postman collection for the same is provided below:
+[Postman Collection](./assets/Zs3ServerCollection.postman_collection.json)
