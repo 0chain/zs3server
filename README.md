@@ -56,7 +56,7 @@ docker-compose up -d
 Install from here: https://aws.amazon.com/cli/
 
 ### Configuration
-Fetch the access key and secret from your deployed the zs3server. To configure `AWS CLI`, type `aws configure` and 
+Fetch the access key and secret from your deployed zs3server. To configure `aws cli`, type `aws configure` and 
 specify the zs3server key information like below:
 ```
 aws configure
