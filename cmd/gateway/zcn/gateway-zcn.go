@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/0chain/gosdk/constants"
-	"github.com/minio/minio/internal/logger"
 	"io"
 	"net/http"
 	"os"
@@ -13,6 +11,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/0chain/gosdk/constants"
+	"github.com/minio/minio/internal/logger"
 
 	"github.com/0chain/gosdk/zboxcore/sdk"
 	"github.com/minio/cli"
@@ -493,7 +494,13 @@ func getRelativePathOfObj(refPath, bucketName string) string {
 func (zob *zcnObjects) MakeBucketWithLocation(ctx context.Context, bucket string, opts minio.BucketOptions) error {
 	// Create a directory; ignore opts
 	remotePath := filepath.Join(rootPath, bucket)
-	return zob.alloc.CreateDir(remotePath)
+	createDirOp := sdk.OperationRequest{
+		OperationType: constants.FileOperationCreateDir,
+		RemotePath:    remotePath,
+	}
+	return zob.alloc.DoMultiOperation([]sdk.OperationRequest{
+		createDirOp,
+	})
 }
 
 func (zob *zcnObjects) PutObject(ctx context.Context, bucket, object string, r *minio.PutObjReader, opts minio.ObjectOptions) (objInfo minio.ObjectInfo, err error) {
@@ -592,6 +599,7 @@ func (zob *zcnObjects) PutMultipleObjects(
 
 			options := []sdk.ChunkedUploadOption{
 				sdk.WithEncrypt(false),
+				sdk.WithChunkNumber(200),
 			}
 			operationRequests[idx] = sdk.OperationRequest{
 				FileMeta:      fileMeta,
@@ -640,8 +648,14 @@ func (zob *zcnObjects) CopyObject(ctx context.Context, srcBucket, srcObject, des
 	} else {
 		dstRemotePath = filepath.Join(rootPath, destBucket, destObject)
 	}
-
-	err = zob.alloc.CopyObject(srcRemotePath, dstRemotePath)
+	copyOp := sdk.OperationRequest{
+		OperationType: constants.FileOperationCopy,
+		RemotePath:    srcRemotePath,
+		DestPath:      dstRemotePath,
+	}
+	err = zob.alloc.DoMultiOperation([]sdk.OperationRequest{
+		copyOp,
+	})
 	if err != nil {
 		return
 	}
