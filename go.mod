@@ -5,7 +5,7 @@ go 1.20
 require (
 	cloud.google.com/go/storage v1.27.0
 	github.com/0chain/errors v1.0.3
-	github.com/0chain/gosdk v1.10.1-0.20231104150015-d3c786ac98c7
+	github.com/0chain/gosdk v1.10.1-0.20231115115747-895c7f001283
 	github.com/Azure/azure-pipeline-go v0.2.2
 	github.com/Azure/azure-storage-blob-go v0.10.0
 	github.com/Shopify/sarama v1.28.0
@@ -43,7 +43,7 @@ require (
 	github.com/klauspost/cpuid/v2 v2.2.4
 	github.com/klauspost/pgzip v1.2.5
 	github.com/klauspost/readahead v1.4.0
-	github.com/klauspost/reedsolomon v1.11.7
+	github.com/klauspost/reedsolomon v1.11.8
 	github.com/lib/pq v1.9.0
 	github.com/miekg/dns v1.1.43
 	github.com/minio/cli v1.22.0
@@ -56,7 +56,7 @@ require (
 	github.com/minio/parquet-go v1.1.0
 	github.com/minio/pkg v1.1.14
 	github.com/minio/selfupdate v0.4.0
-	github.com/minio/sha256-simd v1.0.0
+	github.com/minio/sha256-simd v1.0.1
 	github.com/minio/simdjson-go v0.2.1
 	github.com/minio/sio v0.3.0
 	github.com/minio/zipindex v0.2.1
@@ -233,6 +233,7 @@ require (
 	github.com/unrolled/secure v1.0.9 // indirect
 	github.com/xdg/stringprep v1.0.0 // indirect
 	github.com/yusufpapurcu/wmi v1.2.2 // indirect
+	github.com/zeebo/blake3 v0.2.3 // indirect
 	go.dedis.ch/fixbuf v1.0.3 // indirect
 	go.dedis.ch/kyber/v3 v3.1.0 // indirect
 	go.etcd.io/etcd/client/pkg/v3 v3.5.6 // indirect

@@ -1,0 +1,2025 @@
+{
+	"info": {
+		"_postman_id": "99233ff4-f095-4b0d-9935-ef0fc700948b",
+		"name": "Zs3Server Collection",
+		"description": "The S3 Compatible API implements the most commonly used actions from the AWS S3 API, and easily integrates with your existing applications, data management tools, and S3 gateways.\n\n## Prerequisites\n\n- Open the minio UI locally by navigating to localhost:9000.\n- Click on Account settings and create a user with an access key and secret.\n    \n\nOnce you have your application key and secret, navigate to the API's collection variables (Click on **S3 Compatible API** in the tree on the left then click the **Variables** tab). Copy your application key, application key id into the current values of the three variables:\n\n## Test your settings\n\n- Go to [S3 Get Bucket Location](https://).\n- Enter the name of a bucket to which your application key has access.\n- Click **Send**.\n    \n\nYou should see an XML response with the location of the bucket:\n\n<img src=\"https://metadaddy-public.s3.us-west-004.backblazeb2.com/bucket-location.png\">\n\n## Troubleshooting\n\nIf you don't see an XML response with the bucket location, check that:\n\n- The application key has access to the bucket that you specified.\n- You didn't inadvertently swap the application key and application key ID.\n- You saved the collection variables.\n    \n\n## Authentication\n\nThe API supports [AWS Signature Version 4 (SigV4)](https://) for authentication and does not support V2 signatures at this time. This collection uses Postman's built-in implementation of AWS SigV4.\n\n## Requests\n\nCommunicate with the API by sending HTTP requests to resource endpoints. The HTTP method determines the action taken.\n\n| Method | Usage |\n| --- | --- |\n| DELETE | Use the DELETE method to destroy a resource such as a bucket, object or bucket setting. If it is not found, the operation will return a 4xx error and an appropriate message. |\n| GET | To retrieve object data or configuration, use the GET method. Object data is returned in the format it was written; configuration is returned as XML. GET methods are read-only and do not modify any resources. |\n| PUT | Use the PUT method to write object data or configuration. Configuration must be formatted as XML according to the schema defined by the Amazon S3 API. |\n| POST | Use the POST method with the S3 Delete Object, S3 Complete Multipart Upload, and S3 Create Multipart Upload operations. |\n\n## Response Codes\n\nThe API uses standard HTTP response codes to show the outcome of requests. Response codes in the 2xx range indicate success, while codes in the 4xx range indicate a client-side error, such as an authorization failure or a malformed request. 4xx errors return an XML response object explaining the problem. For example:\n\n``` xml\n<Error>\n    <Code>NoSuchBucket</Code>\n    <Message>The specified bucket does not exist: NonExistentBucket</Message>\n    <Resource>NonExistentBucket</Resource>\n</Error>\n\n ```\n\nCodes in the 5xx range indicate a server-side problem preventing B2 from fulfilling your request, and include JSON diagnostics:\n\n``` json\n{\n    \"code\": \"internal_error\",\n    \"message\": \"incident id 2f0e432cc922-9c2c28e96a16711b\",\n    \"status\": 500\n}\n\n ```\n\n| Response | Description |\n| --- | --- |\n| 200 OK | The response contains your requested information. |\n| 201 Created | Your request was accepted. The resource was created. |\n| 202 Accepted | Your request was accepted. The resource was created or updated. |\n| 204 No Content | Your request succeeded, there is no additional information returned. |\n| 400 Bad Request | Your request was malformed. |\n| 401 Unauthorized | You did not supply valid authentication credentials. |\n| 403 Forbidden | You are not allowed to perform that action. |\n| 404 Not Found | No results were found for your request. |\n| 429 Too Many Requests | Your request exceeded the API rate limit. |\n| 500 Internal Server Error | We were unable to perform the request due to server-side problems. |",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "5200574"
+	},
+	"item": [
+		{
+			"name": "Bucket Operations",
+			"item": [
+				{
+					"name": "S3 Create Bucket",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "x-amz-acl",
+								"value": "",
+								"description": "Optional. Allowed values are \"private\" or \"public-read\". Defaults to \"private\".",
+								"type": "text",
+								"disabled": true
+							},
+							{
+								"key": "x-amz-bucket-object-lock-enabled",
+								"value": "",
+								"description": "Optional. Specifies whether object lock should be appied to the bucket.",
+								"type": "text",
+								"disabled": true
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "<CreateBucketConfiguration xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">\n   <LocationConstraint>{{region}}</LocationConstraint>\n</CreateBucketConfiguration>",
+							"options": {
+								"raw": {
+									"language": "xml"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{s3baseurl}}/:bucket",
+							"host": [
+								"{{s3baseurl}}"
+							],
+							"path": [
+								":bucket"
+							],
+							"variable": [
+								{
+									"key": "bucket",
+									"value": "2home",
+									"description": "Required. The name of the bucket to create."
+								}
+							]
+						},
+						"description": "Creates a new bucket.\n\nThe bucket name must be globally unique. For restrictions on bucket names such as minimum and maximum length see [Bucket Names](https://www.backblaze.com/b2/docs/buckets.html#bucketNames).\n\nYou can optionally specify a canned ACL of `private` (the default) or `public-read` via the `x-amz-acl` header."
+					},
+					"response": [
+						{
+							"name": "S3 Create Bucket",
+							"originalRequest": {
+								"method": "PUT",
+								"header": [
+									{
+										"key": "x-amz-acl",
+										"value": "private",
+										"description": "Optional. Allowed values are \"private\" or \"public-read\". Defaults to \"private\".",
+										"type": "text"
+									},
+									{
+										"key": "x-amz-bucket-object-lock-enabled",
+										"value": "",
+										"description": "Optional. Specifies whether object lock should be appied to the bucket.",
+										"type": "text",
+										"disabled": true
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "<CreateBucketConfiguration xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">\n   <LocationConstraint><your-region></LocationConstraint>\n</CreateBucketConfiguration>",
+									"options": {
+										"raw": {
+											"language": "xml"
+										}
+									}
+								},
+								"url": {
+									"raw": "s3.<your-region>.backblazeb2.com/:bucket",
+									"host": [
+										"s3",
+										"<your-region>",
+										"backblazeb2",
+										"com"
+									],
+									"path": [
+										":bucket"
+									],
+									"variable": [
+										{
+											"key": "bucket",
+											"value": "my-bucket-name",
+											"description": "Required. The name of the bucket to create."
+										}
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "plain",
+							"header": [
+								{
+									"key": "x-amz-request-id",
+									"value": "699c79d678ac85eb"
+								},
+								{
+									"key": "x-amz-id-2",
+									"value": "aMb41pGbJOWYzrTUIY0JmFjSgZMljS2L4"
+								},
+								{
+									"key": "Location",
+									"value": "/my-bucket-name"
+								},
+								{
+									"key": "Cache-Control",
+									"value": "max-age=0, no-cache, no-store"
+								},
+								{
+									"key": "Content-Type",
+									"value": ""
+								},
+								{
+									"key": "Content-Length",
+									"value": "0"
+								},
+								{
+									"key": "Date",
+									"value": "Fri, 28 Jan 2022 22:46:26 GMT"
+								},
+								{
+									"key": "Keep-Alive",
+									"value": "timeout=5"
+								},
+								{
+									"key": "Connection",
+									"value": "keep-alive"
+								}
+							],
+							"cookie": [],
+							"body": ""
+						}
+					]
+				},
+				{
+					"name": "S3 Delete Bucket",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "x-amz-expected-bucket-owner",
+								"value": "",
+								"description": "Optional. Account ID of the expected bucket owner. If the bucket is owned by a different owner, a 403 Access Denied error will be returned.",
+								"type": "text",
+								"disabled": true
+							}
+						],
+						"url": {
+							"raw": "{{s3baseurl}}/:bucket",
+							"host": [
+								"{{s3baseurl}}"
+							],
+							"path": [
+								":bucket"
+							],
+							"variable": [
+								{
+									"key": "bucket",
+									"value": "",
+									"description": "Required. Specifies the bucket to delete."
+								}
+							]
+						},
+						"description": "Deletes the bucket specified. Only buckets that contain no versions of any files can be deleted."
+					},
+					"response": [
+						{
+							"name": "S3 Delete Bucket",
+							"originalRequest": {
+								"method": "DELETE",
+								"header": [
+									{
+										"key": "x-amz-expected-bucket-owner",
+										"value": "",
+										"description": "Optional. Account ID of the expected bucket owner. If the bucket is owned by a different owner, a 403 Access Denied error will be returned.",
+										"type": "text",
+										"disabled": true
+									}
+								],
+								"url": {
+									"raw": "s3.{{region}}.backblazeb2.com/:bucket",
+									"host": [
+										"s3",
+										"{{region}}",
+										"backblazeb2",
+										"com"
+									],
+									"path": [
+										":bucket"
+									],
+									"variable": [
+										{
+											"key": "bucket",
+											"value": "my-bucket-name",
+											"description": "Required. Specifies the bucket to delete."
+										}
+									]
+								}
+							},
+							"status": "No Content",
+							"code": 204,
+							"_postman_previewlanguage": "plain",
+							"header": [
+								{
+									"key": "x-amz-request-id",
+									"value": "a4c7d533ccb3871b"
+								},
+								{
+									"key": "x-amz-id-2",
+									"value": "aMeE1bGaLOXwzCTWSYxtmozRWZGRjvmJy"
+								},
+								{
+									"key": "Cache-Control",
+									"value": "max-age=0, no-cache, no-store"
+								},
+								{
+									"key": "Content-Type",
+									"value": ""
+								},
+								{
+									"key": "Date",
+									"value": "Fri, 28 Jan 2022 23:46:27 GMT"
+								},
+								{
+									"key": "Keep-Alive",
+									"value": "timeout=5"
+								},
+								{
+									"key": "Connection",
+									"value": "keep-alive"
+								}
+							],
+							"cookie": [],
+							"body": ""
+						}
+					]
+				},
+				{
+					"name": "S3 Delete Objects",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Set Content-MD5 HTTP header with the MD5 hash of the body",
+									"pm.request.headers.add({",
+									"    key: 'Content-MD5', ",
+									"    value: CryptoJS.MD5(pm.request.body.toString()).toString(CryptoJS.enc.Base64)",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "x-amz-expected-bucket-owner",
+								"value": "",
+								"type": "text",
+								"description": "Optional. Account ID of the expected bucket owner. If the bucket is owned by a different owner, a 403 Access Denied error will be returned.",
+								"disabled": true
+							},
+							{
+								"key": "x-amz-bypass-governance-retention",
+								"value": "",
+								"type": "text",
+								"description": "Optional. Specifies whether the object should be deleted even if there is a governance object lock in place.",
+								"disabled": true
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "<Delete>\n    <Object>\n        <Key>key1</Key>\n    </Object>\n    <Object>\n        <Key>key2</Key>\n        <VersionId>versionId</VersionId>\n    </Object>\n    <Quiet>true</Quiet>\n</Delete>",
+							"options": {
+								"raw": {
+									"language": "xml"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{s3baseurl}}/:bucket/?delete",
+							"host": [
+								"{{s3baseurl}}"
+							],
+							"path": [
+								":bucket",
+								""
+							],
+							"query": [
+								{
+									"key": "delete",
+									"value": null,
+									"description": "Must be present to delete multiple objects."
+								}
+							],
+							"variable": [
+								{
+									"key": "bucket",
+									"value": "",
+									"description": "Required. The name of the bucket"
+								}
+							]
+						},
+						"description": "Deletes multiple objects from a bucket in a single request. In the XML body, provide the objects keys and, optionally, version IDs if you want to delete a specific object version."
+					},
+					"response": [
+						{
+							"name": "S3 Delete Objects",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "x-amz-expected-bucket-owner",
+										"value": "",
+										"type": "text",
+										"description": "Optional. Account ID of the expected bucket owner. If the bucket is owned by a different owner, a 403 Access Denied error will be returned.",
+										"disabled": true
+									},
+									{
+										"key": "x-amz-bypass-governance-retention",
+										"value": "",
+										"type": "text",
+										"description": "Optional. Specifies whether the object should be deleted even if there is a governance object lock in place.",
+										"disabled": true
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "<Delete>\n    <Object>\n        <Key>object-1</Key>\n    </Object>\n    <Object>\n        <Key>object-2</Key>\n    </Object>\n</Delete>",
+									"options": {
+										"raw": {
+											"language": "xml"
+										}
+									}
+								},
+								"url": {
+									"raw": "s3.{{region}}.backblazeb2.com/:bucket/?delete",
+									"host": [
+										"s3",
+										"{{region}}",
+										"backblazeb2",
+										"com"
+									],
+									"path": [
+										":bucket",
+										""
+									],
+									"query": [
+										{
+											"key": "delete",
+											"value": null,
+											"description": "Must be present to delete multiple objects."
+										}
+									],
+									"variable": [
+										{
+											"key": "bucket",
+											"value": "my-bucket-name",
+											"description": "Required. The name of the bucket"
+										}
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "xml",
+							"header": [
+								{
+									"key": "x-amz-request-id",
+									"value": "d149d18cdac3d9ca"
+								},
+								{
+									"key": "x-amz-id-2",
+									"value": "aMec1XWZmOTAzoTWJY0pmxDTDZDNjxWI4"
+								},
+								{
+									"key": "Cache-Control",
+									"value": "max-age=0, no-cache, no-store"
+								},
+								{
+									"key": "Content-Type",
+									"value": "application/xml"
+								},
+								{
+									"key": "Content-Length",
+									"value": "611"
+								},
+								{
+									"key": "Date",
+									"value": "Fri, 28 Jan 2022 23:45:22 GMT"
+								},
+								{
+									"key": "Keep-Alive",
+									"value": "timeout=5"
+								},
+								{
+									"key": "Connection",
+									"value": "keep-alive"
+								}
+							],
+							"cookie": [],
+							"body": "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n<DeleteResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">\n    <Deleted>\n        <DeleteMarker>true</DeleteMarker>\n        <DeleteMarkerVersionId>4_z6145af89f355ac2f74ed0c1b_f401a918cd72e68af_d20220128_m234522_c004_v0402003_t0046</DeleteMarkerVersionId>\n        <Key>object-1</Key>\n    </Deleted>\n    <Deleted>\n        <DeleteMarker>true</DeleteMarker>\n        <DeleteMarkerVersionId>4_z6145af89f355ac2f74ed0c1b_f401a918cd72e68b0_d20220128_m234522_c004_v0402002_t0049</DeleteMarkerVersionId>\n        <Key>object-2</Key>\n    </Deleted>\n</DeleteResult>"
+						}
+					]
+				},
+				{
+					"name": "S3 List Buckets",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{s3baseurl}}/",
+							"host": [
+								"{{s3baseurl}}"
+							],
+							"path": [
+								""
+							]
+						},
+						"description": "Lists buckets in your account in alphabetical order by bucket name."
+					},
+					"response": [
+						{
+							"name": "S3 List Buckets",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "s3.{{region}}.backblazeb2.com/",
+									"host": [
+										"s3",
+										"{{region}}",
+										"backblazeb2",
+										"com"
+									],
+									"path": [
+										""
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "xml",
+							"header": [
+								{
+									"key": "x-amz-request-id",
+									"value": "51aa803fb55f6d2a"
+								},
+								{
+									"key": "x-amz-id-2",
+									"value": "aMYs1j2ZdOU4zaDVuY5Vm5zQWZMljb2LY"
+								},
+								{
+									"key": "Cache-Control",
+									"value": "max-age=0, no-cache, no-store"
+								},
+								{
+									"key": "Content-Type",
+									"value": "application/xml"
+								},
+								{
+									"key": "Content-Length",
+									"value": "1414"
+								},
+								{
+									"key": "Date",
+									"value": "Fri, 28 Jan 2022 20:43:20 GMT"
+								},
+								{
+									"key": "Keep-Alive",
+									"value": "timeout=5"
+								},
+								{
+									"key": "Connection",
+									"value": "keep-alive"
+								}
+							],
+							"cookie": [],
+							"body": "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n<ListAllMyBucketsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">\n    <Owner>\n        <ID>15f935cf4dcb</ID>\n        <DisplayName></DisplayName>\n    </Owner>\n    <Buckets>\n        <Bucket>\n            <Name>metadaddy-test</Name>\n            <CreationDate>2022-01-04T22:52:35.669Z</CreationDate>\n        </Bucket>\n        <Bucket>\n            <Name>metadaddy-synology</Name>\n            <CreationDate>2022-01-25T04:23:07.343Z</CreationDate>\n        </Bucket>\n    </Buckets>\n</ListAllMyBucketsResult>"
+						}
+					]
+				},
+				{
+					"name": "S3 List Object Versions",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "x-amz-expected-bucket-owner",
+								"value": "",
+								"description": "Optional. Account ID of the expected bucket owner. If the bucket is owned by a different owner, a 403 Access Denied error will be returned.",
+								"type": "text",
+								"disabled": true
+							}
+						],
+						"url": {
+							"raw": "{{s3baseurl}}/:bucket/?versions",
+							"host": [
+								"{{s3baseurl}}"
+							],
+							"path": [
+								":bucket",
+								""
+							],
+							"query": [
+								{
+									"key": "versions",
+									"value": null,
+									"description": "Must be present to retrieve object versions"
+								},
+								{
+									"key": "delimiter",
+									"value": "",
+									"description": "Optional. The delimiter is used to group keys.",
+									"disabled": true
+								},
+								{
+									"key": "encoding-type",
+									"value": "",
+									"description": "Optional. Specifies an encoding method to use for characters that are not supported in XML 1.0.",
+									"disabled": true
+								},
+								{
+									"key": "key-marker",
+									"value": "",
+									"description": "Optional. The key that you want to start listing from.",
+									"disabled": true
+								},
+								{
+									"key": "max-keys",
+									"value": "",
+									"description": "Optional. The maximum number of keys that should be returned.",
+									"disabled": true
+								},
+								{
+									"key": "prefix",
+									"value": "",
+									"description": "Optional. Limit response to keys with this prefix.",
+									"disabled": true
+								},
+								{
+									"key": "version-id-marker",
+									"value": null,
+									"description": "Optional. The object version id that you want to start listing from.",
+									"disabled": true
+								}
+							],
+							"variable": [
+								{
+									"key": "bucket",
+									"value": "",
+									"description": "Required. The name of the bucket"
+								}
+							]
+						},
+						"description": "Returns metadata of the versions of objects in the bucket. Use the query parameters to filter the search."
+					},
+					"response": [
+						{
+							"name": "S3 List Object Versions",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "x-amz-expected-bucket-owner",
+										"value": "",
+										"description": "Optional. Account ID of the expected bucket owner. If the bucket is owned by a different owner, a 403 Access Denied error will be returned.",
+										"type": "text",
+										"disabled": true
+									}
+								],
+								"url": {
+									"raw": "s3.{{region}}.backblazeb2.com/:bucket/?versions",
+									"host": [
+										"s3",
+										"{{region}}",
+										"backblazeb2",
+										"com"
+									],
+									"path": [
+										":bucket",
+										""
+									],
+									"query": [
+										{
+											"key": "delimiter",
+											"value": "",
+											"description": "Optional. The delimiter is used to group keys.",
+											"disabled": true
+										},
+										{
+											"key": "encoding-type",
+											"value": "",
+											"description": "Optional. Specifies an encoding method to use for characters that are not supported in XML 1.0.",
+											"disabled": true
+										},
+										{
+											"key": "key-marker",
+											"value": "",
+											"description": "Optional. The key that you want to start listing from.",
+											"disabled": true
+										},
+										{
+											"key": "max-keys",
+											"value": "",
+											"description": "Optional. The maximum number of keys that should be returned.",
+											"disabled": true
+										},
+										{
+											"key": "prefix",
+											"value": "",
+											"description": "Optional. Limit response to keys with this prefix.",
+											"disabled": true
+										},
+										{
+											"key": "version-id-marker",
+											"value": null,
+											"description": "Optional. The object version id that you want to start listing from.",
+											"disabled": true
+										},
+										{
+											"key": "versions",
+											"value": null
+										}
+									],
+									"variable": [
+										{
+											"key": "bucket",
+											"value": "my-bucket-name",
+											"description": "Required. The name of the bucket"
+										}
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "xml",
+							"header": [
+								{
+									"key": "x-amz-request-id",
+									"value": "3075a9560f9d6f1d"
+								},
+								{
+									"key": "x-amz-id-2",
+									"value": "aMWk1vGZLOdYz9jV4Y5lmcjRnZCVjVWIE"
+								},
+								{
+									"key": "Cache-Control",
+									"value": "max-age=0, no-cache, no-store"
+								},
+								{
+									"key": "Content-Type",
+									"value": "application/xml"
+								},
+								{
+									"key": "Content-Length",
+									"value": "2646"
+								},
+								{
+									"key": "Date",
+									"value": "Fri, 28 Jan 2022 23:41:05 GMT"
+								},
+								{
+									"key": "Keep-Alive",
+									"value": "timeout=5"
+								},
+								{
+									"key": "Connection",
+									"value": "keep-alive"
+								}
+							],
+							"cookie": [],
+							"body": "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n<ListVersionsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">\n    <DeleteMarker>\n        <IsLatest>true</IsLatest>\n        <Key>object-2</Key>\n        <LastModified>2022-01-28T23:40:31.000Z</LastModified>\n        <Owner>\n            <ID>15f935cf4dcb</ID>\n            <DisplayName></DisplayName>\n        </Owner>\n        <VersionId>4_z6145af89f355ac2f74ed0c1b_f40057de773908ada_d20220128_m234031_c004_v0402002_t0050</VersionId>\n    </DeleteMarker>\n    <IsTruncated>false</IsTruncated>\n    <MaxKeys>1000</MaxKeys>\n    <Name>my-bucket-name</Name>\n    <Version>\n        <ETag>\"85f30635602dc09bd85957a6e82a2c21\"</ETag>\n        <IsLatest>true</IsLatest>\n        <Key>object-1</Key>\n        <LastModified>2022-01-28T23:24:07.000Z</LastModified>\n        <Owner>\n            <ID>15f935cf4dcb</ID>\n            <DisplayName></DisplayName>\n        </Owner>\n        <Size>11</Size>\n        <StorageClass>STANDARD</StorageClass>\n        <VersionId>4_z6145af89f355ac2f74ed0c1b_f4030346ce9e208f0_d20220128_m232407_c004_v0402005_t0021</VersionId>\n    </Version>\n    <Version>\n        <ETag>\"85f30635602dc09bd85957a6e82a2c21\"</ETag>\n        <IsLatest>false</IsLatest>\n        <Key>object-1</Key>\n        <LastModified>2022-01-28T23:12:33.000Z</LastModified>\n        <Owner>\n            <ID>15f935cf4dcb</ID>\n            <DisplayName></DisplayName>\n        </Owner>\n        <Size>11</Size>\n        <StorageClass>STANDARD</StorageClass>\n        <VersionId>4_z6145af89f355ac2f74ed0c1b_f416a807037a7ee2a_d20220128_m231233_c004_v0402000_t0056</VersionId>\n    </Version>\n</ListVersionsResult>"
+						}
+					]
+				},
+				{
+					"name": "S3 List Objects",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "x-amz-expected-bucket-owner",
+								"value": "",
+								"description": "Optional. Account ID of the expected bucket owner. If the bucket is owned by a different owner, a 403 Access Denied error will be returned.",
+								"type": "text",
+								"disabled": true
+							}
+						],
+						"url": {
+							"raw": "{{s3baseurl}}/:bucket/",
+							"host": [
+								"{{s3baseurl}}"
+							],
+							"path": [
+								":bucket",
+								""
+							],
+							"query": [
+								{
+									"key": "delimiter",
+									"value": "",
+									"description": "Optional. The delimiter is used to group keys.",
+									"disabled": true
+								},
+								{
+									"key": "encoding-type",
+									"value": "",
+									"description": "Optional. Specifies an encoding method to use for characters that are not supported in XML 1.0.",
+									"disabled": true
+								},
+								{
+									"key": "marker",
+									"value": "",
+									"description": "Optional. The key that you want to start listing from.",
+									"disabled": true
+								},
+								{
+									"key": "max-keys",
+									"value": "",
+									"description": "Optional. The maximum number of keys that should be returned.",
+									"disabled": true
+								},
+								{
+									"key": "prefix",
+									"value": "",
+									"description": "Optional. Limit response to keys with this prefix.",
+									"disabled": true
+								}
+							],
+							"variable": [
+								{
+									"key": "bucket",
+									"value": "home",
+									"description": "Required. The name of the bucket"
+								}
+							]
+						},
+						"description": "Returns a list of up to 1,000 objects in the bucket, sorted alphabetically by key. Use the query parameters to filter the search.\n\nNote - **S3 List Objects V2** (below) should be used in preference to this operation, since S3 List Objects has no mechanism to page through more than 1,000 results."
+					},
+					"response": [
+						{
+							"name": "S3 List Objects",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "x-amz-expected-bucket-owner",
+										"value": "",
+										"description": "Optional. Account ID of the expected bucket owner. If the bucket is owned by a different owner, a 403 Access Denied error will be returned.",
+										"type": "text",
+										"disabled": true
+									}
+								],
+								"url": {
+									"raw": "s3.{{region}}.backblazeb2.com/:bucket/",
+									"host": [
+										"s3",
+										"{{region}}",
+										"backblazeb2",
+										"com"
+									],
+									"path": [
+										":bucket",
+										""
+									],
+									"query": [
+										{
+											"key": "delimiter",
+											"value": "",
+											"description": "Optional. The delimiter is used to group keys.",
+											"disabled": true
+										},
+										{
+											"key": "encoding-type",
+											"value": "",
+											"description": "Optional. Specifies an encoding method to use for characters that are not supported in XML 1.0.",
+											"disabled": true
+										},
+										{
+											"key": "marker",
+											"value": "",
+											"description": "Optional. The key that you want to start listing from.",
+											"disabled": true
+										},
+										{
+											"key": "max-keys",
+											"value": "",
+											"description": "Optional. The maximum number of keys that should be returned.",
+											"disabled": true
+										},
+										{
+											"key": "prefix",
+											"value": "",
+											"description": "Optional. Limit response to keys with this prefix.",
+											"disabled": true
+										}
+									],
+									"variable": [
+										{
+											"key": "bucket",
+											"value": "my-bucket-name",
+											"description": "Required. The name of the bucket"
+										}
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "xml",
+							"header": [
+								{
+									"key": "x-amz-request-id",
+									"value": "87e06e4dfe6ac590"
+								},
+								{
+									"key": "x-amz-id-2",
+									"value": "aMaw1+2ZLOZwzhTU/Y9VmpzQHZHxjKWK7"
+								},
+								{
+									"key": "Cache-Control",
+									"value": "max-age=0, no-cache, no-store"
+								},
+								{
+									"key": "Content-Type",
+									"value": "application/xml"
+								},
+								{
+									"key": "Content-Length",
+									"value": "1358"
+								},
+								{
+									"key": "Date",
+									"value": "Fri, 28 Jan 2022 23:42:28 GMT"
+								},
+								{
+									"key": "Keep-Alive",
+									"value": "timeout=5"
+								},
+								{
+									"key": "Connection",
+									"value": "keep-alive"
+								}
+							],
+							"cookie": [],
+							"body": "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">\n    <Contents>\n        <ETag>\"85f30635602dc09bd85957a6e82a2c21\"</ETag>\n        <Key>object-1</Key>\n        <LastModified>2022-01-28T23:24:07.000Z</LastModified>\n        <Owner>\n            <ID>15f935cf4dcb</ID>\n            <DisplayName></DisplayName>\n        </Owner>\n        <Size>11</Size>\n        <StorageClass>STANDARD</StorageClass>\n    </Contents>\n    <Contents>\n        <ETag>\"85f30635602dc09bd85957a6e82a2c21\"</ETag>\n        <Key>object-2</Key>\n        <LastModified>2022-01-28T23:25:45.000Z</LastModified>\n        <Owner>\n            <ID>15f935cf4dcb</ID>\n            <DisplayName></DisplayName>\n        </Owner>\n        <Size>11</Size>\n        <StorageClass>STANDARD</StorageClass>\n    </Contents>\n    <IsTruncated>false</IsTruncated>\n    <MaxKeys>1000</MaxKeys>\n    <Name>my-bucket-name</Name>\n    <Prefix></Prefix>\n    <Marker></Marker>\n</ListBucketResult>"
+						}
+					]
+				},
+				{
+					"name": "S3 List Objects V2",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "x-amz-expected-bucket-owner",
+								"value": "",
+								"description": "Optional. Account ID of the expected bucket owner. If the bucket is owned by a different owner, a 403 Access Denied error will be returned.",
+								"type": "text",
+								"disabled": true
+							}
+						],
+						"url": {
+							"raw": "{{s3baseurl}}/:bucket/?list-type=2",
+							"host": [
+								"{{s3baseurl}}"
+							],
+							"path": [
+								":bucket",
+								""
+							],
+							"query": [
+								{
+									"key": "list-type",
+									"value": "2",
+									"description": "Must be set to 2 for V2 object list"
+								},
+								{
+									"key": "continuation-token",
+									"value": "",
+									"description": "Optional. Continuation token returned by a previous request.",
+									"disabled": true
+								},
+								{
+									"key": "delimiter",
+									"value": "",
+									"description": "Optional. The delimiter is used to group keys.",
+									"disabled": true
+								},
+								{
+									"key": "encoding-type",
+									"value": "",
+									"description": "Optional. Specifies an encoding method to use for characters that are not supported in XML 1.0.",
+									"disabled": true
+								},
+								{
+									"key": "fetch-owner",
+									"value": "",
+									"description": "Optional. Set to 'true' to return the owner with each key.",
+									"disabled": true
+								},
+								{
+									"key": "max-keys",
+									"value": "",
+									"description": "Optional. The maximum number of keys that should be returned.",
+									"disabled": true
+								},
+								{
+									"key": "prefix",
+									"value": "",
+									"description": "Optional. Limit response to keys with this prefix.",
+									"disabled": true
+								},
+								{
+									"key": "start-after",
+									"value": "",
+									"description": "Optional. B2 will start listing after this key.",
+									"disabled": true
+								}
+							],
+							"variable": [
+								{
+									"key": "bucket",
+									"value": "home",
+									"description": "Required. The name of the bucket"
+								}
+							]
+						},
+						"description": "Returns a list of up to 1,000 objects in the bucket, sorted alphabetically by key.\n\nUse the query parameters to filter the search.\n\nBy default, sets of up to 1,000 results are returned. You can set the `max-keys` to set the maximum result set size to less than 1,000. If the search results in more than the maximum result set size, then the first set is returned in the initial response, the `<IsTruncated>` response element contains the value `true` and the `<NextContinuationToken>` element contains a token to retrieve the next set of results. Use this token as the `continuation-token` query parameter in another request to retrieve the next set of results."
+					},
+					"response": [
+						{
+							"name": "S3 List Objects V2",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "x-amz-expected-bucket-owner",
+										"value": "",
+										"description": "Optional. Account ID of the expected bucket owner. If the bucket is owned by a different owner, a 403 Access Denied error will be returned.",
+										"type": "text",
+										"disabled": true
+									}
+								],
+								"url": {
+									"raw": "s3.{{region}}.backblazeb2.com/:bucket/?list-type=2",
+									"host": [
+										"s3",
+										"{{region}}",
+										"backblazeb2",
+										"com"
+									],
+									"path": [
+										":bucket",
+										""
+									],
+									"query": [
+										{
+											"key": "list-type",
+											"value": "2",
+											"description": "Must be set to 2 for V2 object list"
+										},
+										{
+											"key": "continuation-token",
+											"value": "",
+											"description": "Optional. Continuation token returned by a previous request.",
+											"disabled": true
+										},
+										{
+											"key": "delimiter",
+											"value": "",
+											"description": "Optional. The delimiter is used to group keys.",
+											"disabled": true
+										},
+										{
+											"key": "encoding-type",
+											"value": "",
+											"description": "Optional. Specifies an encoding method to use for characters that are not supported in XML 1.0.",
+											"disabled": true
+										},
+										{
+											"key": "fetch-owner",
+											"value": "",
+											"description": "Optional. Set to 'true' to return the owner with each key.",
+											"disabled": true
+										},
+										{
+											"key": "max-keys",
+											"value": "",
+											"description": "Optional. The maximum number of keys that should be returned.",
+											"disabled": true
+										},
+										{
+											"key": "prefix",
+											"value": "",
+											"description": "Optional. Limit response to keys with this prefix.",
+											"disabled": true
+										},
+										{
+											"key": "start-after",
+											"value": "",
+											"description": "Optional. B2 will start listing after this key.",
+											"disabled": true
+										}
+									],
+									"variable": [
+										{
+											"key": "bucket",
+											"value": "my-bucket-name",
+											"description": "Required. The name of the bucket"
+										}
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "xml",
+							"header": [
+								{
+									"key": "x-amz-request-id",
+									"value": "fbaa4aa26f4ad37b"
+								},
+								{
+									"key": "x-amz-id-2",
+									"value": "aMSI102bnOUEz/zU1Y9lmtTR4ZCpj02IQ"
+								},
+								{
+									"key": "Cache-Control",
+									"value": "max-age=0, no-cache, no-store"
+								},
+								{
+									"key": "Content-Type",
+									"value": "application/xml"
+								},
+								{
+									"key": "Content-Length",
+									"value": "1042"
+								},
+								{
+									"key": "Date",
+									"value": "Fri, 28 Jan 2022 23:43:55 GMT"
+								},
+								{
+									"key": "Keep-Alive",
+									"value": "timeout=5"
+								},
+								{
+									"key": "Connection",
+									"value": "keep-alive"
+								}
+							],
+							"cookie": [],
+							"body": "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">\n    <Contents>\n        <ETag>\"85f30635602dc09bd85957a6e82a2c21\"</ETag>\n        <Key>object-1</Key>\n        <LastModified>2022-01-28T23:24:07.000Z</LastModified>\n        <Size>11</Size>\n        <StorageClass>STANDARD</StorageClass>\n    </Contents>\n    <Contents>\n        <ETag>\"85f30635602dc09bd85957a6e82a2c21\"</ETag>\n        <Key>object-2</Key>\n        <LastModified>2022-01-28T23:25:45.000Z</LastModified>\n        <Size>11</Size>\n        <StorageClass>STANDARD</StorageClass>\n    </Contents>\n    <Contents>\n        <ETag>\"3729bf569924c845dfe90bfe6281a9ff-1\"</ETag>\n        <Key>object-3</Key>\n        <LastModified>2022-01-28T23:27:20.000Z</LastModified>\n        <Size>11</Size>\n        <StorageClass>STANDARD</StorageClass>\n    </Contents>\n    <IsTruncated>false</IsTruncated>\n    <MaxKeys>1000</MaxKeys>\n    <Name>my-bucket-name</Name>\n    <Prefix></Prefix>\n    <KeyCount>3</KeyCount>\n</ListBucketResult>"
+						}
+					]
+				}
+			],
+			"description": "This set of operations allows you to manipulate B2 buckets.\n\nThere is no limit to the number of files in a bucket, but there is a limit of 100 buckets per account.\n\nAside from S3 List Buckets, all bucket operations use an endpoint of the form `\nhttps://s3.<region>.backblazeb2.com/<bucket name>`."
+		},
+		{
+			"name": "Object Operations",
+			"item": [
+				{
+					"name": "S3 Delete Object",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "x-amz-expected-bucket-owner",
+								"value": "",
+								"description": "Optional. Account ID of the expected bucket owner. If the bucket is owned by a different owner, a 403 Access Denied error will be returned.",
+								"type": "text",
+								"disabled": true
+							},
+							{
+								"key": "x-amz-bypass-governance-retention",
+								"value": "",
+								"description": "Optional. Specifies whether the object should be deleted even if there is a governance object lock in place.",
+								"type": "text",
+								"disabled": true
+							}
+						],
+						"url": {
+							"raw": "{{s3baseurl}}/:bucket/:key",
+							"host": [
+								"{{s3baseurl}}"
+							],
+							"path": [
+								":bucket",
+								":key"
+							],
+							"query": [
+								{
+									"key": "versionId",
+									"value": "",
+									"description": "VersionId to delete.",
+									"disabled": true
+								}
+							],
+							"variable": [
+								{
+									"key": "bucket",
+									"value": "",
+									"description": "Required. The name of the bucket"
+								},
+								{
+									"key": "key",
+									"value": "",
+									"description": "Required. Key of the object to read."
+								}
+							]
+						}
+					},
+					"response": [
+						{
+							"name": "S3 Delete Object",
+							"originalRequest": {
+								"method": "DELETE",
+								"header": [
+									{
+										"key": "x-amz-expected-bucket-owner",
+										"value": "",
+										"description": "Optional. Account ID of the expected bucket owner. If the bucket is owned by a different owner, a 403 Access Denied error will be returned.",
+										"type": "text",
+										"disabled": true
+									},
+									{
+										"key": "x-amz-bypass-governance-retention",
+										"value": "",
+										"description": "Optional. Specifies whether the object should be deleted even if there is a governance object lock in place.",
+										"type": "text",
+										"disabled": true
+									}
+								],
+								"url": {
+									"raw": "s3.{{region}}.backblazeb2.com/:bucket/:key",
+									"host": [
+										"s3",
+										"{{region}}",
+										"backblazeb2",
+										"com"
+									],
+									"path": [
+										":bucket",
+										":key"
+									],
+									"query": [
+										{
+											"key": "versionId",
+											"value": "",
+											"description": "VersionId to delete.",
+											"disabled": true
+										}
+									],
+									"variable": [
+										{
+											"key": "bucket",
+											"value": "my-bucket-name",
+											"description": "Required. The name of the bucket"
+										},
+										{
+											"key": "key",
+											"value": "object-1",
+											"description": "Required. Key of the object to read."
+										}
+									]
+								}
+							},
+							"status": "No Content",
+							"code": 204,
+							"_postman_previewlanguage": "plain",
+							"header": [
+								{
+									"key": "x-amz-request-id",
+									"value": "462500c9d699ed92"
+								},
+								{
+									"key": "x-amz-id-2",
+									"value": "aMR01LmYuOegzLTUBY5hmJjQOZKdjfGJC"
+								},
+								{
+									"key": "x-amz-delete-marker",
+									"value": "true"
+								},
+								{
+									"key": "x-amz-version-id",
+									"value": "4_z6145af89f355ac2f74ed0c1b_f40057de773908ada_d20220128_m234031_c004_v0402002_t0050"
+								},
+								{
+									"key": "Cache-Control",
+									"value": "max-age=0, no-cache, no-store"
+								},
+								{
+									"key": "Content-Type",
+									"value": ""
+								},
+								{
+									"key": "Date",
+									"value": "Fri, 28 Jan 2022 23:40:31 GMT"
+								},
+								{
+									"key": "Keep-Alive",
+									"value": "timeout=5"
+								},
+								{
+									"key": "Connection",
+									"value": "keep-alive"
+								}
+							],
+							"cookie": [],
+							"body": ""
+						}
+					]
+				},
+				{
+					"name": "S3 Get Object",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Set keyMd5 HTTP header with the MD5 hash of the key",
+									"var key = pm.request.headers.get('x-amz-server-side-encryption-customer-key');",
+									"if (key) {",
+									"    pm.request.headers.add({",
+									"        key: 'keyMd5', ",
+									"        value: CryptoJS.MD5(CryptoJS.enc.Base64.parse(key)).toString(CryptoJS.enc.Base64)",
+									"    });",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Range",
+								"value": "",
+								"description": "Optional. The HTTP range of bytes required, for example, bytes=0-999  ",
+								"type": "text",
+								"disabled": true
+							},
+							{
+								"key": "x-amz-expected-bucket-owner",
+								"value": "",
+								"description": "Optional. Account ID of the expected bucket owner. If the bucket is owned by a different owner, a 403 Access Denied error will be returned.",
+								"type": "text",
+								"disabled": true
+							},
+							{
+								"key": "x-amz-server-side-encryption-customer-algorithm",
+								"value": "",
+								"description": "Optional. Encryption algorithm to be used for SSE-C.",
+								"type": "text",
+								"disabled": true
+							},
+							{
+								"key": "x-amz-server-side-encryption-customer-key",
+								"value": "",
+								"description": "Optional. Base64-encoded customer key for SSE-C.",
+								"type": "text",
+								"disabled": true
+							}
+						],
+						"url": {
+							"raw": "{{s3baseurl}}/:bucket/:key",
+							"host": [
+								"{{s3baseurl}}"
+							],
+							"path": [
+								":bucket",
+								":key"
+							],
+							"query": [
+								{
+									"key": "partNumber",
+									"value": "",
+									"description": "Part number to read, between 1 and 10,000.",
+									"disabled": true
+								},
+								{
+									"key": "response-cache-control",
+									"value": "",
+									"description": "Specifies Cache-Control header for the response.",
+									"disabled": true
+								},
+								{
+									"key": "response-content-encoding",
+									"value": "",
+									"description": "Specifies Content-Encoding header for the response.",
+									"disabled": true
+								},
+								{
+									"key": "response-content-language",
+									"value": "",
+									"description": "Specifies Content-Language header for the response.",
+									"disabled": true
+								},
+								{
+									"key": "response-content-type",
+									"value": "",
+									"description": "Specifies Content-Type header for the response.",
+									"disabled": true
+								},
+								{
+									"key": "response-expires",
+									"value": "",
+									"description": "Specifies Expires header for the response.",
+									"disabled": true
+								},
+								{
+									"key": "versionId",
+									"value": "",
+									"description": "VersionId to read.",
+									"disabled": true
+								}
+							],
+							"variable": [
+								{
+									"key": "bucket",
+									"value": "2home",
+									"description": "Required. The name of the bucket"
+								},
+								{
+									"key": "key",
+									"value": "license2",
+									"description": "Required. Key of the object to read."
+								}
+							]
+						}
+					},
+					"response": [
+						{
+							"name": "S3 Get Object",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "x-amz-expected-bucket-owner",
+										"value": "",
+										"description": "Optional. Account ID of the expected bucket owner. If the bucket is owned by a different owner, a 403 Access Denied error will be returned.",
+										"type": "text",
+										"disabled": true
+									},
+									{
+										"key": "x-amz-server-side-encryption-customer-algorithm",
+										"value": "AES256",
+										"description": "Optional. Encryption algorithm to be used for SSE-C.",
+										"type": "text",
+										"disabled": true
+									},
+									{
+										"key": "x-amz-server-side-encryption-customer-key",
+										"value": "kmxlnaH92TEckb+8giJF8qPR5lPY5NDBsIpQQZwAn7A=",
+										"description": "Optional. Base64-encoded customer key for SSE-C.",
+										"type": "text",
+										"disabled": true
+									},
+									{
+										"key": "x-amz-server-side-encryption-customer-key-MD5",
+										"value": "{{keyMd5}}",
+										"description": "Optional. Base64-encoded MD5 hash of the customer key for SSE-C. Calculated in pre-request script.",
+										"type": "text",
+										"disabled": true
+									}
+								],
+								"url": {
+									"raw": "s3.{{region}}.backblazeb2.com/:bucket/:key",
+									"host": [
+										"s3",
+										"{{region}}",
+										"backblazeb2",
+										"com"
+									],
+									"path": [
+										":bucket",
+										":key"
+									],
+									"query": [
+										{
+											"key": "partNumber",
+											"value": "",
+											"description": "Part number to read, between 1 and 10,000.",
+											"disabled": true
+										},
+										{
+											"key": "response-cache-control",
+											"value": "",
+											"description": "Specifies Cache-Control header for the response.",
+											"disabled": true
+										},
+										{
+											"key": "response-content-encoding",
+											"value": "",
+											"description": "Specifies Content-Encoding header for the response.",
+											"disabled": true
+										},
+										{
+											"key": "response-content-language",
+											"value": "",
+											"description": "Specifies Content-Language header for the response.",
+											"disabled": true
+										},
+										{
+											"key": "response-content-type",
+											"value": "",
+											"description": "Specifies Content-Type header for the response.",
+											"disabled": true
+										},
+										{
+											"key": "response-expires",
+											"value": "",
+											"description": "Specifies Expires header for the response.",
+											"disabled": true
+										},
+										{
+											"key": "versionId",
+											"value": "",
+											"description": "VersionId to read.",
+											"disabled": true
+										}
+									],
+									"variable": [
+										{
+											"key": "bucket",
+											"value": "my-bucket-name",
+											"description": "Required. The name of the bucket"
+										},
+										{
+											"key": "key",
+											"value": "object-1",
+											"description": "Required. Key of the object to read."
+										}
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "plain",
+							"header": [
+								{
+									"key": "Accept-Ranges",
+									"value": "bytes"
+								},
+								{
+									"key": "Last-Modified",
+									"value": "Fri, 28 Jan 2022 23:12:33 GMT"
+								},
+								{
+									"key": "ETag",
+									"value": "\"85f30635602dc09bd85957a6e82a2c21\""
+								},
+								{
+									"key": "Cache-Control",
+									"value": "no-cache"
+								},
+								{
+									"key": "x-amz-request-id",
+									"value": "22f4a1772746da99"
+								},
+								{
+									"key": "x-amz-id-2",
+									"value": "aMWA1NmaNOcQz7zWKY2lmZzT6ZHdjpGJT"
+								},
+								{
+									"key": "x-amz-version-id",
+									"value": "4_z6145af89f355ac2f74ed0c1b_f416a807037a7ee2a_d20220128_m231233_c004_v0402000_t0056"
+								},
+								{
+									"key": "Content-Type",
+									"value": "text/plain"
+								},
+								{
+									"key": "Content-Length",
+									"value": "11"
+								},
+								{
+									"key": "Date",
+									"value": "Fri, 28 Jan 2022 23:14:25 GMT"
+								},
+								{
+									"key": "Keep-Alive",
+									"value": "timeout=5"
+								},
+								{
+									"key": "Connection",
+									"value": "keep-alive"
+								}
+							],
+							"cookie": [],
+							"body": "object data"
+						}
+					]
+				},
+				{
+					"name": "S3 Put Object",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// // Set keyMd5 HTTP header with the MD5 hash of the key",
+									"// var key = pm.request.headers.get('x-amz-server-side-encryption-customer-key');",
+									"// if (key) {",
+									"//     pm.request.headers.add({",
+									"//         key: 'x-amz-server-side-encryption-customer-key-MD5', ",
+									"//         value: CryptoJS.MD5(CryptoJS.enc.Base64.parse(key)).toString(CryptoJS.enc.Base64)",
+									"//     });",
+									"// }",
+									"",
+									"// // Set contentMd5 HTTP header with the MD5 hash of the body if object lock is set",
+									"// var retainUntil = pm.request.headers.get('x-amz-object-lock-retain-until-date');",
+									"// if (retainUntil) {",
+									"//     pm.request.headers.add({",
+									"//         key: 'Content-MD5', ",
+									"//         value: CryptoJS.MD5(pm.request.body.toString()).toString(CryptoJS.enc.Base64)",
+									"//     });",
+									"// }"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Cache-Control",
+								"value": "",
+								"description": "Optional. Specifies Cache-Control header on retrieval.",
+								"type": "text",
+								"disabled": true
+							},
+							{
+								"key": "Content-Disposition",
+								"value": "",
+								"description": "Optional. Specifies Content-Disposition header on retrieval.",
+								"type": "text",
+								"disabled": true
+							},
+							{
+								"key": "Content-Encoding",
+								"value": "",
+								"description": "Optional. Specifies Content-Encoding header on retrieval.",
+								"type": "text",
+								"disabled": true
+							},
+							{
+								"key": "Content-Language",
+								"value": "",
+								"description": "Optional. Specifies Content-Encoding header on retrieval.",
+								"type": "text",
+								"disabled": true
+							},
+							{
+								"key": "Content-Length",
+								"value": "",
+								"description": "Optional. Specifies Content-Length header on retrieval.",
+								"type": "text",
+								"disabled": true
+							},
+							{
+								"key": "Content-Type",
+								"value": "",
+								"description": "Optional. Specifies Content-Type header on retrieval.",
+								"type": "text",
+								"disabled": true
+							},
+							{
+								"key": "Expires",
+								"value": "",
+								"description": "Optional. Specifies Expires header on retrieval.",
+								"type": "text",
+								"disabled": true
+							},
+							{
+								"key": "x-amz-acl",
+								"value": "",
+								"type": "text",
+								"description": "Optional. If supplied, must be the same as the bucket ACL.",
+								"disabled": true
+							},
+							{
+								"key": "x-amz-expected-bucket-owner",
+								"value": "",
+								"type": "text",
+								"description": "Optional. Account ID of the expected bucket owner. If the bucket is owned by a different owner, a 403 Access Denied error will be returned.",
+								"disabled": true
+							},
+							{
+								"key": "x-amz-object-lock-legal-hold",
+								"value": "",
+								"type": "text",
+								"description": "Optional. Specifies whether a legal hold will be applied. Allowed values are 'ON' or 'OFF'.",
+								"disabled": true
+							},
+							{
+								"key": "x-amz-object-lock-mode",
+								"value": "",
+								"type": "text",
+								"description": "Optional. The lock mode to apply. Allowed values are 'GOVERNANCE' or 'COMPLIANCE'.",
+								"disabled": true
+							},
+							{
+								"key": "x-amz-object-lock-retain-until-date",
+								"value": "",
+								"type": "text",
+								"description": "Optional. Timestamp for expiration of object lock.",
+								"disabled": true
+							},
+							{
+								"key": "x-amz-server-side-encryption-customer-algorithm",
+								"value": "",
+								"type": "text",
+								"description": "Optional. Encryption algorithm to be used for SSE-C.",
+								"disabled": true
+							},
+							{
+								"key": "x-amz-server-side-encryption-customer-key",
+								"value": "",
+								"type": "text",
+								"description": "Optional. Base64-encoded customer key for SSE-C.",
+								"disabled": true
+							},
+							{
+								"key": "x-amz-server-side-encryption",
+								"value": "",
+								"description": "Optional. Set to AES256 to use SSE-B2.",
+								"type": "text",
+								"disabled": true
+							}
+						],
+						"body": {
+							"mode": "file",
+							"file": {
+								"src": "/Users/lakshmi/Documents/work/mc/staticcheck.conf"
+							}
+						},
+						"url": {
+							"raw": "{{s3baseurl}}/:bucket/:key?multiupload=true",
+							"host": [
+								"{{s3baseurl}}"
+							],
+							"path": [
+								":bucket",
+								":key"
+							],
+							"query": [
+								{
+									"key": "multiupload",
+									"value": "true"
+								}
+							],
+							"variable": [
+								{
+									"key": "bucket",
+									"value": "buck1"
+								},
+								{
+									"key": "key",
+									"value": "nest1/myfile.conf"
+								}
+							]
+						}
+					},
+					"response": [
+						{
+							"name": "S3 Put Object",
+							"originalRequest": {
+								"method": "PUT",
+								"header": [
+									{
+										"key": "Cache-Control",
+										"value": "",
+										"description": "Optional. Specifies Cache-Control header on retrieval.",
+										"type": "text",
+										"disabled": true
+									},
+									{
+										"key": "Content-Disposition",
+										"value": "",
+										"description": "Optional. Specifies Content-Disposition header on retrieval.",
+										"type": "text",
+										"disabled": true
+									},
+									{
+										"key": "Content-Encoding",
+										"value": "",
+										"description": "Optional. Specifies Content-Encoding header on retrieval.",
+										"type": "text",
+										"disabled": true
+									},
+									{
+										"key": "Content-Language",
+										"value": "",
+										"description": "Optional. Specifies Content-Encoding header on retrieval.",
+										"type": "text",
+										"disabled": true
+									},
+									{
+										"key": "Content-Length",
+										"value": "",
+										"description": "Optional. Specifies Content-Length header on retrieval.",
+										"type": "text",
+										"disabled": true
+									},
+									{
+										"key": "Content-Type",
+										"value": "",
+										"description": "Optional. Specifies Content-Type header on retrieval.",
+										"type": "text",
+										"disabled": true
+									},
+									{
+										"key": "Expires",
+										"value": "",
+										"description": "Optional. Specifies Expires header on retrieval.",
+										"type": "text",
+										"disabled": true
+									},
+									{
+										"key": "x-amz-acl",
+										"value": "",
+										"type": "text",
+										"description": "Optional. If supplied, must be the same as the bucket ACL.",
+										"disabled": true
+									},
+									{
+										"key": "x-amz-expected-bucket-owner",
+										"value": "",
+										"type": "text",
+										"description": "Optional. Account ID of the expected bucket owner. If the bucket is owned by a different owner, a 403 Access Denied error will be returned.",
+										"disabled": true
+									},
+									{
+										"key": "x-amz-object-lock-legal-hold",
+										"value": "",
+										"type": "text",
+										"description": "Optional. Specifies whether a legal hold will be applied. Allowed values are 'ON' or 'OFF'.",
+										"disabled": true
+									},
+									{
+										"key": "x-amz-object-lock-mode",
+										"value": "",
+										"type": "text",
+										"description": "Optional. The lock mode to apply. Allowed values are 'GOVERNANCE' or 'COMPLIANCE'.",
+										"disabled": true
+									},
+									{
+										"key": "x-amz-object-lock-retain-until-date",
+										"value": "",
+										"type": "text",
+										"description": "Optional. Timestamp for expiration of object lock.",
+										"disabled": true
+									},
+									{
+										"key": "x-amz-server-side-encryption-customer-algorithm",
+										"value": "",
+										"type": "text",
+										"description": "Optional. Encryption algorithm to be used for SSE-C.",
+										"disabled": true
+									},
+									{
+										"key": "x-amz-server-side-encryption-customer-key",
+										"value": "",
+										"type": "text",
+										"description": "Optional. Base64-encoded customer key for SSE-C.",
+										"disabled": true
+									},
+									{
+										"key": "x-amz-server-side-encryption",
+										"value": "",
+										"description": "Optional. Set to AES256 to use SSE-B2.",
+										"type": "text",
+										"disabled": true
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "object data"
+								},
+								"url": {
+									"raw": "s3.{{region}}.backblazeb2.com/:bucket/:key",
+									"host": [
+										"s3",
+										"{{region}}",
+										"backblazeb2",
+										"com"
+									],
+									"path": [
+										":bucket",
+										":key"
+									],
+									"variable": [
+										{
+											"key": "bucket",
+											"value": "my-bucket-name",
+											"description": "Required. The name of the bucket."
+										},
+										{
+											"key": "key",
+											"value": "object-1",
+											"description": "Required. Key of the object to be written."
+										}
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "plain",
+							"header": [
+								{
+									"key": "x-amz-request-id",
+									"value": "4d38f7d0978e0ed5"
+								},
+								{
+									"key": "x-amz-id-2",
+									"value": "aMaM1sGZVOSAzPDVLYy9mJDTIZFVjImI7"
+								},
+								{
+									"key": "ETag",
+									"value": "\"85f30635602dc09bd85957a6e82a2c21\""
+								},
+								{
+									"key": "x-amz-version-id",
+									"value": "4_z6145af89f355ac2f74ed0c1b_f416a807037a7ee2a_d20220128_m231233_c004_v0402000_t0056"
+								},
+								{
+									"key": "Cache-Control",
+									"value": "max-age=0, no-cache, no-store"
+								},
+								{
+									"key": "Content-Length",
+									"value": "0"
+								},
+								{
+									"key": "Date",
+									"value": "Fri, 28 Jan 2022 23:12:33 GMT"
+								},
+								{
+									"key": "Keep-Alive",
+									"value": "timeout=5"
+								},
+								{
+									"key": "Connection",
+									"value": "keep-alive"
+								}
+							],
+							"cookie": [],
+							"body": ""
+						}
+					]
+				},
+				{
+					"name": "S3 PutMultipleObject",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// // Set keyMd5 HTTP header with the MD5 hash of the key",
+									"// var key = pm.request.headers.get('x-amz-server-side-encryption-customer-key');",
+									"// if (key) {",
+									"//     pm.request.headers.add({",
+									"//         key: 'x-amz-server-side-encryption-customer-key-MD5', ",
+									"//         value: CryptoJS.MD5(CryptoJS.enc.Base64.parse(key)).toString(CryptoJS.enc.Base64)",
+									"//     });",
+									"// }",
+									"",
+									"// // Set contentMd5 HTTP header with the MD5 hash of the body if object lock is set",
+									"// var retainUntil = pm.request.headers.get('x-amz-object-lock-retain-until-date');",
+									"// if (retainUntil) {",
+									"//     pm.request.headers.add({",
+									"//         key: 'Content-MD5', ",
+									"//         value: CryptoJS.MD5(pm.request.body.toString()).toString(CryptoJS.enc.Base64)",
+									"//     });",
+									"// }"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "PUT",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "doublefile",
+									"type": "file",
+									"src": "/Users/lakshmi/Documents/work/zboxcli/main.go"
+								},
+								{
+									"key": "doublefile2",
+									"type": "file",
+									"src": "/Users/lakshmi/Documents/work/zboxcli/README.md"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{s3baseurl}}/:bucket?multiupload=true",
+							"host": [
+								"{{s3baseurl}}"
+							],
+							"path": [
+								":bucket"
+							],
+							"query": [
+								{
+									"key": "multiupload",
+									"value": "true"
+								}
+							],
+							"variable": [
+								{
+									"key": "bucket",
+									"value": "wm6"
+								}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"auth": {
+		"type": "awsv4",
+		"awsv4": [
+			{
+				"key": "service",
+				"value": "s3",
+				"type": "string"
+			},
+			{
+				"key": "region",
+				"value": "",
+				"type": "string"
+			},
+			{
+				"key": "secretKey",
+				"value": "{{applicationKey}}",
+				"type": "string"
+			},
+			{
+				"key": "accessKey",
+				"value": "{{applicationKeyId}}",
+				"type": "string"
+			}
+		]
+	},
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "applicationKeyId",
+			"value": "<your-application-key-id>",
+			"type": "string"
+		},
+		{
+			"key": "applicationKey",
+			"value": "<your-application-key>",
+			"type": "string"
+		},
+		{
+			"key": "s3baseurl",
+			"value": "",
+			"type": "string"
+		}
+	]
+}
