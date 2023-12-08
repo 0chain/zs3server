@@ -53,8 +53,10 @@ jobs:
             cd client-api
             docker build -t $MINIO_CLIENT_REGISTRY:latest .
             docker tag $MINIO_CLIENT_REGISTRY:latest $MINIO_CLIENT_REGISTRY:$TAG-$SHORT_SHA
+            docker tag $MINIO_CLIENT_REGISTRY:latest $MINIO_CLIENT_REGISTRY:$TAG
             docker push $MINIO_CLIENT_REGISTRY:$TAG-$SHORT_SHA
-        
+            docker push $MINIO_CLIENT_REGISTRY:$TAG
+
         - name: Push latest
           if: ${{ github.event.inputs.latest_tag == 'yes' || github.ref == 'refs/heads/master' }}
           run: |
