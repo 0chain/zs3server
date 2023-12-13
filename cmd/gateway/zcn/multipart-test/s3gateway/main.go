@@ -13,11 +13,26 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/0chain/gosdk/constants"
+	"github.com/0chain/gosdk/core/sys"
+	"github.com/0chain/gosdk/zboxcore/sdk"
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 )
+
+var (
+	FileMap = make(map[string]*MultiPartFile)
+	mapLock sync.Mutex
+	alloc   *sdk.Allocation
+)
+
+type MultiPartFile struct {
+	memFile *sys.MemChanFile
+	opWg    sync.WaitGroup
+}
 
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
@@ -172,15 +187,50 @@ func makeInitiateMultipartUploadHandler(localStorageDir string) http.HandlerFunc
 		vars := mux.Vars(r)
 		bucket := vars["bucket"]
 		object := vars["object"]
-
+		var objectSize int64
 		log.Println("initial upload...")
 
 		// Generate a unique upload ID
 		uploadID := uuid.New().String()
-
+		mapLock.Lock()
+		memFile := &sys.MemChanFile{
+			Buffer: make(chan []byte, 10),
+			// false means encrypt is false
+			ChunkWriteSize: int(alloc.GetChunkReadSize(false)),
+		}
+		multiPartFile := &MultiPartFile{
+			memFile: memFile,
+		}
+		FileMap[uploadID] = multiPartFile
+		mapLock.Unlock()
 		// Create the bucket directory if it doesn't exist
 		bucketPath := filepath.Join(localStorageDir, bucket, uploadID, object)
 		log.Println("bucketPath:", bucketPath)
+		// Create fileMeta and sdk.OperationRequest
+		fileMeta := sdk.FileMeta{
+			ActualSize: objectSize, // Need to set the actual size
+			RemoteName: object,
+			RemotePath: bucketPath,
+			MimeType:   "application/octet-stream", // can get from request
+		}
+		options := []sdk.ChunkedUploadOption{
+			sdk.WithChunkNumber(250),
+		}
+		operationRequest := sdk.OperationRequest{
+			FileMeta:      fileMeta,
+			FileReader:    memFile,
+			OperationType: constants.FileOperationInsert,
+			Opts:          options,
+			RemotePath:    bucketPath,
+		}
+		// if its update change operation type
+		multiPartFile.opWg.Add(1)
+		go func() {
+			// run this in background, will block until the data is written to memFile
+			// We should add ctx here to cancel the operation
+			_ = alloc.DoMultiOperation([]sdk.OperationRequest{operationRequest})
+			multiPartFile.opWg.Done()
+		}()
 		if err := os.MkdirAll(bucketPath, os.ModePerm); err != nil {
 			log.Println(err)
 			http.Error(w, "Error creating bucket", http.StatusInternalServerError)
@@ -231,7 +281,7 @@ func makeUploadPartHandler(localStorageDir string) http.HandlerFunc {
 		uploadID := r.URL.Query().Get("uploadId")
 
 		// Buffer to read each part
-		const partSize = 8 * 1024 // Set an appropriate part size
+		var partSize = alloc.GetChunkReadSize(false) // Set an appropriate part size set true if file is encrypted
 		buf := make([]byte, partSize)
 
 		// Create a unique filename for each part
@@ -242,18 +292,27 @@ func makeUploadPartHandler(localStorageDir string) http.HandlerFunc {
 
 		log.Printf("make upload part %v, uploadID: %v, filename: %s", partNumber, uploadID, partFilename)
 		// Create the part file
-		partFile, err := os.Create(partFilename)
-		if err != nil {
-			log.Printf("create part file: %v failed, %v\n", partFilename, err)
-			http.Error(w, "Error creating part file", http.StatusInternalServerError)
+		// partFile, err := os.Create(partFilename)
+		// if err != nil {
+		// 	log.Printf("create part file: %v failed, %v\n", partFilename, err)
+		// 	http.Error(w, "Error creating part file", http.StatusInternalServerError)
+		// 	return
+		// }
+		// defer partFile.Close()
+		mapLock.Lock()
+		multiPartFile, ok := FileMap[uploadID]
+		mapLock.Unlock()
+		if !ok {
+			log.Printf("uploadID: %v not found\n", uploadID)
+			http.Error(w, "uploadID not found", http.StatusInternalServerError)
 			return
 		}
-		defer partFile.Close()
-
+		partFile := multiPartFile.memFile
 		// Create an MD5 hash to calculate ETag
 		hash := md5.New()
 
 		// Read each part from the request body
+		// We need to make sure we write atleast ChunkWriteSize bytes to memFile unless its the last part
 		for {
 			n, err := r.Body.Read(buf)
 			if err == io.EOF {
@@ -328,7 +387,16 @@ func makeCompleteMultipartUploadHandler(localStorageDir string) http.HandlerFunc
 			http.Error(w, "Error cleaning up part files and directories", http.StatusInternalServerError)
 			return
 		}
-
+		// wait for upload to finish
+		mapLock.Lock()
+		multiPartFile, ok := FileMap[uploadID]
+		mapLock.Unlock()
+		if !ok {
+			log.Printf("uploadID: %v not found\n", uploadID)
+			http.Error(w, "uploadID not found", http.StatusInternalServerError)
+			return
+		}
+		multiPartFile.opWg.Wait()
 		// Build the XML response
 		responseXML := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
 <CompleteMultipartUploadResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
