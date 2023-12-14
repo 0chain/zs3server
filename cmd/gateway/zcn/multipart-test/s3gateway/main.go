@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"crypto/md5"
 	"encoding/hex"
 	"encoding/xml"
@@ -21,6 +22,8 @@ import (
 	"github.com/0chain/gosdk/zboxcore/sdk"
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
+	"github.com/peterlimg/s3gateway/seqpriorityqueue"
+	"github.com/peterlimg/s3gateway/zcn"
 )
 
 var (
@@ -32,12 +35,24 @@ var (
 type MultiPartFile struct {
 	memFile *sys.MemChanFile
 	opWg    sync.WaitGroup
+	seqPQ   *seqpriorityqueue.SeqPriorityQueue
+	doneC   chan struct{}
 }
 
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	// Initialize the router
 	router := mux.NewRouter()
+
+	err := zcn.InitializeSDK("", "", 1)
+	if err != nil {
+		panic(err)
+	}
+
+	alloc, err = sdk.GetAllocation(zcn.AllocationID)
+	if err != nil {
+		panic(err)
+	}
 
 	localStorageDir := "./store"
 
@@ -187,7 +202,9 @@ func makeInitiateMultipartUploadHandler(localStorageDir string) http.HandlerFunc
 		vars := mux.Vars(r)
 		bucket := vars["bucket"]
 		object := vars["object"]
-		var objectSize int64
+		// var objectSize int64
+		objectSize := int64(371917281)
+		// objectSize := int64(22491196)
 		log.Println("initial upload...")
 
 		// Generate a unique upload ID
@@ -198,8 +215,11 @@ func makeInitiateMultipartUploadHandler(localStorageDir string) http.HandlerFunc
 			// false means encrypt is false
 			ChunkWriteSize: int(alloc.GetChunkReadSize(false)),
 		}
+		log.Println("ChunkReadSize:", memFile.ChunkWriteSize)
 		multiPartFile := &MultiPartFile{
 			memFile: memFile,
+			seqPQ:   seqpriorityqueue.NewSeqPriorityQueue(),
+			doneC:   make(chan struct{}),
 		}
 		FileMap[uploadID] = multiPartFile
 		mapLock.Unlock()
@@ -210,7 +230,7 @@ func makeInitiateMultipartUploadHandler(localStorageDir string) http.HandlerFunc
 		fileMeta := sdk.FileMeta{
 			ActualSize: objectSize, // Need to set the actual size
 			RemoteName: object,
-			RemotePath: bucketPath,
+			RemotePath: "/" + bucket,
 			MimeType:   "application/octet-stream", // can get from request
 		}
 		options := []sdk.ChunkedUploadOption{
@@ -231,19 +251,57 @@ func makeInitiateMultipartUploadHandler(localStorageDir string) http.HandlerFunc
 			_ = alloc.DoMultiOperation([]sdk.OperationRequest{operationRequest})
 			multiPartFile.opWg.Done()
 		}()
+
+		go func() {
+			for {
+				partNumber := multiPartFile.seqPQ.Popup()
+				log.Println("==================================== popup part:", partNumber)
+
+				if partNumber == -1 {
+					close(multiPartFile.doneC)
+					log.Println("==================================== popup done")
+					return
+				}
+
+				partFilename := filepath.Join(localStorageDir, bucket, uploadID, object, fmt.Sprintf("part%d", partNumber))
+
+				func() {
+					// Open the part file for reading
+					partFile, err := os.Open(partFilename)
+					if err != nil {
+						log.Panicf("could not open part file: %v, err: %v", partFilename, err)
+					}
+					defer partFile.Close()
+
+					data, err := ioutil.ReadAll(partFile)
+					if err != nil {
+						log.Panicf("read part: %v failed, err: %v", partNumber, err)
+					}
+
+					log.Println("^^^^^^^^^ uploading part:", partNumber, "size:", len(data))
+
+					n, err := io.Copy(multiPartFile.memFile, bytes.NewBuffer(data))
+					// n, err := io.Copy(multiPartFile.memFile, partFile)
+					if err != nil {
+						log.Panicf("upoad part: %v failed, err: %v", partNumber, err)
+					}
+
+					log.Println("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ uploaded part:", partNumber, " size:", n)
+				}()
+
+				log.Println("==================================== popup part:", partNumber)
+				// if partNumber == -1 {
+				// 	close(multiPartFile.doneC)
+				// 	log.Println("==================================== popup done")
+				// 	return
+				// }
+			}
+		}()
 		if err := os.MkdirAll(bucketPath, os.ModePerm); err != nil {
 			log.Println(err)
 			http.Error(w, "Error creating bucket", http.StatusInternalServerError)
 			return
 		}
-
-		// Create the upload directory
-		// uploadDir := filepath.Join(bucketPath, fmt.Sprintf("%s_multipart_upload", object))
-		// if err := os.MkdirAll(uploadDir, os.ModePerm); err != nil {
-		// 	log.Println(err)
-		// 	http.Error(w, "Error creating upload directory", http.StatusInternalServerError)
-		// 	return
-		// }
 
 		response := InitiateMultipartUploadResponse{UploadID: uploadID}
 
@@ -283,6 +341,7 @@ func makeUploadPartHandler(localStorageDir string) http.HandlerFunc {
 		// Buffer to read each part
 		var partSize = alloc.GetChunkReadSize(false) // Set an appropriate part size set true if file is encrypted
 		buf := make([]byte, partSize)
+		// buf := make([]byte, 8*1024)
 
 		// Create a unique filename for each part
 		partNumberStr := r.URL.Query().Get("partNumber")
@@ -290,15 +349,16 @@ func makeUploadPartHandler(localStorageDir string) http.HandlerFunc {
 		partFilename := filepath.Join(localStorageDir, bucket, uploadID, object, fmt.Sprintf("part%d", partNumber))
 		partETagFilename := partFilename + ".etag"
 
-		log.Printf("make upload part %v, uploadID: %v, filename: %s", partNumber, uploadID, partFilename)
+		// log.Printf("make upload part %v, uploadID: %v, filename: %s", partNumber, uploadID, partFilename)
 		// Create the part file
-		// partFile, err := os.Create(partFilename)
-		// if err != nil {
-		// 	log.Printf("create part file: %v failed, %v\n", partFilename, err)
-		// 	http.Error(w, "Error creating part file", http.StatusInternalServerError)
-		// 	return
-		// }
-		// defer partFile.Close()
+		partFile, err := os.Create(partFilename)
+		if err != nil {
+			log.Printf("create part file: %v failed, %v\n", partFilename, err)
+			http.Error(w, "Error creating part file", http.StatusInternalServerError)
+			return
+		}
+		defer partFile.Close()
+
 		mapLock.Lock()
 		multiPartFile, ok := FileMap[uploadID]
 		mapLock.Unlock()
@@ -307,7 +367,8 @@ func makeUploadPartHandler(localStorageDir string) http.HandlerFunc {
 			http.Error(w, "uploadID not found", http.StatusInternalServerError)
 			return
 		}
-		partFile := multiPartFile.memFile
+		// partFile := multiPartFile.memFile
+		seqPQ := multiPartFile.seqPQ
 		// Create an MD5 hash to calculate ETag
 		hash := md5.New()
 
@@ -316,6 +377,7 @@ func makeUploadPartHandler(localStorageDir string) http.HandlerFunc {
 		for {
 			n, err := r.Body.Read(buf)
 			if err == io.EOF {
+				gTotal += n
 				// Write the part data to the part file
 				if _, err := partFile.Write(buf[:n]); err != nil {
 					log.Println(err)
@@ -331,6 +393,7 @@ func makeUploadPartHandler(localStorageDir string) http.HandlerFunc {
 				http.Error(w, "Error reading part data", http.StatusInternalServerError)
 				return
 			}
+			gTotal += n
 
 			// Write the part data to the part file
 			if _, err := partFile.Write(buf[:n]); err != nil {
@@ -343,6 +406,9 @@ func makeUploadPartHandler(localStorageDir string) http.HandlerFunc {
 			hash.Write(buf[:n])
 		}
 
+		seqPQ.Push(partNumber)
+		log.Println("VVVVVVVVVVVVVV pushed part:", partNumber)
+
 		// Calculate ETag for the part
 		eTag := hex.EncodeToString(hash.Sum(nil))
 
@@ -353,7 +419,7 @@ func makeUploadPartHandler(localStorageDir string) http.HandlerFunc {
 			return
 		}
 
-		log.Printf("Uploaded part %d for multipart upload with UploadID: %s, ETag: %s\n", partNumber, uploadID, eTag)
+		// log.Printf("Uploaded part %d for multipart upload with UploadID: %s, ETag: %s\n", partNumber, uploadID, eTag)
 
 		// Include the ETag in the response header
 		w.Header().Set("ETag", eTag)
@@ -380,13 +446,8 @@ func makeCompleteMultipartUploadHandler(localStorageDir string) http.HandlerFunc
 		// Include the correct ETag in the response header
 		w.Header().Set("ETag", eTag)
 
-		log.Printf("Completed multipart upload for object %s with UploadID: %s, ETag: %s\n", object, uploadID, eTag)
+		// log.Printf("Completed multipart upload for object %s with UploadID: %s, ETag: %s\n", object, uploadID, eTag)
 
-		if err := cleanupPartFilesAndDirs(bucket, uploadID, object, localStorageDir); err != nil {
-			log.Println("Error cleaning up part files and directories:", err)
-			http.Error(w, "Error cleaning up part files and directories", http.StatusInternalServerError)
-			return
-		}
 		// wait for upload to finish
 		mapLock.Lock()
 		multiPartFile, ok := FileMap[uploadID]
@@ -396,7 +457,16 @@ func makeCompleteMultipartUploadHandler(localStorageDir string) http.HandlerFunc
 			http.Error(w, "uploadID not found", http.StatusInternalServerError)
 			return
 		}
+		multiPartFile.seqPQ.Done()
+		<-multiPartFile.doneC
 		multiPartFile.opWg.Wait()
+
+		// TODO: do clean up after all has been uploaded to allocation
+		// if err := cleanupPartFilesAndDirs(bucket, uploadID, object, localStorageDir); err != nil {
+		// 	log.Println("Error cleaning up part files and directories:", err)
+		// 	http.Error(w, "Error cleaning up part files and directories", http.StatusInternalServerError)
+		// 	return
+		// }
 		// Build the XML response
 		responseXML := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
 <CompleteMultipartUploadResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
@@ -462,14 +532,14 @@ func constructCompleteObject(bucket, uploadID, object, localStorageDir string) (
 		partETags = append(partETags, string(partETagBytes))
 
 		// Remove the part file
-		if err := os.Remove(partFilename); err != nil {
-			return "", err
-		}
+		// if err := os.Remove(partFilename); err != nil {
+		// 	return "", err
+		// }
 
 		// Remove the ETag file
-		if err := os.Remove(partETagFilename); err != nil {
-			return "", err
-		}
+		// if err := os.Remove(partETagFilename); err != nil {
+		// 	return "", err
+		// }
 	}
 
 	// Get the concatenated ETag value
