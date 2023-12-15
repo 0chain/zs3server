@@ -256,28 +256,40 @@ func makeInitiateMultipartUploadHandler(localStorageDir string) http.HandlerFunc
 
 		go func() {
 			var buf bytes.Buffer
+			var total int64
 			for {
 				select {
-				case data := <-multiPartFile.dataC:
-					_, err := buf.Write(data)
-					if err != nil {
-						log.Panic(err)
+				case data, ok := <-multiPartFile.dataC:
+					if ok {
+						_, err := buf.Write(data)
+						if err != nil {
+							log.Panic(err)
+						}
+
+						n := buf.Len() / memFile.ChunkWriteSize
+						bbuf := make([]byte, n*memFile.ChunkWriteSize)
+						_, err = buf.Read(bbuf)
+						if err != nil {
+							log.Panic(err)
+						}
+
+						cn, err := io.Copy(multiPartFile.memFile, bytes.NewBuffer(bbuf))
+						// n, err := io.Copy(multiPartFile.memFile, partFile)
+						if err != nil {
+							log.Panicf("upoad part failed, err: %v", err)
+						}
+						total += cn
+						log.Println("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ uploaded:", total, " new:", cn)
+					} else {
+						cn, err := io.Copy(multiPartFile.memFile, &buf)
+						if err != nil {
+							log.Panic(err)
+						}
+
+						total += cn
+						log.Println("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ uploaded:", total, " new:", cn)
 					}
 
-					n := buf.Len() / memFile.ChunkWriteSize
-					bbuf := make([]byte, n*memFile.ChunkWriteSize)
-					_, err = buf.Read(bbuf)
-					if err != nil {
-						log.Panic(err)
-					}
-
-					cn, err := io.Copy(multiPartFile.memFile, bytes.NewBuffer(bbuf))
-					// n, err := io.Copy(multiPartFile.memFile, partFile)
-					if err != nil {
-						log.Panicf("upoad part failed, err: %v", err)
-					}
-
-					log.Println("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ uploaded ", cn)
 				case <-multiPartFile.doneC:
 					return
 				}
