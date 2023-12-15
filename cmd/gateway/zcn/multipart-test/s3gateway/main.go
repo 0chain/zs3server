@@ -228,12 +228,12 @@ func makeInitiateMultipartUploadHandler(localStorageDir string) http.HandlerFunc
 		mapLock.Unlock()
 		// Create the bucket directory if it doesn't exist
 		bucketPath := filepath.Join(localStorageDir, bucket, uploadID, object)
-		log.Println("bucketPath:", bucketPath)
+		remotePath := "/" + filepath.Join(bucket, object)
 		// Create fileMeta and sdk.OperationRequest
 		fileMeta := sdk.FileMeta{
 			ActualSize: objectSize, // Need to set the actual size
-			RemoteName: filepath.Base(bucketPath),
-			RemotePath: "/" + filepath.Join(bucket, object),
+			RemoteName: object,
+			RemotePath: remotePath,
 			MimeType:   "application/octet-stream", // can get from request
 		}
 		options := []sdk.ChunkedUploadOption{
@@ -244,7 +244,7 @@ func makeInitiateMultipartUploadHandler(localStorageDir string) http.HandlerFunc
 			FileReader:    memFile,
 			OperationType: constants.FileOperationInsert,
 			Opts:          options,
-			RemotePath:    bucketPath,
+			RemotePath:    fileMeta.RemotePath,
 		}
 		// if its update change operation type
 		multiPartFile.opWg.Add(1)
