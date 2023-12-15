@@ -37,6 +37,7 @@ type MultiPartFile struct {
 	opWg    sync.WaitGroup
 	seqPQ   *seqpriorityqueue.SeqPriorityQueue
 	doneC   chan struct{}
+	dataC   chan []byte
 }
 
 func main() {
@@ -203,8 +204,8 @@ func makeInitiateMultipartUploadHandler(localStorageDir string) http.HandlerFunc
 		bucket := vars["bucket"]
 		object := vars["object"]
 		// var objectSize int64
-		objectSize := int64(371917281)
-		// objectSize := int64(22491196)
+		// objectSize := int64(371917281)
+		objectSize := int64(22491196)
 		log.Println("initial upload...")
 
 		// Generate a unique upload ID
@@ -220,6 +221,7 @@ func makeInitiateMultipartUploadHandler(localStorageDir string) http.HandlerFunc
 			memFile: memFile,
 			seqPQ:   seqpriorityqueue.NewSeqPriorityQueue(),
 			doneC:   make(chan struct{}),
+			dataC:   make(chan []byte, 10),
 		}
 		FileMap[uploadID] = multiPartFile
 		mapLock.Unlock()
@@ -253,6 +255,36 @@ func makeInitiateMultipartUploadHandler(localStorageDir string) http.HandlerFunc
 		}()
 
 		go func() {
+			var buf bytes.Buffer
+			for {
+				select {
+				case data := <-multiPartFile.dataC:
+					_, err := buf.Write(data)
+					if err != nil {
+						log.Panic(err)
+					}
+
+					n := buf.Len() / memFile.ChunkWriteSize
+					bbuf := make([]byte, n*memFile.ChunkWriteSize)
+					_, err = buf.Read(bbuf)
+					if err != nil {
+						log.Panic(err)
+					}
+
+					cn, err := io.Copy(multiPartFile.memFile, bytes.NewBuffer(bbuf))
+					// n, err := io.Copy(multiPartFile.memFile, partFile)
+					if err != nil {
+						log.Panicf("upoad part failed, err: %v", err)
+					}
+
+					log.Println("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ uploaded ", cn)
+				case <-multiPartFile.doneC:
+					return
+				}
+			}
+		}()
+
+		go func() {
 			for {
 				partNumber := multiPartFile.seqPQ.Popup()
 				log.Println("==================================== popup part:", partNumber)
@@ -273,28 +305,14 @@ func makeInitiateMultipartUploadHandler(localStorageDir string) http.HandlerFunc
 					}
 					defer partFile.Close()
 
-					data, err := ioutil.ReadAll(partFile)
+					data, err := io.ReadAll(partFile)
 					if err != nil {
 						log.Panicf("read part: %v failed, err: %v", partNumber, err)
 					}
 
+					multiPartFile.dataC <- data
 					log.Println("^^^^^^^^^ uploading part:", partNumber, "size:", len(data))
-
-					n, err := io.Copy(multiPartFile.memFile, bytes.NewBuffer(data))
-					// n, err := io.Copy(multiPartFile.memFile, partFile)
-					if err != nil {
-						log.Panicf("upoad part: %v failed, err: %v", partNumber, err)
-					}
-
-					log.Println("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ uploaded part:", partNumber, " size:", n)
 				}()
-
-				log.Println("==================================== popup part:", partNumber)
-				// if partNumber == -1 {
-				// 	close(multiPartFile.doneC)
-				// 	log.Println("==================================== popup done")
-				// 	return
-				// }
 			}
 		}()
 		if err := os.MkdirAll(bucketPath, os.ModePerm); err != nil {
