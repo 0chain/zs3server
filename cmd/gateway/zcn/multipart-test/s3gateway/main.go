@@ -302,6 +302,7 @@ func makeInitiateMultipartUploadHandler(localStorageDir string) http.HandlerFunc
 				log.Println("==================================== popup part:", partNumber)
 
 				if partNumber == -1 {
+					close(multiPartFile.dataC)
 					close(multiPartFile.doneC)
 					log.Println("==================================== popup done")
 					return
