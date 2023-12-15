@@ -3,7 +3,7 @@ module github.com/peterlimg/s3gateway
 go 1.21.4
 
 require (
-	github.com/0chain/gosdk v1.10.1-0.20231213215808-310edbb4d669
+	github.com/0chain/gosdk v1.10.1-0.20231214200656-5a5e14d7d186
 	github.com/google/uuid v1.5.0
 	github.com/gorilla/mux v1.8.1
 	github.com/mitchellh/go-homedir v1.1.0
