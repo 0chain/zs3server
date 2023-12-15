@@ -174,7 +174,8 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object string
 	return uploadID, nil
 }
 
-func (zob *zcnObjects) PutObjectPart(ctx context.Context, bucket, object, uploadID string, partID int, data *minio.PutObjReader, opts minio.ObjectOptions) (info minio.PartInfo, err error) {
+func (zob *zcnObjects) PutObjectPart(ctx context.Context, bucket, object, uploadID string, partID int, data *minio.PutObjReader, opts minio.ObjectOptions) (pi minio.PartInfo, err error) {
+	// func (zob *zcnObjects) PutObjectPart(ctx context.Context, bucket, object, uploadID string, partID int, data *minio.PutObjReader, opts minio.ObjectOptions) (info minio.PartInfo, err error) {
 	// Buffer to read each part
 	var partSize = zob.alloc.GetChunkReadSize(false) // Set an appropriate part size set true if file is encrypted
 	buf := make([]byte, partSize)
@@ -258,7 +259,8 @@ func (zob *zcnObjects) PutObjectPart(ctx context.Context, bucket, object, upload
 	}, nil
 }
 
-func (zob *zcnObjects) CompleteMultipartUpload(ctx context.Context, bucket, object, uploadID string, uploadedParts []minio.CompletePart, opts minio.ObjectOptions) (objInfo minio.ObjectInfo, err error) {
+func (zob *zcnObjects) CompleteMultipartUpload(ctx context.Context, bucket, object, uploadID string, uploadedParts []minio.CompletePart, opts minio.ObjectOptions) (oi minio.ObjectInfo, err error) {
+	// func (zob *zcnObjects) CompleteMultipartUpload(ctx context.Context, bucket, object, uploadID string, uploadedParts []minio.CompletePart, opts minio.ObjectOptions) (objInfo minio.ObjectInfo, err error) {
 	// log.Println("complete total size:", gTotal)
 	// Implement logic to calculate ETag based on uploaded parts
 	eTag, err := constructCompleteObject(bucket, uploadID, object, localStorageDir)
