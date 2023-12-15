@@ -233,11 +233,11 @@ func makeInitiateMultipartUploadHandler(localStorageDir string) http.HandlerFunc
 		fileMeta := sdk.FileMeta{
 			ActualSize: objectSize, // Need to set the actual size
 			RemoteName: object,
-			RemotePath: "/" + bucket,
+			RemotePath: "/" + bucketPath,
 			MimeType:   "application/octet-stream", // can get from request
 		}
 		options := []sdk.ChunkedUploadOption{
-			sdk.WithChunkNumber(250),
+			sdk.WithChunkNumber(32),
 		}
 		operationRequest := sdk.OperationRequest{
 			FileMeta:      fileMeta,
