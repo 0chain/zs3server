@@ -38,6 +38,7 @@ type MultiPartFile struct {
 	seqPQ   *seqpriorityqueue.SeqPriorityQueue
 	doneC   chan struct{}
 	dataC   chan []byte
+	opError error
 }
 
 func main() {
@@ -250,7 +251,7 @@ func makeInitiateMultipartUploadHandler(localStorageDir string) http.HandlerFunc
 		go func() {
 			// run this in background, will block until the data is written to memFile
 			// We should add ctx here to cancel the operation
-			_ = alloc.DoMultiOperation([]sdk.OperationRequest{operationRequest})
+			multiPartFile.opError = alloc.DoMultiOperation([]sdk.OperationRequest{operationRequest})
 			multiPartFile.opWg.Done()
 		}()
 
@@ -491,6 +492,11 @@ func makeCompleteMultipartUploadHandler(localStorageDir string) http.HandlerFunc
 		multiPartFile.seqPQ.Done()
 		<-multiPartFile.doneC
 		multiPartFile.opWg.Wait()
+		if multiPartFile.opError != nil {
+			log.Println("Error uploading file:", multiPartFile.opError)
+			http.Error(w, "Error uploading file", http.StatusInternalServerError)
+			return
+		}
 
 		// TODO: do clean up after all has been uploaded to allocation
 		// if err := cleanupPartFilesAndDirs(bucket, uploadID, object, localStorageDir); err != nil {
