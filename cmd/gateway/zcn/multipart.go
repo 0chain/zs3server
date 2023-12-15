@@ -68,7 +68,7 @@ func (zob *zcnObjects) NewMultiPartUpload(localStorageDir, bucket, object string
 	fileMeta := sdk.FileMeta{
 		ActualSize: objectSize, // Need to set the actual size
 		RemoteName: object,
-		RemotePath: "/" + bucket,
+		RemotePath: "/" + filepath.Join(bucket, object),
 		MimeType:   "application/octet-stream", // can get from request
 	}
 	options := []sdk.ChunkedUploadOption{
@@ -79,7 +79,7 @@ func (zob *zcnObjects) NewMultiPartUpload(localStorageDir, bucket, object string
 		FileReader:    memFile,
 		OperationType: constants.FileOperationInsert,
 		Opts:          options,
-		RemotePath:    bucketPath,
+		RemotePath:    fileMeta.RemotePath,
 	}
 	// if its update change operation type
 	multiPartFile.opWg.Add(1)
