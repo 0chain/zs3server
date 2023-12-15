@@ -232,7 +232,7 @@ func makeInitiateMultipartUploadHandler(localStorageDir string) http.HandlerFunc
 		// Create fileMeta and sdk.OperationRequest
 		fileMeta := sdk.FileMeta{
 			ActualSize: objectSize, // Need to set the actual size
-			RemoteName: object,
+			RemoteName: filepath.Base(bucketPath),
 			RemotePath: "/" + bucketPath,
 			MimeType:   "application/octet-stream", // can get from request
 		}
