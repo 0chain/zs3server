@@ -38,7 +38,11 @@ type MultiPartFile struct {
 	dataC   chan []byte
 }
 
-func (zob *zcnObjects) NewMultiPartUpload(localStorageDir, bucket, object string) (string, error) {
+func (zob *zcnObjects) NewMultipartUpload(ctx context.Context, bucket string, object string, opts minio.ObjectOptions) (uploadID string, err error) {
+	return zob.newMultiPartUpload(localStorageDir, bucket, object)
+}
+
+func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object string) (string, error) {
 	// var objectSize int64
 	// objectSize := int64(371917281)
 	objectSize := int64(22491196)
@@ -383,25 +387,25 @@ func constructCompleteObject(bucket, uploadID, object, localStorageDir string) (
 
 // Function to clean up temporary part files and directories
 func cleanupPartFilesAndDirs(bucket, uploadID, object, localStorageDir string) error {
-	for partNumber := 1; ; partNumber++ {
-		partFilename := filepath.Join(localStorageDir, bucket, uploadID, object, fmt.Sprintf("part%d", partNumber))
-		partETagFilename := partFilename + ".etag"
+	// for partNumber := 1; ; partNumber++ {
+	// 	partFilename := filepath.Join(localStorageDir, bucket, uploadID, object, fmt.Sprintf("part%d", partNumber))
+	// 	partETagFilename := partFilename + ".etag"
 
-		// Break the loop when there are no more parts
-		if _, err := os.Stat(partFilename); os.IsNotExist(err) {
-			break
-		}
+	// 	// Break the loop when there are no more parts
+	// 	if _, err := os.Stat(partFilename); os.IsNotExist(err) {
+	// 		break
+	// 	}
 
-		// Remove the part file
-		if err := os.Remove(partFilename); err != nil {
-			return err
-		}
+	// 	// Remove the part file
+	// 	if err := os.Remove(partFilename); err != nil {
+	// 		return err
+	// 	}
 
-		// Remove the ETag file
-		if err := os.Remove(partETagFilename); err != nil {
-			return err
-		}
-	}
+	// 	// Remove the ETag file
+	// 	if err := os.Remove(partETagFilename); err != nil {
+	// 		return err
+	// 	}
+	// }
 
 	// Remove the upload directory
 	uploadDir := filepath.Join(localStorageDir, bucket, uploadID)
