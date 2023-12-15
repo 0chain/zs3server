@@ -289,10 +289,8 @@ func makeInitiateMultipartUploadHandler(localStorageDir string) http.HandlerFunc
 
 						total += cn
 						log.Println("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ uploaded:", total, " new:", cn)
+						return
 					}
-
-				case <-multiPartFile.doneC:
-					return
 				}
 			}
 		}()
