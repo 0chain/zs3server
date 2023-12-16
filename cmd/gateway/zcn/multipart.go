@@ -284,33 +284,17 @@ func (zob *zcnObjects) CompleteMultipartUpload(ctx context.Context, bucket, obje
 	multiPartFile.opWg.Wait()
 
 	// TODO: do clean up after all has been uploaded to allocation
-	// if err := cleanupPartFilesAndDirs(bucket, uploadID, object, localStorageDir); err != nil {
-	// 	log.Println("Error cleaning up part files and directories:", err)
-	// 	http.Error(w, "Error cleaning up part files and directories", http.StatusInternalServerError)
-	// 	return
-	// }
+	if err = cleanupPartFilesAndDirs(bucket, uploadID, object, localStorageDir); err != nil {
+		log.Println("Error cleaning up part files and directories:", err)
+		// http.Error(w, "Error cleaning up part files and directories", http.StatusInternalServerError)
+		return minio.ObjectInfo{}, fmt.Errorf("error cleaning up part files and directories: %v", err)
+	}
 
 	return minio.ObjectInfo{
 		Bucket: bucket,
 		Name:   object,
 		ETag:   eTag,
 	}, nil
-
-	// 		// Build the XML response
-	// 		responseXML := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
-	// <CompleteMultipartUploadResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
-	// 	<Location>https//%s.localhost:8080/%s</Location>
-	//   <Bucket>%s</Bucket>
-	//   <Key>%s</Key>
-	//   <ETag>"%s"</ETag>
-	// </CompleteMultipartUploadResult>`, bucket, object, bucket, object, eTag)
-
-	//		// Set the Content-Type header to indicate XML response
-	//		w.Header().Set("Content-Type", "application/xml")
-	//		w.WriteHeader(http.StatusOK)
-	//		// Write the XML response to the client
-	//		w.Write([]byte(responseXML))
-	//	}
 }
 
 // Function to construct the complete object file
@@ -359,16 +343,6 @@ func constructCompleteObject(bucket, uploadID, object, localStorageDir string) (
 
 		// Append the part ETag to the slice
 		partETags = append(partETags, string(partETagBytes))
-
-		// Remove the part file
-		// if err := os.Remove(partFilename); err != nil {
-		// 	return "", err
-		// }
-
-		// Remove the ETag file
-		// if err := os.Remove(partETagFilename); err != nil {
-		// 	return "", err
-		// }
 	}
 
 	// Get the concatenated ETag value
@@ -390,26 +364,6 @@ func constructCompleteObject(bucket, uploadID, object, localStorageDir string) (
 
 // Function to clean up temporary part files and directories
 func cleanupPartFilesAndDirs(bucket, uploadID, object, localStorageDir string) error {
-	// for partNumber := 1; ; partNumber++ {
-	// 	partFilename := filepath.Join(localStorageDir, bucket, uploadID, object, fmt.Sprintf("part%d", partNumber))
-	// 	partETagFilename := partFilename + ".etag"
-
-	// 	// Break the loop when there are no more parts
-	// 	if _, err := os.Stat(partFilename); os.IsNotExist(err) {
-	// 		break
-	// 	}
-
-	// 	// Remove the part file
-	// 	if err := os.Remove(partFilename); err != nil {
-	// 		return err
-	// 	}
-
-	// 	// Remove the ETag file
-	// 	if err := os.Remove(partETagFilename); err != nil {
-	// 		return err
-	// 	}
-	// }
-
 	// Remove the upload directory
 	uploadDir := filepath.Join(localStorageDir, bucket, uploadID)
 	if err := os.RemoveAll(uploadDir); err != nil {
@@ -428,13 +382,8 @@ func (zob *zcnObjects) GetMultipartInfo(ctx context.Context, bucket, object, upl
 }
 
 func (zob *zcnObjects) ListObjectParts(ctx context.Context, bucket string, object string, uploadID string, partNumberMarker int, maxParts int, opts minio.ObjectOptions) (lpi minio.ListPartsInfo, err error) {
-	// logger.LogIf(ctx, NotImplemented{})
-	// return lpi, NotImplemented{}
-	// Replace this with the actual directory where parts information is stored
-
 	// Generate the path for the parts information file
 	partsInfoPath := filepath.Join(localStorageDir, bucket, uploadID, object)
-	// partFilename := filepath.Join(localStorageDir, bucket, uploadID, object, fmt.Sprintf("part%d", partNumber))
 
 	// Check if the parts information file exists
 	_, err = os.Stat(partsInfoPath)
@@ -448,8 +397,6 @@ func (zob *zcnObjects) ListObjectParts(ctx context.Context, bucket string, objec
 		Object:   object,
 		Bucket:   bucket,
 		UploadID: uploadID,
-		// Parts:          make([]minio.ObjectPartInfo, 0),
-		// NextPartNumber: 1,
 	}
 
 	for i := partNumberMarker; i <= maxParts; i++ {
@@ -484,7 +431,5 @@ func (zob *zcnObjects) ListObjectParts(ctx context.Context, bucket string, objec
 }
 
 func (zob *zcnObjects) AbortMultipartUpload(ctx context.Context, bucket string, object string, uploadID string, opts minio.ObjectOptions) error {
-	// err := l.Client.AbortMultipartUpload(ctx, bucket, object, uploadID)
-	// return minio.ErrorRespToObjectError(err, bucket, object)
-	return nil
+	return cleanupPartFilesAndDirs(bucket, uploadID, object, localStorageDir)
 }
