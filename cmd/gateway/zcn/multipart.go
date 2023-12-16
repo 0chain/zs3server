@@ -417,3 +417,73 @@ func cleanupPartFilesAndDirs(bucket, uploadID, object, localStorageDir string) e
 
 	return nil
 }
+
+// GetMultipartInfo returns multipart info of the uploadId of the object
+func (zob *zcnObjects) GetMultipartInfo(ctx context.Context, bucket, object, uploadID string, opts minio.ObjectOptions) (result minio.MultipartInfo, err error) {
+	result.Bucket = bucket
+	result.Object = object
+	result.UploadID = uploadID
+	return result, nil
+}
+
+func (zob *zcnObjects) ListObjectParts(ctx context.Context, bucket string, object string, uploadID string, partNumberMarker int, maxParts int, opts minio.ObjectOptions) (lpi minio.ListPartsInfo, err error) {
+	// logger.LogIf(ctx, NotImplemented{})
+	// return lpi, NotImplemented{}
+	// Replace this with the actual directory where parts information is stored
+
+	// Generate the path for the parts information file
+	partsInfoPath := filepath.Join(localStorageDir, bucket, uploadID, object)
+	// partFilename := filepath.Join(localStorageDir, bucket, uploadID, object, fmt.Sprintf("part%d", partNumber))
+
+	// Check if the parts information file exists
+	_, err = os.Stat(partsInfoPath)
+	if err != nil {
+		return minio.ListPartsInfo{}, fmt.Errorf("Unable to list object parts: %w", err)
+	}
+
+	// Read the parts information from the file (you may use your preferred method to read and parse the information)
+	// For simplicity, we assume a simple JSON file here
+	partsInfo := minio.ListPartsInfo{
+		Object:   object,
+		Bucket:   bucket,
+		UploadID: uploadID,
+		// Parts:          make([]minio.ObjectPartInfo, 0),
+		// NextPartNumber: 1,
+	}
+
+	for i := partNumberMarker; i <= maxParts; i++ {
+		partFilename := filepath.Join(localStorageDir, bucket, uploadID, object, fmt.Sprintf("part%d", i))
+		// Check if the part file exists
+		fs, err := os.Stat(partFilename)
+		if err != nil {
+			// If the part file does not exist, we have reached the end of the parts list
+			break
+		}
+
+		// Read the ETag of the part
+		partETagFilename := partFilename + ".etag"
+		partETagBytes, err := os.ReadFile(partETagFilename)
+		if err != nil {
+			return minio.ListPartsInfo{}, fmt.Errorf("Unable to read part ETag: %w", err)
+		}
+
+		// Append the part information to the parts list
+		part := minio.PartInfo{
+			PartNumber:   i,
+			LastModified: fs.ModTime(),
+			ETag:         hex.EncodeToString(partETagBytes),
+			Size:         fs.Size(),
+			ActualSize:   fs.Size(),
+		}
+
+		partsInfo.Parts = append(partsInfo.Parts, part)
+	}
+
+	return partsInfo, nil
+}
+
+func (zob *zcnObjects) AbortMultipartUpload(ctx context.Context, bucket string, object string, uploadID string, opts minio.ObjectOptions) error {
+	// err := l.Client.AbortMultipartUpload(ctx, bucket, object, uploadID)
+	// return minio.ErrorRespToObjectError(err, bucket, object)
+	return nil
+}
