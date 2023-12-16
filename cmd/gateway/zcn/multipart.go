@@ -18,9 +18,9 @@ import (
 	"github.com/0chain/gosdk/core/sys"
 	"github.com/0chain/gosdk/zboxcore/sdk"
 	"github.com/google/uuid"
-	"github.com/peterlimg/s3gateway/seqpriorityqueue"
 
 	minio "github.com/minio/minio/cmd"
+	"github.com/minio/minio/cmd/gateway/zcn/seqpriorityqueue"
 )
 
 var (
@@ -39,6 +39,7 @@ type MultiPartFile struct {
 }
 
 func (zob *zcnObjects) NewMultipartUpload(ctx context.Context, bucket string, object string, opts minio.ObjectOptions) (uploadID string, err error) {
+	log.Println("initial multipart upload, partNumber:", opts.PartNumber)
 	return zob.newMultiPartUpload(localStorageDir, bucket, object)
 }
 

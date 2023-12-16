@@ -22,7 +22,7 @@ import (
 	"github.com/0chain/gosdk/zboxcore/sdk"
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
-	"github.com/peterlimg/s3gateway/seqpriorityqueue"
+	"github.com/minio/minio/cmd/gateway/zcn/seqpriorityqueue"
 	"github.com/peterlimg/s3gateway/zcn"
 )
 
