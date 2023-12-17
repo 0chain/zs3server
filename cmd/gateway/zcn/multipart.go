@@ -153,8 +153,6 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object string
 func (zob *zcnObjects) PutObjectPart(ctx context.Context, bucket, object, uploadID string, partID int, data *minio.PutObjReader, opts minio.ObjectOptions) (pi minio.PartInfo, err error) {
 	// func (zob *zcnObjects) PutObjectPart(ctx context.Context, bucket, object, uploadID string, partID int, data *minio.PutObjReader, opts minio.ObjectOptions) (info minio.PartInfo, err error) {
 	// Buffer to read each part
-	var partSize = zob.alloc.GetChunkReadSize(false) // Set an appropriate part size set true if file is encrypted
-	buf := make([]byte, partSize)
 
 	// Create a unique filename for each part
 	partFilename := filepath.Join(localStorageDir, bucket, uploadID, object, fmt.Sprintf("part%d", partID))
@@ -180,6 +178,8 @@ func (zob *zcnObjects) PutObjectPart(ctx context.Context, bucket, object, upload
 	// Create an MD5 hash to calculate ETag
 	hash := md5.New()
 
+	var partSize = zob.alloc.GetChunkReadSize(false) // Set an appropriate part size set true if file is encrypted
+	buf := make([]byte, partSize)
 	// Read each part from the request body
 	// We need to make sure we write atleast ChunkWriteSize bytes to memFile unless its the last part
 	var size int
@@ -279,7 +279,7 @@ func (zob *zcnObjects) CompleteMultipartUpload(ctx context.Context, bucket, obje
 		multiPartFile.opWg.Done()
 	}()
 
-	eTag, err := constructCompleteObject(bucket, uploadID, object, localStorageDir, multiPartFile.memFile)
+	eTag, err := zob.constructCompleteObject(bucket, uploadID, object, localStorageDir, multiPartFile.memFile)
 	if err != nil {
 		log.Println("Error constructing complete object:", err)
 		return minio.ObjectInfo{}, fmt.Errorf("error constructing complete object: %v", err)
@@ -306,7 +306,7 @@ func (zob *zcnObjects) CompleteMultipartUpload(ctx context.Context, bucket, obje
 }
 
 // Function to construct the complete object file
-func constructCompleteObject(bucket, uploadID, object, localStorageDir string, writer io.Writer) (string, error) {
+func (zob *zcnObjects) constructCompleteObject(bucket, uploadID, object, localStorageDir string, writer io.Writer) (string, error) {
 	// Create a temporary file to assemble the complete object
 	// tmpCompleteObjectFilename := filepath.Join(localStorageDir, bucket, uploadID, object+".tmp")
 	// tmpCompleteObjectFile, err := os.Create(tmpCompleteObjectFilename)
@@ -317,6 +317,7 @@ func constructCompleteObject(bucket, uploadID, object, localStorageDir string, w
 
 	// Create a slice to store individual part ETags
 	var partETags []string
+	var partSize = zob.alloc.GetChunkReadSize(false) // Set an appropriate part size set true if file is encrypted
 	for partNumber := 1; ; partNumber++ {
 		partFilename := filepath.Join(localStorageDir, bucket, uploadID, object, fmt.Sprintf("part%d", partNumber))
 		partETagFilename := partFilename + ".etag"
@@ -333,10 +334,29 @@ func constructCompleteObject(bucket, uploadID, object, localStorageDir string, w
 		}
 		defer partFile.Close()
 
-		// Copy the part data to both the temporary file and the hash
-		_, err = io.Copy(writer, partFile)
-		if err != nil {
-			return "", err
+		buf := make([]byte, partSize)
+		// Read each part from the request body
+		// We need to make sure we write atleast ChunkWriteSize bytes to memFile unless its the last part
+		for {
+			n, err := partFile.Read(buf)
+			if err == io.EOF {
+				// Write the part data to the part file
+				if _, err := writer.Write(buf[:n]); err != nil {
+					log.Println(err)
+					return "", fmt.Errorf("error writing part data: %v", err)
+				}
+
+				break // End of file
+			} else if err != nil {
+				log.Println(err)
+				return "", fmt.Errorf("error reading part data: %v", err)
+			}
+
+			// Write the part data to the part file
+			if _, err := writer.Write(buf[:n]); err != nil {
+				log.Println(err)
+				return "", fmt.Errorf("error writing part data: %v", err)
+			}
 		}
 
 		// Read the ETag of the part
