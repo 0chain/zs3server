@@ -44,8 +44,8 @@ func (zob *zcnObjects) NewMultipartUpload(ctx context.Context, bucket string, ob
 }
 
 func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object string) (string, error) {
-	var objectSize int64
-	// objectSize := int64(371917281)
+	// var objectSize int64
+	objectSize := int64(371917281)
 	// objectSize := int64(22491196)
 	log.Println("initial upload...")
 
