@@ -1,6 +1,7 @@
 package zcn
 
 import (
+	"bytes"
 	"context"
 	"crypto/md5"
 	"encoding/hex"
@@ -73,48 +74,46 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object string
 		return "", fmt.Errorf("erro creating bucket: %v", err)
 	}
 
-	return uploadID, nil
+	go func() {
+		var buf bytes.Buffer
+		var total int64
+		for {
+			select {
+			case data, ok := <-multiPartFile.dataC:
+				if ok {
+					_, err := buf.Write(data)
+					if err != nil {
+						log.Panic(err)
+					}
 
-	// TODO: use the following code when we can start uploading without knowing the actual size
-	// go func() {
-	// 	var buf bytes.Buffer
-	// 	var total int64
-	// 	for {
-	// 		select {
-	// 		case data, ok := <-multiPartFile.dataC:
-	// 			if ok {
-	// 				_, err := buf.Write(data)
-	// 				if err != nil {
-	// 					log.Panic(err)
-	// 				}
+					n := buf.Len() / memFile.ChunkWriteSize
+					bbuf := make([]byte, n*memFile.ChunkWriteSize)
+					_, err = buf.Read(bbuf)
+					if err != nil {
+						log.Panic(err)
+					}
 
-	// 				n := buf.Len() / memFile.ChunkWriteSize
-	// 				bbuf := make([]byte, n*memFile.ChunkWriteSize)
-	// 				_, err = buf.Read(bbuf)
-	// 				if err != nil {
-	// 					log.Panic(err)
-	// 				}
+					cn, err := io.Copy(multiPartFile.memFile, bytes.NewBuffer(bbuf))
+					// n, err := io.Copy(multiPartFile.memFile, partFile)
+					if err != nil {
+						log.Panicf("upoad part failed, err: %v", err)
+					}
+					total += cn
+					log.Println("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ uploaded:", total, " new:", cn)
+				} else {
+					cn, err := io.Copy(multiPartFile.memFile, &buf)
+					if err != nil {
+						log.Panic(err)
+					}
 
-	// 				cn, err := io.Copy(multiPartFile.memFile, bytes.NewBuffer(bbuf))
-	// 				// n, err := io.Copy(multiPartFile.memFile, partFile)
-	// 				if err != nil {
-	// 					log.Panicf("upoad part failed, err: %v", err)
-	// 				}
-	// 				total += cn
-	// 				log.Println("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ uploaded:", total, " new:", cn)
-	// 			} else {
-	// 				cn, err := io.Copy(multiPartFile.memFile, &buf)
-	// 				if err != nil {
-	// 					log.Panic(err)
-	// 				}
-
-	// 				total += cn
-	// 				log.Println("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ uploaded:", total, " new:", cn)
-	// 				return
-	// 			}
-	// 		}
-	// 	}
-	// }()
+					total += cn
+					log.Println("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ uploaded:", total, " new:", cn)
+					close(multiPartFile.doneC) // notify the end of all data uploading
+					return
+				}
+			}
+		}
+	}()
 
 	// go func() {
 	// 	for {
@@ -148,6 +147,8 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object string
 	// 		}()
 	// 	}
 	// }()
+	return uploadID, nil
+
 }
 
 func (zob *zcnObjects) PutObjectPart(ctx context.Context, bucket, object, uploadID string, partID int, data *minio.PutObjReader, opts minio.ObjectOptions) (pi minio.PartInfo, err error) {
@@ -279,15 +280,15 @@ func (zob *zcnObjects) CompleteMultipartUpload(ctx context.Context, bucket, obje
 		multiPartFile.opWg.Done()
 	}()
 
-	eTag, err := zob.constructCompleteObject(bucket, uploadID, object, localStorageDir, multiPartFile.memFile)
+	eTag, err := zob.constructCompleteObject(bucket, uploadID, object, localStorageDir, multiPartFile)
 	if err != nil {
 		log.Println("Error constructing complete object:", err)
 		return minio.ObjectInfo{}, fmt.Errorf("error constructing complete object: %v", err)
 	}
 
 	// wait for upload to finish
-	multiPartFile.seqPQ.Done()
-	// <-multiPartFile.doneC
+	// multiPartFile.seqPQ.Done()
+	<-multiPartFile.doneC
 	multiPartFile.opWg.Wait()
 	log.Println("finish uploading...")
 
@@ -306,58 +307,35 @@ func (zob *zcnObjects) CompleteMultipartUpload(ctx context.Context, bucket, obje
 }
 
 // Function to construct the complete object file
-func (zob *zcnObjects) constructCompleteObject(bucket, uploadID, object, localStorageDir string, writer io.Writer) (string, error) {
-	// Create a temporary file to assemble the complete object
-	// tmpCompleteObjectFilename := filepath.Join(localStorageDir, bucket, uploadID, object+".tmp")
-	// tmpCompleteObjectFile, err := os.Create(tmpCompleteObjectFilename)
-	// if err != nil {
-	// 	return "", err
-	// }
-	// defer tmpCompleteObjectFile.Close()
-
+func (zob *zcnObjects) constructCompleteObject(bucket, uploadID, object, localStorageDir string, multiPartFile *MultiPartFile) (string, error) {
 	// Create a slice to store individual part ETags
 	var partETags []string
-	var partSize = zob.alloc.GetChunkReadSize(false) // Set an appropriate part size set true if file is encrypted
 	for partNumber := 1; ; partNumber++ {
 		partFilename := filepath.Join(localStorageDir, bucket, uploadID, object, fmt.Sprintf("part%d", partNumber))
 		partETagFilename := partFilename + ".etag"
 
 		// Break the loop when there are no more parts
 		if _, err := os.Stat(partFilename); os.IsNotExist(err) {
+			close(multiPartFile.dataC) // notify the end of data pusing
 			break
 		}
 
-		// Open the part file for reading
-		partFile, err := os.Open(partFilename)
-		if err != nil {
-			return "", err
-		}
-		defer partFile.Close()
+		func() {
+			// Open the part file for reading
+			partFile, err := os.Open(partFilename)
+			if err != nil {
+				log.Panicf("could not open part file: %v, err: %v", partFilename, err)
+			}
+			defer partFile.Close()
 
-		buf := make([]byte, partSize)
-		// Read each part from the request body
-		// We need to make sure we write atleast ChunkWriteSize bytes to memFile unless its the last part
-		for {
-			n, err := partFile.Read(buf)
-			if err == io.EOF {
-				// Write the part data to the part file
-				if _, err := writer.Write(buf[:n]); err != nil {
-					log.Println(err)
-					return "", fmt.Errorf("error writing part data: %v", err)
-				}
-
-				break // End of file
-			} else if err != nil {
-				log.Println(err)
-				return "", fmt.Errorf("error reading part data: %v", err)
+			data, err := io.ReadAll(partFile)
+			if err != nil {
+				log.Panicf("read part: %v failed, err: %v", partNumber, err)
 			}
 
-			// Write the part data to the part file
-			if _, err := writer.Write(buf[:n]); err != nil {
-				log.Println(err)
-				return "", fmt.Errorf("error writing part data: %v", err)
-			}
-		}
+			multiPartFile.dataC <- data
+			log.Println("^^^^^^^^^ uploading part:", partNumber, "size:", len(data))
+		}()
 
 		// Read the ETag of the part
 		partETagBytes, err := os.ReadFile(partETagFilename)
