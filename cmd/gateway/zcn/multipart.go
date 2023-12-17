@@ -290,7 +290,7 @@ func (zob *zcnObjects) CompleteMultipartUpload(ctx context.Context, bucket, obje
 	// multiPartFile.seqPQ.Done()
 	<-multiPartFile.doneC
 	multiPartFile.opWg.Wait()
-	log.Println("finish uploading...")
+	log.Println("finish uploading!!")
 
 	// TODO: do clean up after all has been uploaded to allocation
 	if err = cleanupPartFilesAndDirs(bucket, uploadID, object, localStorageDir); err != nil {
