@@ -1,13 +1,11 @@
 package zcn
 
 import (
-	"bytes"
 	"context"
 	"crypto/md5"
 	"encoding/hex"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -31,11 +29,12 @@ var (
 )
 
 type MultiPartFile struct {
-	memFile *sys.MemChanFile
-	opWg    sync.WaitGroup
-	seqPQ   *seqpriorityqueue.SeqPriorityQueue
-	doneC   chan struct{}
-	dataC   chan []byte
+	memFile  *sys.MemChanFile
+	fileSize int64
+	opWg     sync.WaitGroup
+	seqPQ    *seqpriorityqueue.SeqPriorityQueue
+	doneC    chan struct{}
+	dataC    chan []byte
 }
 
 func (zob *zcnObjects) NewMultipartUpload(ctx context.Context, bucket string, object string, opts minio.ObjectOptions) (uploadID string, err error) {
@@ -45,9 +44,9 @@ func (zob *zcnObjects) NewMultipartUpload(ctx context.Context, bucket string, ob
 
 func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object string) (string, error) {
 	// var objectSize int64
-	objectSize := int64(371917281)
+	// objectSize := int64(371917281)
 	// objectSize := int64(22491196)
-	log.Println("initial upload...")
+	// log.Println("initial upload...")
 
 	// Generate a unique upload ID
 	uploadID := uuid.New().String()
@@ -69,110 +68,86 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object string
 	// Create the bucket directory if it doesn't exist
 	bucketPath := filepath.Join(localStorageDir, bucket, uploadID, object)
 	log.Println("bucketPath:", bucketPath)
-	// Create fileMeta and sdk.OperationRequest
-	fileMeta := sdk.FileMeta{
-		ActualSize: objectSize, // Need to set the actual size
-		RemoteName: object,
-		RemotePath: "/" + filepath.Join(bucket, object),
-		MimeType:   "application/octet-stream", // can get from request
-	}
-	options := []sdk.ChunkedUploadOption{
-		sdk.WithChunkNumber(250),
-	}
-	operationRequest := sdk.OperationRequest{
-		FileMeta:      fileMeta,
-		FileReader:    memFile,
-		OperationType: constants.FileOperationInsert,
-		Opts:          options,
-		RemotePath:    fileMeta.RemotePath,
-	}
-	// if its update change operation type
-	multiPartFile.opWg.Add(1)
-	go func() {
-		// run this in background, will block until the data is written to memFile
-		// We should add ctx here to cancel the operation
-		_ = zob.alloc.DoMultiOperation([]sdk.OperationRequest{operationRequest}, multiPartFile.doneC)
-		multiPartFile.opWg.Done()
-	}()
-
-	go func() {
-		var buf bytes.Buffer
-		var total int64
-		for {
-			select {
-			case data, ok := <-multiPartFile.dataC:
-				if ok {
-					_, err := buf.Write(data)
-					if err != nil {
-						log.Panic(err)
-					}
-
-					n := buf.Len() / memFile.ChunkWriteSize
-					bbuf := make([]byte, n*memFile.ChunkWriteSize)
-					_, err = buf.Read(bbuf)
-					if err != nil {
-						log.Panic(err)
-					}
-
-					cn, err := io.Copy(multiPartFile.memFile, bytes.NewBuffer(bbuf))
-					// n, err := io.Copy(multiPartFile.memFile, partFile)
-					if err != nil {
-						log.Panicf("upoad part failed, err: %v", err)
-					}
-					total += cn
-					log.Println("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ uploaded:", total, " new:", cn)
-				} else {
-					cn, err := io.Copy(multiPartFile.memFile, &buf)
-					if err != nil {
-						log.Panic(err)
-					}
-
-					total += cn
-					log.Println("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ uploaded:", total, " new:", cn)
-					return
-				}
-			}
-		}
-	}()
-
-	go func() {
-		for {
-			partNumber := multiPartFile.seqPQ.Popup()
-			log.Println("==================================== popup part:", partNumber)
-
-			if partNumber == -1 {
-				close(multiPartFile.dataC)
-				close(multiPartFile.doneC)
-				log.Println("==================================== popup done")
-				return
-			}
-
-			partFilename := filepath.Join(localStorageDir, bucket, uploadID, object, fmt.Sprintf("part%d", partNumber))
-
-			func() {
-				// Open the part file for reading
-				partFile, err := os.Open(partFilename)
-				if err != nil {
-					log.Panicf("could not open part file: %v, err: %v", partFilename, err)
-				}
-				defer partFile.Close()
-
-				data, err := io.ReadAll(partFile)
-				if err != nil {
-					log.Panicf("read part: %v failed, err: %v", partNumber, err)
-				}
-
-				multiPartFile.dataC <- data
-				log.Println("^^^^^^^^^ uploading part:", partNumber, "size:", len(data))
-			}()
-		}
-	}()
 	if err := os.MkdirAll(bucketPath, os.ModePerm); err != nil {
 		log.Println(err)
 		return "", fmt.Errorf("erro creating bucket: %v", err)
 	}
 
 	return uploadID, nil
+
+	// TODO: use the following code when we can start uploading without knowing the actual size
+	// go func() {
+	// 	var buf bytes.Buffer
+	// 	var total int64
+	// 	for {
+	// 		select {
+	// 		case data, ok := <-multiPartFile.dataC:
+	// 			if ok {
+	// 				_, err := buf.Write(data)
+	// 				if err != nil {
+	// 					log.Panic(err)
+	// 				}
+
+	// 				n := buf.Len() / memFile.ChunkWriteSize
+	// 				bbuf := make([]byte, n*memFile.ChunkWriteSize)
+	// 				_, err = buf.Read(bbuf)
+	// 				if err != nil {
+	// 					log.Panic(err)
+	// 				}
+
+	// 				cn, err := io.Copy(multiPartFile.memFile, bytes.NewBuffer(bbuf))
+	// 				// n, err := io.Copy(multiPartFile.memFile, partFile)
+	// 				if err != nil {
+	// 					log.Panicf("upoad part failed, err: %v", err)
+	// 				}
+	// 				total += cn
+	// 				log.Println("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ uploaded:", total, " new:", cn)
+	// 			} else {
+	// 				cn, err := io.Copy(multiPartFile.memFile, &buf)
+	// 				if err != nil {
+	// 					log.Panic(err)
+	// 				}
+
+	// 				total += cn
+	// 				log.Println("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ uploaded:", total, " new:", cn)
+	// 				return
+	// 			}
+	// 		}
+	// 	}
+	// }()
+
+	// go func() {
+	// 	for {
+	// 		partNumber := multiPartFile.seqPQ.Popup()
+	// 		log.Println("==================================== popup part:", partNumber)
+
+	// 		if partNumber == -1 {
+	// 			close(multiPartFile.dataC)
+	// 			close(multiPartFile.doneC)
+	// 			log.Println("==================================== popup done")
+	// 			return
+	// 		}
+
+	// 		partFilename := filepath.Join(localStorageDir, bucket, uploadID, object, fmt.Sprintf("part%d", partNumber))
+
+	// 		func() {
+	// 			// Open the part file for reading
+	// 			partFile, err := os.Open(partFilename)
+	// 			if err != nil {
+	// 				log.Panicf("could not open part file: %v, err: %v", partFilename, err)
+	// 			}
+	// 			defer partFile.Close()
+
+	// 			data, err := io.ReadAll(partFile)
+	// 			if err != nil {
+	// 				log.Panicf("read part: %v failed, err: %v", partNumber, err)
+	// 			}
+
+	// 			multiPartFile.dataC <- data
+	// 			log.Println("^^^^^^^^^ uploading part:", partNumber, "size:", len(data))
+	// 		}()
+	// 	}
+	// }()
 }
 
 func (zob *zcnObjects) PutObjectPart(ctx context.Context, bucket, object, uploadID string, partID int, data *minio.PutObjReader, opts minio.ObjectOptions) (pi minio.PartInfo, err error) {
@@ -201,7 +176,6 @@ func (zob *zcnObjects) PutObjectPart(ctx context.Context, bucket, object, upload
 		log.Printf("uploadID: %v not found\n", uploadID)
 		return minio.PartInfo{}, fmt.Errorf("uploadID: %v not found", uploadID)
 	}
-	// partFile := multiPartFile.memFile
 	seqPQ := multiPartFile.seqPQ
 	// Create an MD5 hash to calculate ETag
 	hash := md5.New()
@@ -252,6 +226,8 @@ func (zob *zcnObjects) PutObjectPart(ctx context.Context, bucket, object, upload
 		return minio.PartInfo{}, fmt.Errorf("error saving ETag file: %v", err)
 	}
 
+	multiPartFile.fileSize += int64(size)
+
 	return minio.PartInfo{
 		PartNumber: partID,
 		ETag:       eTag,
@@ -261,16 +237,10 @@ func (zob *zcnObjects) PutObjectPart(ctx context.Context, bucket, object, upload
 }
 
 func (zob *zcnObjects) CompleteMultipartUpload(ctx context.Context, bucket, object, uploadID string, uploadedParts []minio.CompletePart, opts minio.ObjectOptions) (oi minio.ObjectInfo, err error) {
-	// func (zob *zcnObjects) CompleteMultipartUpload(ctx context.Context, bucket, object, uploadID string, uploadedParts []minio.CompletePart, opts minio.ObjectOptions) (objInfo minio.ObjectInfo, err error) {
-	// log.Println("complete total size:", gTotal)
-	// Implement logic to calculate ETag based on uploaded parts
-	eTag, err := constructCompleteObject(bucket, uploadID, object, localStorageDir)
-	if err != nil {
-		log.Println("Error constructing complete object:", err)
-		return minio.ObjectInfo{}, fmt.Errorf("error constructing complete object: %v", err)
-	}
+	// var objectSize int64
+	// objectSize := int64(371917281)
+	// objectSize := int64(22491196)
 
-	// wait for upload to finish
 	mapLock.Lock()
 	multiPartFile, ok := FileMap[uploadID]
 	mapLock.Unlock()
@@ -279,9 +249,47 @@ func (zob *zcnObjects) CompleteMultipartUpload(ctx context.Context, bucket, obje
 		return minio.ObjectInfo{}, fmt.Errorf("uploadID: %v not found", uploadID)
 	}
 
+	log.Println("initial upload, file size:", multiPartFile.fileSize)
+	// Create the bucket directory if it doesn't exist
+	bucketPath := filepath.Join(localStorageDir, bucket, uploadID, object)
+	log.Println("bucketPath:", bucketPath)
+	// Create fileMeta and sdk.OperationRequest
+	fileMeta := sdk.FileMeta{
+		ActualSize: multiPartFile.fileSize, // Need to set the actual size
+		RemoteName: object,
+		RemotePath: "/" + filepath.Join(bucket, object),
+		MimeType:   "application/octet-stream", // can get from request
+	}
+	options := []sdk.ChunkedUploadOption{
+		sdk.WithChunkNumber(250),
+	}
+	operationRequest := sdk.OperationRequest{
+		FileMeta:      fileMeta,
+		FileReader:    multiPartFile.memFile,
+		OperationType: constants.FileOperationInsert,
+		Opts:          options,
+		RemotePath:    fileMeta.RemotePath,
+	}
+	// if its update change operation type
+	multiPartFile.opWg.Add(1)
+	go func() {
+		// run this in background, will block until the data is written to memFile
+		// We should add ctx here to cancel the operation
+		_ = zob.alloc.DoMultiOperation([]sdk.OperationRequest{operationRequest})
+		multiPartFile.opWg.Done()
+	}()
+
+	eTag, err := constructCompleteObject(bucket, uploadID, object, localStorageDir, multiPartFile.memFile)
+	if err != nil {
+		log.Println("Error constructing complete object:", err)
+		return minio.ObjectInfo{}, fmt.Errorf("error constructing complete object: %v", err)
+	}
+
+	// wait for upload to finish
 	multiPartFile.seqPQ.Done()
-	<-multiPartFile.doneC
+	// <-multiPartFile.doneC
 	multiPartFile.opWg.Wait()
+	log.Println("finish uploading...")
 
 	// TODO: do clean up after all has been uploaded to allocation
 	if err = cleanupPartFilesAndDirs(bucket, uploadID, object, localStorageDir); err != nil {
@@ -298,22 +306,17 @@ func (zob *zcnObjects) CompleteMultipartUpload(ctx context.Context, bucket, obje
 }
 
 // Function to construct the complete object file
-func constructCompleteObject(bucket, uploadID, object, localStorageDir string) (string, error) {
+func constructCompleteObject(bucket, uploadID, object, localStorageDir string, writer io.Writer) (string, error) {
 	// Create a temporary file to assemble the complete object
-	tmpCompleteObjectFilename := filepath.Join(localStorageDir, bucket, uploadID, object+".tmp")
-	tmpCompleteObjectFile, err := os.Create(tmpCompleteObjectFilename)
-	if err != nil {
-		return "", err
-	}
-	defer tmpCompleteObjectFile.Close()
-
-	// Create a multi-writer to write to both the temporary file and calculate the ETag
-	var allWriters []io.Writer
-	allWriters = append(allWriters, tmpCompleteObjectFile)
+	// tmpCompleteObjectFilename := filepath.Join(localStorageDir, bucket, uploadID, object+".tmp")
+	// tmpCompleteObjectFile, err := os.Create(tmpCompleteObjectFilename)
+	// if err != nil {
+	// 	return "", err
+	// }
+	// defer tmpCompleteObjectFile.Close()
 
 	// Create a slice to store individual part ETags
 	var partETags []string
-
 	for partNumber := 1; ; partNumber++ {
 		partFilename := filepath.Join(localStorageDir, bucket, uploadID, object, fmt.Sprintf("part%d", partNumber))
 		partETagFilename := partFilename + ".etag"
@@ -331,12 +334,13 @@ func constructCompleteObject(bucket, uploadID, object, localStorageDir string) (
 		defer partFile.Close()
 
 		// Copy the part data to both the temporary file and the hash
-		if _, err := io.Copy(tmpCompleteObjectFile, partFile); err != nil {
+		_, err = io.Copy(writer, partFile)
+		if err != nil {
 			return "", err
 		}
 
 		// Read the ETag of the part
-		partETagBytes, err := ioutil.ReadFile(partETagFilename)
+		partETagBytes, err := os.ReadFile(partETagFilename)
 		if err != nil {
 			return "", err
 		}
@@ -349,15 +353,15 @@ func constructCompleteObject(bucket, uploadID, object, localStorageDir string) (
 	eTag := strings.Join(partETags, "")
 
 	// Close the temporary file
-	if err := tmpCompleteObjectFile.Close(); err != nil {
-		return "", err
-	}
+	// if err := tmpCompleteObjectFile.Close(); err != nil {
+	// 	return "", err
+	// }
 
 	// Rename the temporary file to its final destination
-	completeObjectFilename := filepath.Join(localStorageDir, bucket, object)
-	if err := os.Rename(tmpCompleteObjectFilename, completeObjectFilename); err != nil {
-		return "", err
-	}
+	// completeObjectFilename := filepath.Join(localStorageDir, bucket, object)
+	// if err := os.Rename(tmpCompleteObjectFilename, completeObjectFilename); err != nil {
+	// 	return "", err
+	// }
 
 	return eTag, nil
 }
