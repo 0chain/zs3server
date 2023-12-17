@@ -44,8 +44,8 @@ func (zob *zcnObjects) NewMultipartUpload(ctx context.Context, bucket string, ob
 }
 
 func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object string) (string, error) {
-	// var objectSize int64
-	objectSize := int64(371917281)
+	var objectSize int64
+	// objectSize := int64(371917281)
 	// objectSize := int64(22491196)
 	log.Println("initial upload...")
 
@@ -91,7 +91,7 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object string
 	go func() {
 		// run this in background, will block until the data is written to memFile
 		// We should add ctx here to cancel the operation
-		_ = zob.alloc.DoMultiOperation([]sdk.OperationRequest{operationRequest})
+		_ = zob.alloc.DoMultiOperation([]sdk.OperationRequest{operationRequest}, multiPartFile.doneC)
 		multiPartFile.opWg.Done()
 	}()
 
