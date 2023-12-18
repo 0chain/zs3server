@@ -12,7 +12,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"sync/atomic"
 
 	"github.com/0chain/gosdk/constants"
 	"github.com/0chain/gosdk/core/sys"
@@ -34,6 +33,8 @@ type MultiPartFile struct {
 	memFile       *sys.MemChanFile
 	lock          sync.Mutex
 	fileSize      int64
+	lastPartSize  int64
+	lastPartID    int
 	readyToUpload bool
 	opWg          sync.WaitGroup
 	seqPQ         *seqpriorityqueue.SeqPriorityQueue
@@ -43,25 +44,54 @@ type MultiPartFile struct {
 	dataC         chan []byte   // data to be uploaded
 }
 
-func (mpf *MultiPartFile) ChunkWriteSize() int64 {
-	return int64(mpf.memFile.ChunkWriteSize)
-}
-
-func (mpf *MultiPartFile) IncreaseFileSize(size int64) {
+func (mpf *MultiPartFile) UpdateFileSize(partID int, size int64) {
 	mpf.lock.Lock()
-	ready := mpf.readyToUpload
-	mpf.lock.Unlock()
-	if !ready {
-		atomic.AddInt64(&mpf.fileSize, size)
+	defer mpf.lock.Unlock()
+	if mpf.readyToUpload {
+		return
 	}
+
+	// the first arrived part
+	if mpf.lastPartSize == 0 {
+		mpf.lastPartSize = size
+		mpf.lastPartID = partID
+		mpf.fileSize += size
+		return
+	}
+
+	// size greater than the previous set part size, means the last set part is the last part
+	if size > mpf.lastPartSize {
+		// the prev set part is the last part
+		mpf.fileSize = int64(mpf.lastPartID-1)*size + mpf.lastPartSize
+		log.Println("see last part, partID:", partID, "file size:", mpf.fileSize)
+		mpf.readyToUpload = true
+		close(mpf.readyUploadC)
+		mpf.lastPartSize = size
+		return
+	}
+
+	if size == mpf.lastPartSize {
+		mpf.fileSize += size
+		return
+	}
+
+	// this is last part
+	mpf.fileSize = int64(partID-1)*mpf.lastPartSize + size
+	log.Println("see last part, partID:", partID, "file size:", mpf.fileSize)
+	mpf.readyToUpload = true
+	close(mpf.readyUploadC)
+	mpf.readyUploadC = nil
 }
 
-func (mpf *MultiPartFile) SetFileSizeAndReadyToUpload(size int64) {
+func (mpf *MultiPartFile) notifyEnd() {
 	mpf.lock.Lock()
-	mpf.fileSize = size
-	mpf.readyToUpload = true
-	mpf.lock.Unlock()
-	close(mpf.readyUploadC)
+	defer mpf.lock.Unlock()
+	if !mpf.readyToUpload {
+		mpf.readyToUpload = true
+		if mpf.readyUploadC != nil {
+			close(mpf.readyUploadC)
+		}
+	}
 }
 
 func (zob *zcnObjects) NewMultipartUpload(ctx context.Context, bucket string, object string, opts minio.ObjectOptions) (uploadID string, err error) {
@@ -296,14 +326,7 @@ func (zob *zcnObjects) PutObjectPart(ctx context.Context, bucket, object, upload
 		return minio.PartInfo{}, fmt.Errorf("error saving ETag file: %v", err)
 	}
 
-	chunkReadSize := zob.alloc.GetChunkReadSize(false) // Set an appropriate part size set true if file is encrypted
-	if int64(size) < chunkReadSize {
-		// means the last part, calcuate the actual file size: (partNumber - 1) * chunkWriteSize + size
-		log.Println("see last part:", partID, "size:", size)
-		multiPartFile.SetFileSizeAndReadyToUpload((int64(partID)-1)*multiPartFile.ChunkWriteSize() + int64(size))
-	} else {
-		multiPartFile.IncreaseFileSize(int64(size))
-	}
+	multiPartFile.UpdateFileSize(partID, int64(size))
 
 	return minio.PartInfo{
 		PartNumber: partID,
@@ -325,6 +348,7 @@ func (zob *zcnObjects) CompleteMultipartUpload(ctx context.Context, bucket, obje
 		log.Printf("uploadID: %v not found\n", uploadID)
 		return minio.ObjectInfo{}, fmt.Errorf("uploadID: %v not found", uploadID)
 	}
+	multiPartFile.notifyEnd()
 
 	// wait for upload to finish
 	multiPartFile.seqPQ.Done()
