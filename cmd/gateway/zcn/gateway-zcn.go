@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -294,6 +295,7 @@ func (zob *zcnObjects) GetObjectNInfo(ctx context.Context, bucket, object string
 	} else {
 		remotePath = filepath.Join(rootPath, bucket, object)
 	}
+	log.Printf("~~~~~~~~~~~~~~~~~~~~~~~~ get object info remotePath: %v\n", remotePath)
 
 	ref, err := getSingleRegularRef(zob.alloc, remotePath)
 	if err != nil {
@@ -302,6 +304,8 @@ func (zob *zcnObjects) GetObjectNInfo(ctx context.Context, bucket, object string
 		}
 		return nil, err
 	}
+
+	log.Println("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~get object info, ref: ", ref)
 
 	objectInfo := minio.ObjectInfo{
 		Bucket:  bucket,
@@ -329,8 +333,10 @@ func (zob *zcnObjects) GetObjectNInfo(ctx context.Context, bucket, object string
 	if err != nil {
 		return nil, err
 	}
+	log.Printf("~~~~~~~~~~~~~~~~~~~~~~~~ startOffset: %v, length: %v\n", startOffset, length)
 
 	r := io.NewSectionReader(f, startOffset, length)
+	log.Printf("~~~~~~~~~~~~~~~~~~~~~~~~~~~~section reader : %v\n", r)
 	gr, err = minio.NewGetObjectReaderFromReader(r, objectInfo, opts, fCloser)
 	return
 }
@@ -729,3 +735,7 @@ func (zob *zcnObjects) RevokeShareCredential(ctx context.Context, bucket, object
 	return zob.alloc.RevokeShare(remotePath, clientID)
 }
 */
+
+// ListMultipartUploads(ctx context.Context, bucket, prefix, keyMarker, uploadIDMarker, delimiter string, maxUploads int) (result ListMultipartsInfo, err error)
+// CopyObjectPart(ctx context.Context, srcBucket, srcObject, destBucket, destObject string, uploadID string, partID int,
+// 	startOffset int64, length int64, srcInfo ObjectInfo, srcOpts, dstOpts ObjectOptions) (info PartInfo, err error)

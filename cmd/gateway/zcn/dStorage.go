@@ -5,9 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	zerror "github.com/0chain/errors"
@@ -164,30 +166,61 @@ func getSingleRegularRef(alloc *sdk.Allocation, remotePath string) (*sdk.ORef, e
 	return &oREsult.Refs[0], nil
 }
 
+type downloadStatus struct {
+	wg   sync.WaitGroup
+	done bool
+}
+
+var (
+	mu        sync.Mutex
+	downloads = make(map[string]*downloadStatus)
+)
+
 func getFileReader(ctx context.Context, alloc *sdk.Allocation, remotePath string, fileSize uint64) (*os.File, string, error) {
 	localFilePath := filepath.Join(tempdir, remotePath)
-	os.Remove(localFilePath)
+	// os.Remove(localFilePath)
 
-	cb := statusCB{
-		doneCh: make(chan struct{}, 1),
-		errCh:  make(chan error, 1),
-	}
+	mu.Lock()
+	ds, ok := downloads[remotePath]
+	if ok && !ds.done {
+		mu.Unlock()
+		ds.wg.Wait()
+	} else {
+		if !ok {
+			ds = &downloadStatus{}
+			downloads[remotePath] = ds
+		}
+		ds.wg.Add(1)
+		mu.Unlock()
 
-	var ctxCncl context.CancelFunc
-	ctx, ctxCncl = context.WithTimeout(ctx, getTimeOut(fileSize))
-	defer ctxCncl()
+		cb := statusCB{
+			doneCh: make(chan struct{}, 1),
+			errCh:  make(chan error, 1),
+		}
 
-	err := alloc.DownloadFile(localFilePath, remotePath, false, &cb, true)
-	if err != nil {
-		return nil, "", err
-	}
+		var ctxCncl context.CancelFunc
+		ctx, ctxCncl = context.WithTimeout(ctx, getTimeOut(fileSize))
+		defer ctxCncl()
 
-	select {
-	case <-cb.doneCh:
-	case err := <-cb.errCh:
-		return nil, "", err
-	case <-ctx.Done():
-		return nil, "", errors.New("exceeded timeout")
+		log.Println("^^^^^^^^getFileReader: starting download")
+		err := alloc.DownloadFile(localFilePath, remotePath, false, &cb, true)
+		if err != nil {
+			return nil, "", err
+		}
+
+		select {
+		case <-cb.doneCh:
+		case err := <-cb.errCh:
+			return nil, "", err
+		case <-ctx.Done():
+			return nil, "", errors.New("exceeded timeout")
+		}
+
+		mu.Lock()
+		ds.done = true
+		ds.wg.Done()
+		mu.Unlock()
+		log.Println("^^^^^^^^getFileReader: finish download")
 	}
 
 	r, err := os.Open(localFilePath)
