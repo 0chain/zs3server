@@ -167,8 +167,9 @@ func getSingleRegularRef(alloc *sdk.Allocation, remotePath string) (*sdk.ORef, e
 }
 
 type downloadStatus struct {
-	wg   sync.WaitGroup
-	done bool
+	wg     sync.WaitGroup
+	done   bool
+	reader *os.File
 }
 
 var (
@@ -188,6 +189,7 @@ func getFileReader(ctx context.Context, alloc *sdk.Allocation, remotePath string
 			ds.wg.Wait()
 		} else {
 			mu.Unlock()
+			return ds.reader, localFilePath, nil
 		}
 	} else {
 		ds = &downloadStatus{}
@@ -229,6 +231,7 @@ func getFileReader(ctx context.Context, alloc *sdk.Allocation, remotePath string
 	if err != nil {
 		return nil, "", err
 	}
+	ds.reader = r
 
 	return r, localFilePath, nil
 }
