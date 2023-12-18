@@ -182,14 +182,16 @@ func getFileReader(ctx context.Context, alloc *sdk.Allocation, remotePath string
 
 	mu.Lock()
 	ds, ok := downloads[remotePath]
-	if ok && !ds.done {
-		mu.Unlock()
-		ds.wg.Wait()
-	} else {
-		if !ok {
-			ds = &downloadStatus{}
-			downloads[remotePath] = ds
+	if ok {
+		if !ds.done {
+			mu.Unlock()
+			ds.wg.Wait()
+		} else {
+			mu.Unlock()
 		}
+	} else {
+		ds = &downloadStatus{}
+		downloads[remotePath] = ds
 		ds.wg.Add(1)
 		mu.Unlock()
 
