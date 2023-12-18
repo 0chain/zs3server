@@ -319,6 +319,12 @@ func (zob *zcnObjects) GetObjectNInfo(ctx context.Context, bucket, object string
 	fCloser := func() {
 		f.Close()
 		os.Remove(localPath)
+
+		mu.Lock()
+		delete(downloads, remotePath)
+		mu.Unlock()
+
+		log.Println("^^^^^^^^^^^ remove temp local file: ", localPath)
 	}
 	if err != nil {
 		return nil, err
