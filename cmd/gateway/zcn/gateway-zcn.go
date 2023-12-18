@@ -316,16 +316,6 @@ func (zob *zcnObjects) GetObjectNInfo(ctx context.Context, bucket, object string
 	}
 
 	f, localPath, err := getFileReader(ctx, zob.alloc, remotePath, uint64(ref.ActualFileSize))
-	fCloser := func() {
-		f.Close()
-		os.Remove(localPath)
-
-		mu.Lock()
-		delete(downloads, remotePath)
-		mu.Unlock()
-
-		log.Println("^^^^^^^^^^^ remove temp local file: ", localPath)
-	}
 	if err != nil {
 		return nil, err
 	}
@@ -340,6 +330,19 @@ func (zob *zcnObjects) GetObjectNInfo(ctx context.Context, bucket, object string
 		return nil, err
 	}
 	log.Printf("~~~~~~~~~~~~~~~~~~~~~~~~ startOffset: %v, length: %v\n", startOffset, length)
+
+	fCloser := func() {
+		if startOffset+length >= finfo.Size() {
+			f.Close()
+			os.Remove(localPath)
+
+			mu.Lock()
+			delete(downloads, remotePath)
+			mu.Unlock()
+
+			log.Println("^^^^^^^^^^^ remove temp local file: ", localPath)
+		}
+	}
 
 	r := io.NewSectionReader(f, startOffset, length)
 	log.Printf("~~~~~~~~~~~~~~~~~~~~~~~~~~~~section reader : %v\n", r)
