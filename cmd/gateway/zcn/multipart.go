@@ -170,7 +170,6 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object string
 
 					total += cn
 					log.Println("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ uploaded:", total, " new:", cn)
-					close(multiPartFile.doneC) // notify the end of all data uploading
 					return
 				}
 			}
