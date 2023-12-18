@@ -384,7 +384,6 @@ func (zob *zcnObjects) constructCompleteObject(bucket, uploadID, object, localSt
 
 		// Break the loop when there are no more parts
 		if _, err := os.Stat(partFilename); os.IsNotExist(err) {
-			close(multiPartFile.dataC) // notify the end of data pusing
 			break
 		}
 
