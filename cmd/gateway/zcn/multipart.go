@@ -150,6 +150,7 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object string
 	go func() {
 		select {
 		case <-multiPartFile.readyUploadC:
+			log.Println("ready to upload to Zus storage...")
 		case <-multiPartFile.cancelC:
 			log.Println("uploading is canceled, clean up temp dirs")
 			// TODO: clean up temp dirs
@@ -295,8 +296,10 @@ func (zob *zcnObjects) PutObjectPart(ctx context.Context, bucket, object, upload
 		return minio.PartInfo{}, fmt.Errorf("error saving ETag file: %v", err)
 	}
 
-	if size < multiPartFile.memFile.ChunkWriteSize {
+	chunkReadSize := zob.alloc.GetChunkReadSize(false) // Set an appropriate part size set true if file is encrypted
+	if int64(size) < chunkReadSize {
 		// means the last part, calcuate the actual file size: (partNumber - 1) * chunkWriteSize + size
+		log.Println("see last part:", partID, "size:", size)
 		multiPartFile.SetFileSizeAndReadyToUpload((int64(partID)-1)*multiPartFile.ChunkWriteSize() + int64(size))
 	} else {
 		multiPartFile.IncreaseFileSize(int64(size))
