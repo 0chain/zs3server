@@ -317,11 +317,17 @@ func (zob *zcnObjects) GetObjectNInfo(ctx context.Context, bucket, object string
 			f.Close()
 			os.Remove(localPath)
 
+			var zusDownloadTime time.Duration
 			mu.Lock()
+			ds, ok := downloads[remotePath]
+			if ok {
+				zusDownloadTime = ds.downloadTime
+			}
+
 			delete(downloads, remotePath)
 			mu.Unlock()
 
-			log.Println("^^^^^^^^^^^ remove temp local file: ", localPath)
+			log.Println("^^^^^^^^^^^ remove temp local file: ", localPath, "download from Zus:", zusDownloadTime)
 		}
 	}
 

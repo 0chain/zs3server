@@ -119,7 +119,7 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object string
 		memFile:      memFile,
 		seqPQ:        seqpriorityqueue.NewSeqPriorityQueue(),
 		doneC:        make(chan struct{}),
-		dataC:        make(chan []byte, 10),
+		dataC:        make(chan []byte, 100),
 		readyUploadC: make(chan struct{}),
 		cancelC:      make(chan struct{}),
 	}
