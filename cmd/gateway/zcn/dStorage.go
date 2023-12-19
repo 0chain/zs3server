@@ -168,10 +168,11 @@ func getSingleRegularRef(alloc *sdk.Allocation, remotePath string) (*sdk.ORef, e
 }
 
 type downloadStatus struct {
-	wg         sync.WaitGroup
-	done       bool
-	reader     *os.File
-	objectInfo *minio.ObjectInfo
+	wg           sync.WaitGroup
+	done         bool
+	reader       *os.File
+	objectInfo   *minio.ObjectInfo
+	downloadTime time.Duration
 }
 
 var (
@@ -242,6 +243,7 @@ func getFileReader(ctx context.Context,
 		defer ctxCncl()
 
 		log.Println("^^^^^^^^getFileReader: starting download")
+		st := time.Now()
 		err = alloc.DownloadFile(localFilePath, remotePath, false, &cb, true)
 		if err != nil {
 			return nil, nil, "", err
@@ -254,9 +256,11 @@ func getFileReader(ctx context.Context,
 		case <-ctx.Done():
 			return nil, nil, "", errors.New("exceeded timeout")
 		}
+		tm := time.Since(st)
 
 		mu.Lock()
 		ds.done = true
+		ds.downloadTime = tm
 		ds.wg.Done()
 		r, err := os.Open(localFilePath)
 		if err != nil {
