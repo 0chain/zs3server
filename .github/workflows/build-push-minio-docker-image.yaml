@@ -64,7 +64,9 @@ jobs:
             docker build -t zbox_base -f docker.local/base.Dockerfile .
             docker build -t $MINIO_SERVER_REGISTRY:latest .
             docker tag $MINIO_SERVER_REGISTRY:latest $MINIO_SERVER_REGISTRY:$TAG-$SHORT_SHA
+            docker tag $MINIO_SERVER_REGISTRY:latest $MINIO_SERVER_REGISTRY:$TAG
             docker push $MINIO_SERVER_REGISTRY:$TAG-$SHORT_SHA
+            docker push $MINIO_SERVER_REGISTRY:$TAG
 
         - name: Push latest
           if: ${{ github.event.inputs.latest_tag == 'yes' || github.ref == 'refs/heads/master' }}

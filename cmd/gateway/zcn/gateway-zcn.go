@@ -4,15 +4,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/0chain/gosdk/constants"
-	"github.com/minio/minio/internal/logger"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/0chain/gosdk/constants"
+	"github.com/minio/minio/internal/logger"
 
 	"github.com/0chain/gosdk/zboxcore/sdk"
 	"github.com/minio/cli"
@@ -294,27 +296,7 @@ func (zob *zcnObjects) GetObjectNInfo(ctx context.Context, bucket, object string
 		remotePath = filepath.Join(rootPath, bucket, object)
 	}
 
-	ref, err := getSingleRegularRef(zob.alloc, remotePath)
-	if err != nil {
-		if isPathNoExistError(err) {
-			return nil, minio.ObjectNotFound{Bucket: bucket, Object: object}
-		}
-		return nil, err
-	}
-
-	objectInfo := minio.ObjectInfo{
-		Bucket:  bucket,
-		Name:    ref.Name,
-		ModTime: ref.UpdatedAt.ToTime(),
-		Size:    ref.ActualFileSize,
-		IsDir:   ref.Type == dirType,
-	}
-
-	f, localPath, err := getFileReader(ctx, zob.alloc, remotePath, uint64(ref.ActualFileSize))
-	fCloser := func() {
-		f.Close()
-		os.Remove(localPath)
-	}
+	f, objectInfo, localPath, err := getFileReader(ctx, zob.alloc, bucket, object, remotePath)
 	if err != nil {
 		return nil, err
 	}
@@ -328,9 +310,30 @@ func (zob *zcnObjects) GetObjectNInfo(ctx context.Context, bucket, object string
 	if err != nil {
 		return nil, err
 	}
+	log.Printf("~~~~~~~~~~~~~~~~~~~~~~~~ startOffset: %v, length: %v\n", startOffset, length)
+
+	fCloser := func() {
+		mu.Lock()
+		defer mu.Unlock()
+		ds, ok := downloads[remotePath]
+		if !ok {
+			log.Println("file closer - download status not found for ", remotePath)
+			return
+		}
+
+		ds.downloaded += length
+		if ds.downloaded >= ds.objectInfo.Size {
+			f.Close()
+			os.Remove(localPath)
+			delete(downloads, remotePath)
+
+			log.Println("^^^^^^^^^^^ remove temp local file: ", localPath, "download from Zus:", ds.downloadTime)
+		}
+	}
 
 	r := io.NewSectionReader(f, startOffset, length)
-	gr, err = minio.NewGetObjectReaderFromReader(r, objectInfo, opts, fCloser)
+	log.Printf("~~~~~~~~~~~~~~~~~~~~~~~~~~~~section reader : %v\n", r)
+	gr, err = minio.NewGetObjectReaderFromReader(r, *objectInfo, opts, fCloser)
 	return
 }
 
@@ -493,7 +496,13 @@ func getRelativePathOfObj(refPath, bucketName string) string {
 func (zob *zcnObjects) MakeBucketWithLocation(ctx context.Context, bucket string, opts minio.BucketOptions) error {
 	// Create a directory; ignore opts
 	remotePath := filepath.Join(rootPath, bucket)
-	return zob.alloc.CreateDir(remotePath)
+	createDirOp := sdk.OperationRequest{
+		OperationType: constants.FileOperationCreateDir,
+		RemotePath:    remotePath,
+	}
+	return zob.alloc.DoMultiOperation([]sdk.OperationRequest{
+		createDirOp,
+	})
 }
 
 func (zob *zcnObjects) PutObject(ctx context.Context, bucket, object string, r *minio.PutObjReader, opts minio.ObjectOptions) (objInfo minio.ObjectInfo, err error) {
@@ -592,6 +601,7 @@ func (zob *zcnObjects) PutMultipleObjects(
 
 			options := []sdk.ChunkedUploadOption{
 				sdk.WithEncrypt(false),
+				sdk.WithChunkNumber(200),
 			}
 			operationRequests[idx] = sdk.OperationRequest{
 				FileMeta:      fileMeta,
@@ -640,8 +650,14 @@ func (zob *zcnObjects) CopyObject(ctx context.Context, srcBucket, srcObject, des
 	} else {
 		dstRemotePath = filepath.Join(rootPath, destBucket, destObject)
 	}
-
-	err = zob.alloc.CopyObject(srcRemotePath, dstRemotePath)
+	copyOp := sdk.OperationRequest{
+		OperationType: constants.FileOperationCopy,
+		RemotePath:    srcRemotePath,
+		DestPath:      dstRemotePath,
+	}
+	err = zob.alloc.DoMultiOperation([]sdk.OperationRequest{
+		copyOp,
+	})
 	if err != nil {
 		return
 	}
@@ -715,3 +731,7 @@ func (zob *zcnObjects) RevokeShareCredential(ctx context.Context, bucket, object
 	return zob.alloc.RevokeShare(remotePath, clientID)
 }
 */
+
+// ListMultipartUploads(ctx context.Context, bucket, prefix, keyMarker, uploadIDMarker, delimiter string, maxUploads int) (result ListMultipartsInfo, err error)
+// CopyObjectPart(ctx context.Context, srcBucket, srcObject, destBucket, destObject string, uploadID string, partID int,
+// 	startOffset int64, length int64, srcInfo ObjectInfo, srcOpts, dstOpts ObjectOptions) (info PartInfo, err error)

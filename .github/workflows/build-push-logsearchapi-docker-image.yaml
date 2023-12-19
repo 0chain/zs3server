@@ -54,8 +54,10 @@ jobs:
             cd logsearchapi
             docker build -t $MINIO_LOGSEARCHAPI_REGISTRY:latest .
             docker tag $MINIO_LOGSEARCHAPI_REGISTRY:latest $MINIO_LOGSEARCHAPI_REGISTRY:$TAG-$SHORT_SHA
+            docker tag $MINIO_LOGSEARCHAPI_REGISTRY:latest $MINIO_LOGSEARCHAPI_REGISTRY:$TAG
             docker push $MINIO_LOGSEARCHAPI_REGISTRY:$TAG-$SHORT_SHA
-        
+            docker push $MINIO_LOGSEARCHAPI_REGISTRY:$TAG
+
         - name: Push latest
           if: ${{ github.event.inputs.latest_tag == 'yes' || github.ref == 'refs/heads/master' }}
           run: |

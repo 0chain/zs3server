@@ -40,7 +40,9 @@ func putObject(bucketName string, objectName string, minioCredentials MinioCrede
 		return putObjectResponse, err
 	}
 
-	uploadInfo, err := minioClient.PutObject(ctx, bucketName, objectName, file, fileStat.Size(), minio.PutObjectOptions{ContentType: "application/octet-stream"})
+	// TODO: Enable multi part once it is supported.
+	//  Disabling multi part as of now because multipart APIs are not implemented for zcn gateway.
+	uploadInfo, err := minioClient.PutObject(ctx, bucketName, objectName, file, fileStat.Size(), minio.PutObjectOptions{DisableMultipart: true,ContentType: "application/octet-stream"})
 	if err != nil {
 		fmt.Println("error from PutObject", err)
 		return putObjectResponse, err
