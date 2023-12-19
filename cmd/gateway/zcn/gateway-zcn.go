@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -295,27 +296,7 @@ func (zob *zcnObjects) GetObjectNInfo(ctx context.Context, bucket, object string
 		remotePath = filepath.Join(rootPath, bucket, object)
 	}
 
-	ref, err := getSingleRegularRef(zob.alloc, remotePath)
-	if err != nil {
-		if isPathNoExistError(err) {
-			return nil, minio.ObjectNotFound{Bucket: bucket, Object: object}
-		}
-		return nil, err
-	}
-
-	objectInfo := minio.ObjectInfo{
-		Bucket:  bucket,
-		Name:    ref.Name,
-		ModTime: ref.UpdatedAt.ToTime(),
-		Size:    ref.ActualFileSize,
-		IsDir:   ref.Type == dirType,
-	}
-
-	f, localPath, err := getFileReader(ctx, zob.alloc, remotePath, uint64(ref.ActualFileSize))
-	fCloser := func() {
-		f.Close()
-		os.Remove(localPath)
-	}
+	f, objectInfo, localPath, err := getFileReader(ctx, zob.alloc, bucket, object, remotePath)
 	if err != nil {
 		return nil, err
 	}
@@ -329,9 +310,30 @@ func (zob *zcnObjects) GetObjectNInfo(ctx context.Context, bucket, object string
 	if err != nil {
 		return nil, err
 	}
+	log.Printf("~~~~~~~~~~~~~~~~~~~~~~~~ startOffset: %v, length: %v\n", startOffset, length)
+
+	fCloser := func() {
+		mu.Lock()
+		defer mu.Unlock()
+		ds, ok := downloads[remotePath]
+		if !ok {
+			log.Println("file closer - download status not found for ", remotePath)
+			return
+		}
+
+		ds.downloaded += length
+		if ds.downloaded >= ds.objectInfo.Size {
+			f.Close()
+			os.Remove(localPath)
+			delete(downloads, remotePath)
+
+			log.Println("^^^^^^^^^^^ remove temp local file: ", localPath, "download from Zus:", ds.downloadTime)
+		}
+	}
 
 	r := io.NewSectionReader(f, startOffset, length)
-	gr, err = minio.NewGetObjectReaderFromReader(r, objectInfo, opts, fCloser)
+	log.Printf("~~~~~~~~~~~~~~~~~~~~~~~~~~~~section reader : %v\n", r)
+	gr, err = minio.NewGetObjectReaderFromReader(r, *objectInfo, opts, fCloser)
 	return
 }
 
@@ -729,3 +731,7 @@ func (zob *zcnObjects) RevokeShareCredential(ctx context.Context, bucket, object
 	return zob.alloc.RevokeShare(remotePath, clientID)
 }
 */
+
+// ListMultipartUploads(ctx context.Context, bucket, prefix, keyMarker, uploadIDMarker, delimiter string, maxUploads int) (result ListMultipartsInfo, err error)
+// CopyObjectPart(ctx context.Context, srcBucket, srcObject, destBucket, destObject string, uploadID string, partID int,
+// 	startOffset int64, length int64, srcInfo ObjectInfo, srcOpts, dstOpts ObjectOptions) (info PartInfo, err error)
