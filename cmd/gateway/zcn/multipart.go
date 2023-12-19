@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/0chain/gosdk/constants"
 	"github.com/0chain/gosdk/core/sys"
@@ -135,6 +136,7 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object string
 	go func() {
 		var buf bytes.Buffer
 		var total int64
+		st := time.Now()
 		for {
 			select {
 			case <-multiPartFile.cancelC:
@@ -156,7 +158,6 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object string
 					}
 
 					cn, err := io.Copy(multiPartFile.memFile, bytes.NewBuffer(bbuf))
-					// n, err := io.Copy(multiPartFile.memFile, partFile)
 					if err != nil {
 						log.Panicf("upoad part failed, err: %v", err)
 					}
@@ -169,7 +170,7 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object string
 					}
 
 					total += cn
-					log.Println("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ uploaded:", total, " new:", cn)
+					log.Println("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ uploaded:", total, " new:", cn, " duration:", time.Since(st))
 					return
 				}
 			}
