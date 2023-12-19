@@ -173,6 +173,7 @@ type downloadStatus struct {
 	reader       *os.File
 	objectInfo   *minio.ObjectInfo
 	downloadTime time.Duration
+	downloaded   int64 // indicates the totay data that has responsed to client
 }
 
 var (

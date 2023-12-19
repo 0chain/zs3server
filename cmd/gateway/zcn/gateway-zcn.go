@@ -313,21 +313,21 @@ func (zob *zcnObjects) GetObjectNInfo(ctx context.Context, bucket, object string
 	log.Printf("~~~~~~~~~~~~~~~~~~~~~~~~ startOffset: %v, length: %v\n", startOffset, length)
 
 	fCloser := func() {
-		if startOffset+length >= finfo.Size() {
+		mu.Lock()
+		defer mu.Unlock()
+		ds, ok := downloads[remotePath]
+		if !ok {
+			log.Println("file closer - download status not found for ", remotePath)
+			return
+		}
+
+		ds.downloaded += length
+		if ds.downloaded >= ds.objectInfo.Size {
 			f.Close()
 			os.Remove(localPath)
-
-			var zusDownloadTime time.Duration
-			mu.Lock()
-			ds, ok := downloads[remotePath]
-			if ok {
-				zusDownloadTime = ds.downloadTime
-			}
-
 			delete(downloads, remotePath)
-			mu.Unlock()
 
-			log.Println("^^^^^^^^^^^ remove temp local file: ", localPath, "download from Zus:", zusDownloadTime)
+			log.Println("^^^^^^^^^^^ remove temp local file: ", localPath, "download from Zus:", ds.downloadTime)
 		}
 	}
 
