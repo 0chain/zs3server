@@ -295,27 +295,8 @@ func (zob *zcnObjects) GetObjectNInfo(ctx context.Context, bucket, object string
 	} else {
 		remotePath = filepath.Join(rootPath, bucket, object)
 	}
-	log.Printf("~~~~~~~~~~~~~~~~~~~~~~~~ get object info remotePath: %v\n", remotePath)
 
-	ref, err := getSingleRegularRef(zob.alloc, remotePath)
-	if err != nil {
-		if isPathNoExistError(err) {
-			return nil, minio.ObjectNotFound{Bucket: bucket, Object: object}
-		}
-		return nil, err
-	}
-
-	log.Println("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~get object info, ref: ", ref)
-
-	objectInfo := minio.ObjectInfo{
-		Bucket:  bucket,
-		Name:    ref.Name,
-		ModTime: ref.UpdatedAt.ToTime(),
-		Size:    ref.ActualFileSize,
-		IsDir:   ref.Type == dirType,
-	}
-
-	f, localPath, err := getFileReader(ctx, zob.alloc, remotePath, uint64(ref.ActualFileSize))
+	f, objectInfo, localPath, err := getFileReader(ctx, zob.alloc, bucket, object, remotePath)
 	if err != nil {
 		return nil, err
 	}
@@ -346,7 +327,7 @@ func (zob *zcnObjects) GetObjectNInfo(ctx context.Context, bucket, object string
 
 	r := io.NewSectionReader(f, startOffset, length)
 	log.Printf("~~~~~~~~~~~~~~~~~~~~~~~~~~~~section reader : %v\n", r)
-	gr, err = minio.NewGetObjectReaderFromReader(r, objectInfo, opts, fCloser)
+	gr, err = minio.NewGetObjectReaderFromReader(r, *objectInfo, opts, fCloser)
 	return
 }
 

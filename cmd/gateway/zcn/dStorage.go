@@ -15,6 +15,7 @@ import (
 	zerror "github.com/0chain/errors"
 	"github.com/0chain/gosdk/constants"
 	"github.com/0chain/gosdk/zboxcore/sdk"
+	minio "github.com/minio/minio/cmd"
 	"github.com/minio/minio/internal/logger"
 	"github.com/mitchellh/go-homedir"
 )
@@ -167,9 +168,10 @@ func getSingleRegularRef(alloc *sdk.Allocation, remotePath string) (*sdk.ORef, e
 }
 
 type downloadStatus struct {
-	wg     sync.WaitGroup
-	done   bool
-	reader *os.File
+	wg         sync.WaitGroup
+	done       bool
+	reader     *os.File
+	objectInfo *minio.ObjectInfo
 }
 
 var (
@@ -177,9 +179,33 @@ var (
 	downloads = make(map[string]*downloadStatus)
 )
 
-func getFileReader(ctx context.Context, alloc *sdk.Allocation, remotePath string, fileSize uint64) (*os.File, string, error) {
+func getObjectRef(alloc *sdk.Allocation, bucket, object, remotePath string) (*minio.ObjectInfo, error) {
+	log.Printf("~~~~~~~~~~~~~~~~~~~~~~~~ get object info remotePath: %v\n", remotePath)
+
+	ref, err := getSingleRegularRef(alloc, remotePath)
+	if err != nil {
+		if isPathNoExistError(err) {
+			return nil, minio.ObjectNotFound{Bucket: bucket, Object: object}
+		}
+		return nil, err
+	}
+
+	log.Println("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~get object info, ref: ", ref)
+
+	return &minio.ObjectInfo{
+		Bucket:  bucket,
+		Name:    ref.Name,
+		ModTime: ref.UpdatedAt.ToTime(),
+		Size:    ref.ActualFileSize,
+		IsDir:   ref.Type == dirType,
+	}, nil
+}
+
+func getFileReader(ctx context.Context,
+	alloc *sdk.Allocation,
+	bucket, object, remotePath string) (*os.File, *minio.ObjectInfo, string, error) {
+
 	localFilePath := filepath.Join(tempdir, remotePath)
-	// os.Remove(localFilePath)
 
 	mu.Lock()
 	ds, ok := downloads[remotePath]
@@ -187,9 +213,10 @@ func getFileReader(ctx context.Context, alloc *sdk.Allocation, remotePath string
 		if !ds.done {
 			mu.Unlock()
 			ds.wg.Wait()
+			return ds.reader, ds.objectInfo, localFilePath, nil
 		} else {
 			mu.Unlock()
-			return ds.reader, localFilePath, nil
+			return ds.reader, ds.objectInfo, localFilePath, nil
 		}
 	} else {
 		ds = &downloadStatus{}
@@ -202,38 +229,44 @@ func getFileReader(ctx context.Context, alloc *sdk.Allocation, remotePath string
 			errCh:  make(chan error, 1),
 		}
 
+		objectInfo, err := getObjectRef(alloc, bucket, object, remotePath)
+		if err != nil {
+			return nil, nil, "", err
+		}
+		mu.Lock()
+		ds.objectInfo = objectInfo
+		mu.Unlock()
+
 		var ctxCncl context.CancelFunc
-		ctx, ctxCncl = context.WithTimeout(ctx, getTimeOut(fileSize))
+		ctx, ctxCncl = context.WithTimeout(ctx, getTimeOut(uint64(objectInfo.Size)))
 		defer ctxCncl()
 
 		log.Println("^^^^^^^^getFileReader: starting download")
-		err := alloc.DownloadFile(localFilePath, remotePath, false, &cb, true)
+		err = alloc.DownloadFile(localFilePath, remotePath, false, &cb, true)
 		if err != nil {
-			return nil, "", err
+			return nil, nil, "", err
 		}
 
 		select {
 		case <-cb.doneCh:
 		case err := <-cb.errCh:
-			return nil, "", err
+			return nil, nil, "", err
 		case <-ctx.Done():
-			return nil, "", errors.New("exceeded timeout")
+			return nil, nil, "", errors.New("exceeded timeout")
 		}
 
 		mu.Lock()
 		ds.done = true
 		ds.wg.Done()
+		r, err := os.Open(localFilePath)
+		if err != nil {
+			return nil, nil, "", err
+		}
+		ds.reader = r
 		mu.Unlock()
 		log.Println("^^^^^^^^getFileReader: finish download")
+		return r, ds.objectInfo, localFilePath, nil
 	}
-
-	r, err := os.Open(localFilePath)
-	if err != nil {
-		return nil, "", err
-	}
-	ds.reader = r
-
-	return r, localFilePath, nil
 }
 
 func putFile(ctx context.Context, alloc *sdk.Allocation, remotePath, contentType string, r io.Reader, size int64, isUpdate, shouldEncrypt bool) (err error) {
