@@ -223,6 +223,7 @@ func getFileReader(ctx context.Context,
 	} else {
 		ds = &downloadStatus{}
 		downloads[remotePath] = ds
+		log.Println("^^^^^^^^getFileReader: starting download:", remotePath)
 		ds.wg.Add(1)
 		mu.Unlock()
 
