@@ -587,3 +587,8 @@ func (zob *zcnObjects) GetObjectTags(ctx context.Context, bucket, object string,
 		"zus": "storage",
 	}, object != "")
 }
+
+// IsTaggingSupported returns whether object tagging is supported or not for this layer.
+func (zob *zcnObjects) IsTaggingSupported() bool {
+	return true
+}
