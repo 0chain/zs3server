@@ -583,5 +583,8 @@ func (zob *zcnObjects) CopyObjectPart(ctx context.Context, srcBucket, srcObject,
 }
 
 func (zob *zcnObjects) GetObjectTagging(ctx context.Context, bucketName, objectName string, opts miniogo.GetObjectTaggingOptions) (*tags.Tags, error) {
-	return &tags.Tags{}, nil
+	log.Println("get object tagging...")
+	return tags.NewTags(map[string]string{
+		"zus": "storage",
+	}, true)
 }
