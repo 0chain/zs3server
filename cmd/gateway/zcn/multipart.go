@@ -544,7 +544,7 @@ func (mt *moveTracker) remove(uploadID string) {
 }
 
 func (zob *zcnObjects) CopyObjectPart(ctx context.Context, srcBucket, srcObject, destBucket, destObject, uploadID string, partID int, startOffset, length int64, srcInfo minio.ObjectInfo, srcOpts, dstOpts minio.ObjectOptions) (pi minio.PartInfo, err error) {
-	log.Println("copy object part, partID:", partID, "srcBucket:", srcBucket, "srcObject:", srcObject, "destBucket:", destBucket, "destObject:", destObject, "uploadID:", uploadID))
+	log.Println("copy object part, partID:", partID, "srcBucket:", srcBucket, "srcObject:", srcObject, "destBucket:", destBucket, "destObject:", destObject, "uploadID:", uploadID)
 	// Check if the source bucket exists
 	if _, err = zob.GetBucketInfo(ctx, srcBucket); err != nil {
 		return pi, err
