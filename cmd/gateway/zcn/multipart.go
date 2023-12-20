@@ -69,6 +69,7 @@ func (mpf *MultiPartFile) UpdateFileSize(partID int, size int64) {
 		log.Println("see last part, partID:", partID, "file size:", mpf.fileSize)
 		mpf.readyToUpload = true
 		close(mpf.readyUploadC)
+		mpf.readyUploadC = nil
 		mpf.lastPartSize = size
 		return
 	}
@@ -87,12 +88,14 @@ func (mpf *MultiPartFile) UpdateFileSize(partID int, size int64) {
 }
 
 func (mpf *MultiPartFile) notifyEnd() {
+	log.Println("notify end")
 	mpf.lock.Lock()
 	defer mpf.lock.Unlock()
 	if !mpf.readyToUpload {
 		mpf.readyToUpload = true
 		if mpf.readyUploadC != nil {
 			close(mpf.readyUploadC)
+			mpf.readyUploadC = nil
 		}
 	}
 }
@@ -339,9 +342,12 @@ func (zob *zcnObjects) PutObjectPart(ctx context.Context, bucket, object, upload
 }
 
 func (zob *zcnObjects) CompleteMultipartUpload(ctx context.Context, bucket, object, uploadID string, uploadedParts []minio.CompletePart, opts minio.ObjectOptions) (oi minio.ObjectInfo, err error) {
-	// var objectSize int64
-	// objectSize := int64(371917281)
-	// objectSize := int64(22491196)
+	if moveTk.isMoving(uploadID) {
+		// avoid uploading
+		moveTk.remove(uploadID)
+
+		return zob.GetObjectInfo(ctx, bucket, object, minio.ObjectOptions{})
+	}
 
 	mapLock.Lock()
 	multiPartFile, ok := FileMap[uploadID]
@@ -516,22 +522,22 @@ func (zob *zcnObjects) AbortMultipartUpload(ctx context.Context, bucket string, 
 }
 
 type moveTracker struct {
-	mu      sync.Mutex
-	uploads map[string]*sync.Once
+	mu    sync.Mutex
+	moves map[string]*sync.Once
 }
 
 func newMoveTracker() *moveTracker {
 	return &moveTracker{
-		uploads: make(map[string]*sync.Once),
+		moves: make(map[string]*sync.Once),
 	}
 }
 
-func (mt *moveTracker) do(uploadID string, f func()) {
+func (mt *moveTracker) doOnce(uploadID string, f func()) {
 	mt.mu.Lock()
-	once, ok := mt.uploads[uploadID]
+	once, ok := mt.moves[uploadID]
 	if !ok {
 		once = &sync.Once{}
-		mt.uploads[uploadID] = once
+		mt.moves[uploadID] = once
 	}
 	mt.mu.Unlock()
 
@@ -540,30 +546,43 @@ func (mt *moveTracker) do(uploadID string, f func()) {
 
 func (mt *moveTracker) remove(uploadID string) {
 	mt.mu.Lock()
-	delete(mt.uploads, uploadID)
+	delete(mt.moves, uploadID)
 	mt.mu.Unlock()
+}
+
+func (mt *moveTracker) isMoving(uploadID string) bool {
+	mt.mu.Lock()
+	_, ok := mt.moves[uploadID]
+	mt.mu.Unlock()
+	return ok
 }
 
 func (zob *zcnObjects) CopyObjectPart(ctx context.Context, srcBucket, srcObject, destBucket, destObject, uploadID string, partID int, startOffset, length int64, srcInfo minio.ObjectInfo, srcOpts, dstOpts minio.ObjectOptions) (pi minio.PartInfo, err error) {
 	log.Println("copy object part, partID:", partID, "srcBucket:", srcBucket, "srcObject:", srcObject, "destBucket:", destBucket, "destObject:", destObject, "uploadID:", uploadID)
+	// Get or create the sync.Once for this uploadID
 	// Check if the source bucket exists
-	if _, err = zob.GetBucketInfo(ctx, srcBucket); err != nil {
-		return pi, err
-	}
+	// _, err = zob.GetBucketInfo(ctx, srcBucket)
+	// if err != nil {
+	// 	return
+	// }
 
-	// Check if the destination bucket exists
-	if _, err = zob.GetBucketInfo(ctx, destBucket); err != nil {
-		return pi, err
-	}
+	// // Check if the destination bucket exists
+	// _, err = zob.GetBucketInfo(ctx, destBucket)
+	// if err != nil {
+	// 	return
+	// }
 
 	// Check if the source object exists
-	if _, err = zob.GetObjectInfo(ctx, srcBucket, srcObject, minio.ObjectOptions{}); err != nil {
-		return pi, err
+	srcInfo, err = zob.GetObjectInfo(ctx, srcBucket, srcObject, minio.ObjectOptions{})
+	if err != nil {
+		return
 	}
 
-	// Get or create the sync.Once for this uploadID
-	moveTk.do(uploadID, func() {
+	moveTk.doOnce(uploadID, func() {
 		_, err = zob.moveZusObject(srcBucket, srcObject, destBucket, destObject)
+		if err != nil {
+			return
+		}
 	})
 
 	if err != nil {
