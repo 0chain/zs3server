@@ -594,7 +594,7 @@ func (zob *zcnObjects) CopyObjectPart(ctx context.Context, srcBucket, srcObject,
 		PartNumber:   partID,
 		LastModified: srcInfo.ModTime,
 		ETag:         srcInfo.ETag,
-		Size:         srcInfo.Size,
+		Size:         length,
 	}
 
 	return pi, nil
