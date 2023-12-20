@@ -655,7 +655,6 @@ func (zob *zcnObjects) moveZusObject(srcBucket, srcObject, destBucket, destObjec
 		OperationType: constants.FileOperationCopy,
 		RemotePath:    srcRemotePath,
 		DestPath:      dstRemotePath,
-		DestName:      destObject,
 	}
 	return dstRemotePath, zob.alloc.DoMultiOperation([]sdk.OperationRequest{
 		copyOp,
