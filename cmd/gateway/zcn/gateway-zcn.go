@@ -662,6 +662,7 @@ func (zob *zcnObjects) moveZusObject(srcBucket, srcObject, destBucket, destObjec
 }
 
 func (zob *zcnObjects) CopyObject(ctx context.Context, srcBucket, srcObject, destBucket, destObject string, srcInfo minio.ObjectInfo, srcOpts, dstOpts minio.ObjectOptions) (objInfo minio.ObjectInfo, err error) {
+	log.Println("move object - srcBucket:", srcBucket, "srcObject:", srcObject, "destBucket:", destBucket, "destObject:", destObject)
 	dstRemotePath, err := zob.moveZusObject(srcBucket, srcObject, destBucket, destObject)
 	if err != nil {
 		return minio.ObjectInfo{}, err
