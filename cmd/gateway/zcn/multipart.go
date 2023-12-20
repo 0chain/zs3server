@@ -28,6 +28,7 @@ var (
 	mapLock sync.Mutex
 	// alloc   *sdk.Allocation
 	localStorageDir = "store"
+	moveTk          = newMoveTracker()
 )
 
 type MultiPartFile struct {
@@ -511,4 +512,69 @@ func (zob *zcnObjects) AbortMultipartUpload(ctx context.Context, bucket string, 
 	}
 	close(multiPartFile.cancelC)
 	return cleanupPartFilesAndDirs(bucket, uploadID, object, localStorageDir)
+}
+
+type moveTracker struct {
+	mu      sync.Mutex
+	uploads map[string]*sync.Once
+}
+
+func newMoveTracker() *moveTracker {
+	return &moveTracker{
+		uploads: make(map[string]*sync.Once),
+	}
+}
+
+func (mt *moveTracker) do(uploadID string, f func()) {
+	mt.mu.Lock()
+	once, ok := mt.uploads[uploadID]
+	if !ok {
+		once = &sync.Once{}
+		mt.uploads[uploadID] = once
+	}
+	mt.mu.Unlock()
+
+	once.Do(f)
+}
+
+func (mt *moveTracker) remove(uploadID string) {
+	mt.mu.Lock()
+	delete(mt.uploads, uploadID)
+	mt.mu.Unlock()
+}
+
+func (zob *zcnObjects) CopyObjectPart(ctx context.Context, srcBucket, srcObject, destBucket, destObject, uploadID string, partID int, startOffset, length int64, srcInfo minio.ObjectInfo, srcOpts, dstOpts minio.ObjectOptions) (pi minio.PartInfo, err error) {
+	// Check if the source bucket exists
+	if _, err = zob.GetBucketInfo(ctx, srcBucket); err != nil {
+		return pi, err
+	}
+
+	// Check if the destination bucket exists
+	if _, err = zob.GetBucketInfo(ctx, destBucket); err != nil {
+		return pi, err
+	}
+
+	// Check if the source object exists
+	if _, err = zob.GetObjectInfo(ctx, srcBucket, srcObject, minio.ObjectOptions{}); err != nil {
+		return pi, err
+	}
+
+	// Get or create the sync.Once for this uploadID
+	moveTk.do(uploadID, func() {
+		_, err = zob.moveZusObject(srcBucket, srcObject, destBucket, destObject)
+	})
+
+	if err != nil {
+		return pi, err
+	}
+
+	// Mock the part copy action
+	pi = minio.PartInfo{
+		PartNumber:   partID,
+		LastModified: srcInfo.ModTime,
+		ETag:         srcInfo.ETag,
+		Size:         srcInfo.Size,
+	}
+
+	return pi, nil
 }

@@ -637,8 +637,9 @@ func (zob *zcnObjects) PutMultipleObjects(
 
 	return objectInfo, nil
 }
-func (zob *zcnObjects) CopyObject(ctx context.Context, srcBucket, srcObject, destBucket, destObject string, srcInfo minio.ObjectInfo, srcOpts, dstOpts minio.ObjectOptions) (objInfo minio.ObjectInfo, err error) {
-	var srcRemotePath, dstRemotePath string
+
+func (zob *zcnObjects) moveZusObject(srcBucket, srcObject, destBucket, destObject string) (dstRemotePath string, err error) {
+	var srcRemotePath string
 	if srcBucket == rootBucketName {
 		srcRemotePath = filepath.Join(rootPath, srcObject)
 	} else {
@@ -655,11 +656,15 @@ func (zob *zcnObjects) CopyObject(ctx context.Context, srcBucket, srcObject, des
 		RemotePath:    srcRemotePath,
 		DestPath:      dstRemotePath,
 	}
-	err = zob.alloc.DoMultiOperation([]sdk.OperationRequest{
+	return dstRemotePath, zob.alloc.DoMultiOperation([]sdk.OperationRequest{
 		copyOp,
 	})
+}
+
+func (zob *zcnObjects) CopyObject(ctx context.Context, srcBucket, srcObject, destBucket, destObject string, srcInfo minio.ObjectInfo, srcOpts, dstOpts minio.ObjectOptions) (objInfo minio.ObjectInfo, err error) {
+	dstRemotePath, err := zob.moveZusObject(srcBucket, srcObject, destBucket, destObject)
 	if err != nil {
-		return
+		return minio.ObjectInfo{}, err
 	}
 
 	var ref *sdk.ORef
