@@ -649,7 +649,7 @@ func (zob *zcnObjects) moveZusObject(srcBucket, srcObject, destBucket, destObjec
 	if destBucket == rootBucketName {
 		dstRemotePath = filepath.Join(rootPath, destObject)
 	} else {
-		dstRemotePath = filepath.Join(rootPath, destBucket)
+		dstRemotePath = filepath.Join(rootPath, destBucket, destObject)
 	}
 	copyOp := sdk.OperationRequest{
 		OperationType: constants.FileOperationCopy,
