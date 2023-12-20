@@ -19,7 +19,6 @@ import (
 	"github.com/0chain/gosdk/zboxcore/sdk"
 	"github.com/google/uuid"
 
-	miniogo "github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/tags"
 	minio "github.com/minio/minio/cmd"
 	"github.com/minio/minio/cmd/gateway/zcn/seqpriorityqueue"
@@ -582,9 +581,9 @@ func (zob *zcnObjects) CopyObjectPart(ctx context.Context, srcBucket, srcObject,
 	return pi, nil
 }
 
-func (zob *zcnObjects) GetObjectTagging(ctx context.Context, bucketName, objectName string, opts miniogo.GetObjectTaggingOptions) (*tags.Tags, error) {
+func (zob *zcnObjects) GetObjectTags(ctx context.Context, bucket, object string, opts minio.ObjectOptions) (*tags.Tags, error) {
 	log.Println("get object tagging...")
 	return tags.NewTags(map[string]string{
 		"zus": "storage",
-	}, true)
+	}, object != "")
 }
