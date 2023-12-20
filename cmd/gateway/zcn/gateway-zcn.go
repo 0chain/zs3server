@@ -649,12 +649,13 @@ func (zob *zcnObjects) moveZusObject(srcBucket, srcObject, destBucket, destObjec
 	if destBucket == rootBucketName {
 		dstRemotePath = filepath.Join(rootPath, destObject)
 	} else {
-		dstRemotePath = filepath.Join(rootPath, destBucket, destObject)
+		dstRemotePath = filepath.Join(rootPath, destBucket)
 	}
 	copyOp := sdk.OperationRequest{
 		OperationType: constants.FileOperationCopy,
 		RemotePath:    srcRemotePath,
 		DestPath:      dstRemotePath,
+		DestName:      destObject,
 	}
 	return dstRemotePath, zob.alloc.DoMultiOperation([]sdk.OperationRequest{
 		copyOp,
