@@ -347,7 +347,13 @@ func (zob *zcnObjects) CompleteMultipartUpload(ctx context.Context, bucket, obje
 		log.Println("complete multipart upload - remove moving, uploadID", uploadID)
 		moveTk.remove(uploadID)
 
-		return zob.GetObjectInfo(ctx, bucket, object, minio.ObjectOptions{})
+		obj, err := zob.GetObjectInfo(ctx, bucket, object, minio.ObjectOptions{})
+		if err != nil {
+			return minio.ObjectInfo{}, fmt.Errorf("complete multipart upload - get object info failed: %v", err)
+		}
+		log.Println("complete multipart upload - get object info:", obj)
+		obj.ETag = "abc"
+		return obj, nil
 	}
 
 	mapLock.Lock()
