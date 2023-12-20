@@ -344,6 +344,7 @@ func (zob *zcnObjects) PutObjectPart(ctx context.Context, bucket, object, upload
 func (zob *zcnObjects) CompleteMultipartUpload(ctx context.Context, bucket, object, uploadID string, uploadedParts []minio.CompletePart, opts minio.ObjectOptions) (oi minio.ObjectInfo, err error) {
 	if moveTk.isMoving(uploadID) {
 		// avoid uploading
+		log.Println("complete multipart upload - remove moving, uploadID", uploadID)
 		moveTk.remove(uploadID)
 
 		return zob.GetObjectInfo(ctx, bucket, object, minio.ObjectOptions{})
@@ -579,6 +580,7 @@ func (zob *zcnObjects) CopyObjectPart(ctx context.Context, srcBucket, srcObject,
 	}
 
 	moveTk.doOnce(uploadID, func() {
+		log.Println("&&&&&&&&&& move zus object, srcBucket:", srcBucket, "srcObject:", srcObject, "destBucket:", destBucket, "destObject:", destObject)
 		_, err = zob.moveZusObject(srcBucket, srcObject, destBucket, destObject)
 		if err != nil {
 			return
