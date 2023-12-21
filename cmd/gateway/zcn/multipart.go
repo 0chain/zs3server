@@ -104,11 +104,6 @@ func (zob *zcnObjects) NewMultipartUpload(ctx context.Context, bucket string, ob
 }
 
 func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object string) (string, error) {
-	// var objectSize int64
-	// objectSize := int64(371917281)
-	// objectSize := int64(22491196)
-	// log.Println("initial upload...")
-
 	// Generate a unique upload ID
 	uploadID := uuid.New().String()
 	mapLock.Lock()
@@ -342,20 +337,12 @@ func (zob *zcnObjects) PutObjectPart(ctx context.Context, bucket, object, upload
 func (zob *zcnObjects) CompleteMultipartUpload(ctx context.Context, bucket, object, uploadID string, uploadedParts []minio.CompletePart, opts minio.ObjectOptions) (oi minio.ObjectInfo, err error) {
 	if zob.copyTracker.isCopying(uploadID) {
 		// avoid uploading
-		log.Println("complete multipart upload - remove moving, uploadID", uploadID)
+		log.Println("complete multipart upload - remove copying, uploadID:", uploadID)
 		zob.copyTracker.remove(uploadID)
-
-		// obj, err := zob.GetObjectInfo(ctx, bucket, object, minio.ObjectOptions{})
-		// if err != nil {
-		// 	return minio.ObjectInfo{}, fmt.Errorf("complete multipart upload - get object info failed: %v", err)
-		// }
-		// log.Println("complete multipart upload - get object info:", obj)
-		// obj.ETag = "abc"
 		return minio.ObjectInfo{
 			Bucket: bucket,
 			Name:   object,
 		}, nil
-		// return obj, nil
 	}
 
 	mapLock.Lock()
@@ -405,23 +392,6 @@ func (zob *zcnObjects) constructCompleteObject(bucket, uploadID, object, localSt
 			break
 		}
 
-		// func() {
-		// 	// Open the part file for reading
-		// 	partFile, err := os.Open(partFilename)
-		// 	if err != nil {
-		// 		log.Panicf("could not open part file: %v, err: %v", partFilename, err)
-		// 	}
-		// 	defer partFile.Close()
-
-		// 	data, err := io.ReadAll(partFile)
-		// 	if err != nil {
-		// 		log.Panicf("read part: %v failed, err: %v", partNumber, err)
-		// 	}
-
-		// 	multiPartFile.dataC <- data
-		// 	log.Println("^^^^^^^^^ uploading part:", partNumber, "size:", len(data))
-		// }()
-
 		// Read the ETag of the part
 		partETagBytes, err := os.ReadFile(partETagFilename)
 		if err != nil {
@@ -434,17 +404,6 @@ func (zob *zcnObjects) constructCompleteObject(bucket, uploadID, object, localSt
 
 	// Get the concatenated ETag value
 	eTag := strings.Join(partETags, "")
-
-	// Close the temporary file
-	// if err := tmpCompleteObjectFile.Close(); err != nil {
-	// 	return "", err
-	// }
-
-	// Rename the temporary file to its final destination
-	// completeObjectFilename := filepath.Join(localStorageDir, bucket, object)
-	// if err := os.Rename(tmpCompleteObjectFilename, completeObjectFilename); err != nil {
-	// 	return "", err
-	// }
 
 	return eTag, nil
 }
@@ -530,39 +489,41 @@ func (zob *zcnObjects) AbortMultipartUpload(ctx context.Context, bucket string, 
 	return cleanupPartFilesAndDirs(bucket, uploadID, object, localStorageDir)
 }
 
-// copyTracker keeps track of the copy operations in progress.
-type copyTracker struct {
-	mu    sync.Mutex
-	moves map[string]*sync.Once
+// operationTracker keeps track of the operations in progress
+// to avoid multiple uploads/copies of the same object.
+// this is used when multipart operations get invovled.
+type operationTracker struct {
+	mu  sync.Mutex
+	ops map[string]*sync.Once
 }
 
-func newCopyTracker() *copyTracker {
-	return &copyTracker{
-		moves: make(map[string]*sync.Once),
+func newOperationTracker() *operationTracker {
+	return &operationTracker{
+		ops: make(map[string]*sync.Once),
 	}
 }
 
-func (mt *copyTracker) doOnce(uploadID string, f func()) {
+func (mt *operationTracker) doOnce(uploadID string, f func()) {
 	mt.mu.Lock()
-	once, ok := mt.moves[uploadID]
+	once, ok := mt.ops[uploadID]
 	if !ok {
 		once = &sync.Once{}
-		mt.moves[uploadID] = once
+		mt.ops[uploadID] = once
 	}
 	mt.mu.Unlock()
 
 	once.Do(f)
 }
 
-func (mt *copyTracker) remove(uploadID string) {
+func (mt *operationTracker) remove(uploadID string) {
 	mt.mu.Lock()
-	delete(mt.moves, uploadID)
+	delete(mt.ops, uploadID)
 	mt.mu.Unlock()
 }
 
-func (mt *copyTracker) isCopying(uploadID string) bool {
+func (mt *operationTracker) isCopying(uploadID string) bool {
 	mt.mu.Lock()
-	_, ok := mt.moves[uploadID]
+	_, ok := mt.ops[uploadID]
 	mt.mu.Unlock()
 	return ok
 }

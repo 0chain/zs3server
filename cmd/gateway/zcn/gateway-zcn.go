@@ -123,7 +123,7 @@ func (z *ZCN) NewGatewayLayer(creds madmin.Credentials) (minio.ObjectLayer, erro
 	zob := &zcnObjects{
 		alloc:       allocation,
 		metrics:     minio.NewMetrics(),
-		copyTracker: *newCopyTracker(),
+		copyTracker: newOperationTracker(),
 	}
 
 	return zob, nil
@@ -133,7 +133,7 @@ type zcnObjects struct {
 	minio.GatewayUnsupported
 	alloc       *sdk.Allocation
 	metrics     *minio.BackendMetrics
-	copyTracker copyTracker
+	copyTracker *operationTracker
 }
 
 // Shutdown Remove temporary directory
