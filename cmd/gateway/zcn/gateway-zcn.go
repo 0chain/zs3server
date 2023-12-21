@@ -121,8 +121,9 @@ func (z *ZCN) NewGatewayLayer(creds madmin.Credentials) (minio.ObjectLayer, erro
 	}
 
 	zob := &zcnObjects{
-		alloc:   allocation,
-		metrics: minio.NewMetrics(),
+		alloc:       allocation,
+		metrics:     minio.NewMetrics(),
+		copyTracker: *newCopyTracker(),
 	}
 
 	return zob, nil
@@ -130,8 +131,9 @@ func (z *ZCN) NewGatewayLayer(creds madmin.Credentials) (minio.ObjectLayer, erro
 
 type zcnObjects struct {
 	minio.GatewayUnsupported
-	alloc   *sdk.Allocation
-	metrics *minio.BackendMetrics
+	alloc       *sdk.Allocation
+	metrics     *minio.BackendMetrics
+	copyTracker copyTracker
 }
 
 // Shutdown Remove temporary directory
@@ -638,7 +640,7 @@ func (zob *zcnObjects) PutMultipleObjects(
 	return objectInfo, nil
 }
 
-func (zob *zcnObjects) moveZusObject(srcBucket, srcObject, destBucket, destObject string) (dstRemotePath string, err error) {
+func (zob *zcnObjects) copyZusObject(srcBucket, srcObject, destBucket, destObject string) (dstRemotePath string, err error) {
 	var srcRemotePath string
 	if srcBucket == rootBucketName {
 		srcRemotePath = filepath.Join(rootPath, srcObject)
@@ -663,7 +665,7 @@ func (zob *zcnObjects) moveZusObject(srcBucket, srcObject, destBucket, destObjec
 
 func (zob *zcnObjects) CopyObject(ctx context.Context, srcBucket, srcObject, destBucket, destObject string, srcInfo minio.ObjectInfo, srcOpts, dstOpts minio.ObjectOptions) (objInfo minio.ObjectInfo, err error) {
 	log.Println("move object - srcBucket:", srcBucket, "srcObject:", srcObject, "destBucket:", destBucket, "destObject:", destObject)
-	dstRemotePath, err := zob.moveZusObject(srcBucket, srcObject, destBucket, destObject)
+	dstRemotePath, err := zob.copyZusObject(srcBucket, srcObject, destBucket, destObject)
 	if err != nil {
 		return minio.ObjectInfo{}, err
 	}
