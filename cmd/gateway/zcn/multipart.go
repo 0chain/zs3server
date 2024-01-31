@@ -161,6 +161,7 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object string
 					if err != nil {
 						log.Panicf("upoad part failed, err: %v", err)
 					}
+					multiPartFile.memFile.Sync() //nolint:errcheck
 					total += cn
 					log.Println("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ uploaded:", total, " new:", cn)
 				} else {
@@ -168,7 +169,7 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object string
 					if err != nil {
 						log.Panic(err)
 					}
-
+					multiPartFile.memFile.Sync() //nolint:errcheck
 					total += cn
 					log.Println("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ uploaded:", total, " new:", cn, " duration:", time.Since(st))
 					return
