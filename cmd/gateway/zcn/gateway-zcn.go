@@ -556,7 +556,10 @@ func (zob *zcnObjects) PutMultipleObjects(
 	if total <= 0 {
 		return nil, fmt.Errorf("no files to upload")
 	}
-
+	chunkNumber := 300
+	if zob.alloc.DataShards < 3 {
+		chunkNumber = 600
+	}
 	if total != len(r) || total != len(opts) {
 		return nil, fmt.Errorf("length mismatch of objects with file readers or with options")
 	}
@@ -601,7 +604,7 @@ func (zob *zcnObjects) PutMultipleObjects(
 
 			options := []sdk.ChunkedUploadOption{
 				sdk.WithEncrypt(false),
-				sdk.WithChunkNumber(200),
+				sdk.WithChunkNumber(chunkNumber),
 			}
 			operationRequests[idx] = sdk.OperationRequest{
 				FileMeta:      fileMeta,

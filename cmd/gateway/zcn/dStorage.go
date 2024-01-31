@@ -292,6 +292,10 @@ func putFile(ctx context.Context, alloc *sdk.Allocation, remotePath, contentType
 	}
 
 	logger.Info("starting chunked upload")
+	chunkNumber := 300
+	if alloc.DataShards < 3 {
+		chunkNumber = 600
+	}
 	opRequest := sdk.OperationRequest{
 		OperationType: constants.FileOperationInsert,
 		FileReader:    newMinioReader(r),
@@ -299,7 +303,7 @@ func putFile(ctx context.Context, alloc *sdk.Allocation, remotePath, contentType
 		RemotePath:    remotePath,
 		FileMeta:      fileMeta,
 		Opts: []sdk.ChunkedUploadOption{
-			sdk.WithChunkNumber(250),
+			sdk.WithChunkNumber(chunkNumber),
 		},
 	}
 

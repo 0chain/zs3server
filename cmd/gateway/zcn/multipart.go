@@ -193,8 +193,12 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object string
 			RemotePath: "/" + filepath.Join(bucket, object),
 			MimeType:   "application/octet-stream", // can get from request
 		}
+		chunkNumber := 300
+		if zob.alloc.DataShards < 3 {
+			chunkNumber = 600
+		}
 		options := []sdk.ChunkedUploadOption{
-			sdk.WithChunkNumber(250),
+			sdk.WithChunkNumber(chunkNumber),
 		}
 		operationRequest := sdk.OperationRequest{
 			FileMeta:      fileMeta,
