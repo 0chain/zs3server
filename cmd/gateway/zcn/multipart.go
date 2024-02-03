@@ -195,6 +195,7 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object string
 		}
 		options := []sdk.ChunkedUploadOption{
 			sdk.WithChunkNumber(250),
+			sdk.WithEncrypt(Encrypt),
 		}
 		operationRequest := sdk.OperationRequest{
 			FileMeta:      fileMeta,
@@ -280,7 +281,7 @@ func (zob *zcnObjects) PutObjectPart(ctx context.Context, bucket, object, upload
 	// Create an MD5 hash to calculate ETag
 	hash := md5.New()
 
-	var partSize = zob.alloc.GetChunkReadSize(false) // Set an appropriate part size set true if file is encrypted
+	var partSize = zob.alloc.GetChunkReadSize(Encrypt) // Set an appropriate part size set true if file is encrypted
 	buf := make([]byte, partSize)
 	// Read each part from the request body
 	// We need to make sure we write atleast ChunkWriteSize bytes to memFile unless its the last part
