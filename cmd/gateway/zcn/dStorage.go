@@ -38,6 +38,7 @@ const (
 	pathDoesNotExist = "path_no_exist"
 	consensusFailed  = "consensus_failed"
 	retryWaitTime    = 500 * time.Millisecond // milliseconds
+	Encrypt          = true
 )
 
 func init() {
@@ -300,6 +301,7 @@ func putFile(ctx context.Context, alloc *sdk.Allocation, remotePath, contentType
 		FileMeta:      fileMeta,
 		Opts: []sdk.ChunkedUploadOption{
 			sdk.WithChunkNumber(250),
+			sdk.WithEncrypt(Encrypt),
 		},
 	}
 
