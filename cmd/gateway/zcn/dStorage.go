@@ -243,9 +243,23 @@ func getFileReader(ctx context.Context,
 		ctx, ctxCncl = context.WithTimeout(ctx, getTimeOut(uint64(objectInfo.Size)))
 		defer ctxCncl()
 
+		r, err := os.Create(localFilePath)
+		if err != nil {
+			return nil, nil, "", err
+		}
+
+		stat, err := r.Stat()
+		if err != nil {
+			return nil, nil, "", err
+		}
+		if stat.IsDir() {
+			log.Println("^^^^^^^^getFileReader: file is a directory")
+			return nil, nil, "", errors.New("file is a directory")
+		}
+
 		log.Println("^^^^^^^^getFileReader: starting download")
 		st := time.Now()
-		err = alloc.DownloadFile(localFilePath, remotePath, false, &cb, true)
+		err = alloc.DownloadFileToFileHandler(r, remotePath, false, &cb, true)
 		if err != nil {
 			return nil, nil, "", err
 		}
@@ -263,10 +277,6 @@ func getFileReader(ctx context.Context,
 		ds.done = true
 		ds.downloadTime = tm
 		ds.wg.Done()
-		r, err := os.Open(localFilePath)
-		if err != nil {
-			return nil, nil, "", err
-		}
 		ds.reader = r
 		mu.Unlock()
 		log.Println("^^^^^^^^getFileReader: finish download")

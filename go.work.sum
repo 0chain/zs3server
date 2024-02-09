@@ -134,8 +134,8 @@ github.com/0chain/gosdk v1.8.5/go.mod h1:JeaXA7gbncHoYbKixUnM58+7S2E9z7IKYY+fV0I
 github.com/0chain/gosdk v1.10.1-0.20231114143641-51b9f0240b64 h1:DBDslN917WflFB3FFWBU9ISgym5tye0gBVw0N3m7Fmk=
 github.com/0chain/gosdk v1.10.1-0.20231114143641-51b9f0240b64/go.mod h1:l/c+X5v6RMyzWUib6FFPdK5bTAzAJ7PojhEvELp3LGk=
 github.com/0chain/gosdk v1.10.1-0.20231210164918-9b9b8e0d5c89/go.mod h1:DAg/de6vodjEa7CM1/LjElOwntRtNV5lb9rMRaR7fzU=
-github.com/0chain/gosdk v1.12.1-0.20240206203835-f95b7551d4bf h1:0EVaQmr5mANzk0GZS70jXVgvnVgd8WUaqVca6duWdrQ=
-github.com/0chain/gosdk v1.12.1-0.20240206203835-f95b7551d4bf/go.mod h1:Mr2n7yz2pH2mfr1IZSuQ6Cvtw36UQjV0rYmnyHMBEYg=
+github.com/0chain/gosdk v1.12.1-0.20240207160420-c93fe2c32a7a h1:Mzx+EXqij/rI/UAaH+3sEud5WTwvtnJIZno8qb5fseY=
+github.com/0chain/gosdk v1.12.1-0.20240207160420-c93fe2c32a7a/go.mod h1:Mr2n7yz2pH2mfr1IZSuQ6Cvtw36UQjV0rYmnyHMBEYg=
 github.com/AndreasBriese/bbloom v0.0.0-20190306092124-e2d15f34fcf9/go.mod h1:bOvUY6CB00SOBii9/FifXqc0awNKxLFCL/+pkDPuyl8=
 github.com/Azure/azure-sdk-for-go/sdk/azcore v0.21.1/go.mod h1:fBF9PQNqB8scdgpZ3ufzaLntG0AG7C1WjPMsiFOmfHM=
 github.com/Azure/azure-sdk-for-go/sdk/internal v0.8.3/go.mod h1:KLF4gFr6DcKFZwSuH8w8yEK6DpFl3LP5rhdvAb7Yz5I=
@@ -310,8 +310,6 @@ github.com/hashicorp/go-rootcerts v1.0.2/go.mod h1:pqUvnprVnM5bf7AOirdbb01K4ccR3
 github.com/hashicorp/golang-lru/v2 v2.0.1/go.mod h1:QeFd9opnmA6QUJc5vARoKUSoFhyfM2/ZepoAG6RGpeM=
 github.com/hashicorp/serf v0.10.1/go.mod h1:yL2t6BqATOLGc5HF7qbFkTfXoPIY0WZdWHfEvMqbG+4=
 github.com/herumi/bls-go-binary v1.30.4 h1:djGiorPb4lFVRF/lsyB+EHVGVlcE7CYRmJKu72Vdpnk=
-github.com/hitenjain14/fasthttp v0.0.0-20240201092245-8e4835c0e974 h1:oEjH9SSKBlzwDyYjzZaqRpxo7GlfUJCyRoOk7QHKSDs=
-github.com/hitenjain14/fasthttp v0.0.0-20240201092245-8e4835c0e974/go.mod h1:RZMcXy7u4S+E97IXYTe7WHZ3+mCYOh4vys8PkIGZeXk=
 github.com/holiman/uint256 v1.2.0/go.mod h1:y4ga/t+u+Xwd7CpDgZESaRcWy0I7XMlTMA25ApIH5Jw=
 github.com/huin/goutil v0.0.0-20170803182201-1ca381bf3150/go.mod h1:PpLOETDnJ0o3iZrZfqZzyLl6l7F3c6L1oWn7OICBi6o=
 github.com/hydrogen18/memlistener v0.0.0-20200120041712-dcc25e7acd91/go.mod h1:qEIFzExnS6016fRpRfxrExeVn2gbClQA99gQhnIcdhE=
