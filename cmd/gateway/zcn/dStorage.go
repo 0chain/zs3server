@@ -252,10 +252,7 @@ func getFileReader(ctx context.Context,
 		if err != nil {
 			return nil, nil, "", err
 		}
-		if stat.IsDir() {
-			log.Println("^^^^^^^^getFileReader: file is a directory")
-			return nil, nil, "", errors.New("file is a directory")
-		}
+		log.Println("^^^^^^^^getFileReader: file stat: ", stat.IsDir())
 
 		log.Println("^^^^^^^^getFileReader: starting download")
 		st := time.Now()
