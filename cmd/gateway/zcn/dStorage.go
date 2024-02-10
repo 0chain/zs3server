@@ -245,7 +245,7 @@ func getFileReader(ctx context.Context,
 
 		log.Println("^^^^^^^^getFileReader: creating file handler")
 
-		r, err := os.Create(localFilePath)
+		r, err := os.CreateTemp("", "zcn*")
 		if err != nil {
 			log.Println("^^^^^^^^getFileReader: error creating file handler: ", err)
 			return nil, nil, "", err
