@@ -245,18 +245,11 @@ func getFileReader(ctx context.Context,
 
 		log.Println("^^^^^^^^getFileReader: creating file handler")
 
-		r, err := os.CreateTemp("", "zcn*")
+		r, err := os.Create(filepath.Join(tempdir, objectInfo.Name))
 		if err != nil {
 			log.Println("^^^^^^^^getFileReader: error creating file handler: ", err)
 			return nil, nil, "", err
 		}
-
-		stat, err := r.Stat()
-		if err != nil {
-			log.Println("^^^^^^^^getFileReader: error getting file stat: ", err)
-			return nil, nil, "", err
-		}
-		log.Println("^^^^^^^^getFileReader: file stat: ", stat.IsDir())
 
 		log.Println("^^^^^^^^getFileReader: starting download")
 		st := time.Now()
