@@ -2,6 +2,7 @@ package zcn
 
 import (
 	"context"
+	"crypto/md5"
 	"errors"
 	"fmt"
 	"io"
@@ -207,7 +208,7 @@ func getFileReader(ctx context.Context,
 	alloc *sdk.Allocation,
 	bucket, object, remotePath string) (*os.File, *minio.ObjectInfo, string, error) {
 
-	localFilePath := filepath.Join(tempdir, remotePath)
+	localFilePath := filepath.Join(tempdir, string(md5.New().Sum([]byte(remotePath))))
 
 	mu.Lock()
 	ds, ok := downloads[remotePath]
