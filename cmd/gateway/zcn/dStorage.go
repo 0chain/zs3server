@@ -206,7 +206,7 @@ func getObjectRef(alloc *sdk.Allocation, bucket, object, remotePath string) (*mi
 func getFileReader(ctx context.Context,
 	alloc *sdk.Allocation,
 	bucket, object, remotePath string) (*os.File, *minio.ObjectInfo, string, error) {
-
+	log.Println("^^^^^^^^getFileReader start: remotePath: ", remotePath)
 	localFilePath := filepath.Join(tempdir, remotePath)
 
 	mu.Lock()
@@ -243,9 +243,17 @@ func getFileReader(ctx context.Context,
 		ctx, ctxCncl = context.WithTimeout(ctx, getTimeOut(uint64(objectInfo.Size)))
 		defer ctxCncl()
 
+		log.Println("^^^^^^^^getFileReader: creating file handler")
+
+		f, err := os.Create(filepath.Join(tempdir, objectInfo.Name))
+		if err != nil {
+			log.Println("^^^^^^^^getFileReader: error creating file handler: ", err)
+			return nil, nil, "", err
+		}
+
 		log.Println("^^^^^^^^getFileReader: starting download")
 		st := time.Now()
-		err = alloc.DownloadFile(localFilePath, remotePath, false, &cb, true)
+		err = alloc.DownloadFileToFileHandler(f, remotePath, false, &cb, true)
 		if err != nil {
 			return nil, nil, "", err
 		}
@@ -263,10 +271,7 @@ func getFileReader(ctx context.Context,
 		ds.done = true
 		ds.downloadTime = tm
 		ds.wg.Done()
-		r, err := os.Open(localFilePath)
-		if err != nil {
-			return nil, nil, "", err
-		}
+		r, _ := os.Open(filepath.Join(tempdir, objectInfo.Name))
 		ds.reader = r
 		mu.Unlock()
 		log.Println("^^^^^^^^getFileReader: finish download")
@@ -292,6 +297,10 @@ func putFile(ctx context.Context, alloc *sdk.Allocation, remotePath, contentType
 	}
 
 	logger.Info("starting chunked upload")
+	chunkNumber := 300
+	if alloc.DataShards < 3 {
+		chunkNumber = 600
+	}
 	opRequest := sdk.OperationRequest{
 		OperationType: constants.FileOperationInsert,
 		FileReader:    newMinioReader(r),
@@ -299,7 +308,7 @@ func putFile(ctx context.Context, alloc *sdk.Allocation, remotePath, contentType
 		RemotePath:    remotePath,
 		FileMeta:      fileMeta,
 		Opts: []sdk.ChunkedUploadOption{
-			sdk.WithChunkNumber(250),
+			sdk.WithChunkNumber(chunkNumber),
 		},
 	}
 
