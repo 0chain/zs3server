@@ -206,7 +206,7 @@ func getObjectRef(alloc *sdk.Allocation, bucket, object, remotePath string) (*mi
 func getFileReader(ctx context.Context,
 	alloc *sdk.Allocation,
 	bucket, object, remotePath string) (*os.File, *minio.ObjectInfo, string, error) {
-
+	log.Println("^^^^^^^^getFileReader start: remotePath: ", remotePath)
 	localFilePath := filepath.Join(tempdir, remotePath)
 
 	mu.Lock()
