@@ -208,7 +208,11 @@ func getFileReader(ctx context.Context,
 	alloc *sdk.Allocation,
 	bucket, object, remotePath string) (*os.File, *minio.ObjectInfo, string, error) {
 
-	localFilePath := filepath.Join(tempdir, string(md5.New().Sum([]byte(remotePath))))
+	hasher := md5.New()
+	hasher.Write([]byte(remotePath))
+	md5Sum := hasher.Sum(nil)
+	log.Println("md5Sum: ", string(md5Sum))
+	localFilePath := filepath.Join(tempdir, string(md5Sum))
 
 	mu.Lock()
 	ds, ok := downloads[remotePath]
