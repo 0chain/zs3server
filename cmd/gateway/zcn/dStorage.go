@@ -243,13 +243,17 @@ func getFileReader(ctx context.Context,
 		ctx, ctxCncl = context.WithTimeout(ctx, getTimeOut(uint64(objectInfo.Size)))
 		defer ctxCncl()
 
+		log.Println("^^^^^^^^getFileReader: creating file handler")
+
 		r, err := os.Create(localFilePath)
 		if err != nil {
+			log.Println("^^^^^^^^getFileReader: error creating file handler: ", err)
 			return nil, nil, "", err
 		}
 
 		stat, err := r.Stat()
 		if err != nil {
+			log.Println("^^^^^^^^getFileReader: error getting file stat: ", err)
 			return nil, nil, "", err
 		}
 		log.Println("^^^^^^^^getFileReader: file stat: ", stat.IsDir())
