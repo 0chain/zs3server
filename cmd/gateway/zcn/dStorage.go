@@ -245,7 +245,7 @@ func getFileReader(ctx context.Context,
 
 		log.Println("^^^^^^^^getFileReader: creating file handler")
 
-		r, err := os.Create(filepath.Join(tempdir, objectInfo.Name))
+		f, err := os.Create(filepath.Join(tempdir, objectInfo.Name))
 		if err != nil {
 			log.Println("^^^^^^^^getFileReader: error creating file handler: ", err)
 			return nil, nil, "", err
@@ -253,7 +253,7 @@ func getFileReader(ctx context.Context,
 
 		log.Println("^^^^^^^^getFileReader: starting download")
 		st := time.Now()
-		err = alloc.DownloadFileToFileHandler(r, remotePath, false, &cb, true)
+		err = alloc.DownloadFileToFileHandler(f, remotePath, false, &cb, true)
 		if err != nil {
 			return nil, nil, "", err
 		}
@@ -271,6 +271,7 @@ func getFileReader(ctx context.Context,
 		ds.done = true
 		ds.downloadTime = tm
 		ds.wg.Done()
+		r, _ := os.Open(filepath.Join(tempdir, objectInfo.Name))
 		ds.reader = r
 		mu.Unlock()
 		log.Println("^^^^^^^^getFileReader: finish download")
