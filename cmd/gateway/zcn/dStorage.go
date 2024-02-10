@@ -3,6 +3,7 @@ package zcn
 import (
 	"context"
 	"crypto/md5"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -207,12 +208,13 @@ func getObjectRef(alloc *sdk.Allocation, bucket, object, remotePath string) (*mi
 func getFileReader(ctx context.Context,
 	alloc *sdk.Allocation,
 	bucket, object, remotePath string) (*os.File, *minio.ObjectInfo, string, error) {
-
+	log.Println("^^^^^^^^getFileReader: remotePath: ", remotePath)
 	hasher := md5.New()
 	hasher.Write([]byte(remotePath))
 	md5Sum := hasher.Sum(nil)
-	log.Println("md5Sum: ", string(md5Sum))
-	localFilePath := filepath.Join(tempdir, string(md5Sum))
+	hash := hex.EncodeToString(md5Sum)
+	log.Println("^^^^^^^^getFileReader: hash: ", hash)
+	localFilePath := filepath.Join(tempdir, hash)
 
 	mu.Lock()
 	ds, ok := downloads[remotePath]
