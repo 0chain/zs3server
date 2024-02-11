@@ -208,12 +208,10 @@ func getObjectRef(alloc *sdk.Allocation, bucket, object, remotePath string) (*mi
 func getFileReader(ctx context.Context,
 	alloc *sdk.Allocation,
 	bucket, object, remotePath string) (*os.File, *minio.ObjectInfo, string, error) {
-	log.Println("^^^^^^^^getFileReader: remotePath: ", remotePath)
 	hasher := md5.New()
 	hasher.Write([]byte(remotePath))
 	md5Sum := hasher.Sum(nil)
 	hash := hex.EncodeToString(md5Sum)
-	log.Println("^^^^^^^^getFileReader: hash: ", hash)
 	localFilePath := filepath.Join(tempdir, hash)
 
 	mu.Lock()
@@ -250,8 +248,12 @@ func getFileReader(ctx context.Context,
 		ctx, ctxCncl = context.WithTimeout(ctx, getTimeOut(uint64(objectInfo.Size)))
 		defer ctxCncl()
 
-		log.Println("^^^^^^^^getFileReader: starting download")
+		log.Println("^^^^^^^^getFileReader: starting download: ", localFilePath)
 		st := time.Now()
+		r, err := os.Create(localFilePath)
+		if err != nil {
+			return nil, nil, "", err
+		}
 		err = alloc.DownloadFile(localFilePath, remotePath, false, &cb, true)
 		if err != nil {
 			return nil, nil, "", err
@@ -270,10 +272,6 @@ func getFileReader(ctx context.Context,
 		ds.done = true
 		ds.downloadTime = tm
 		ds.wg.Done()
-		r, err := os.Open(localFilePath)
-		if err != nil {
-			return nil, nil, "", err
-		}
 		ds.reader = r
 		mu.Unlock()
 		log.Println("^^^^^^^^getFileReader: finish download")
