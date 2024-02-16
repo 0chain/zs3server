@@ -254,7 +254,7 @@ func getFileReader(ctx context.Context,
 		if err != nil {
 			return nil, nil, "", err
 		}
-		err = alloc.DownloadFile(localFilePath, remotePath, false, &cb, true)
+		err = alloc.DownloadFileToFileHandler(r, remotePath, false, &cb, true)
 		if err != nil {
 			return nil, nil, "", err
 		}
