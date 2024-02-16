@@ -402,7 +402,7 @@ func (zob *zcnObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 	} else {
 		remotePath = filepath.Join(rootPath, bucket, prefix)
 	}
-
+	log.Println("ListObjects remotePath: ", remotePath, " objFileType: ", objFileType)
 	var ref *sdk.ORef
 	ref, err = getSingleRegularRef(zob.alloc, remotePath)
 	if err != nil {
@@ -446,7 +446,7 @@ func (zob *zcnObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 	if delimiter != "" {
 		isDelimited = true
 	}
-
+	log.Println("ListObjects listRegularRefs: ", remotePath, " objFileType: ", objFileType)
 	refs, isTruncated, nextMarker, prefixes, err := listRegularRefs(zob.alloc, remotePath, marker, objFileType, maxKeys, isDelimited)
 	if err != nil {
 		if remotePath == rootPath && isPathNoExistError(err) {
