@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"os"
@@ -296,44 +295,35 @@ func (zob *zcnObjects) GetObjectNInfo(ctx context.Context, bucket, object string
 		remotePath = filepath.Join(rootPath, bucket, object)
 	}
 
-	f, objectInfo, localPath, err := getFileReader(ctx, zob.alloc, bucket, object, remotePath)
-	if err != nil {
-		return nil, err
+	var rangeStart int64 = 1
+	var rangeEnd int64 = 0
+	if rs != nil {
+		if rs.IsSuffixLength {
+			rangeStart = -rs.Start
+			// take absolute value of difference between start and end
+			rangeEnd = rangeStart
+			if rs.End-rs.Start > 0 {
+				rangeEnd += rs.End - rs.Start
+			} else {
+				rangeEnd += rs.Start - rs.End
+			}
+		} else {
+			rangeStart = rs.Start
+			rangeEnd = rs.End
+		}
 	}
 
-	finfo, err := f.Stat()
+	f, objectInfo, localPath, err := getFileReader(ctx, zob.alloc, bucket, object, remotePath, rangeStart, rangeEnd)
 	if err != nil {
 		return nil, err
 	}
-
-	startOffset, length, err := rs.GetOffsetLength(finfo.Size())
-	if err != nil {
-		return nil, err
-	}
-	log.Printf("~~~~~~~~~~~~~~~~~~~~~~~~ startOffset: %v, length: %v\n", startOffset, length)
 
 	fCloser := func() {
-		mu.Lock()
-		defer mu.Unlock()
-		ds, ok := downloads[remotePath]
-		if !ok {
-			log.Println("file closer - download status not found for ", remotePath)
-			return
-		}
-
-		ds.downloaded += length
-		if ds.downloaded >= ds.objectInfo.Size {
-			f.Close()
+		if localPath != "" {
 			os.Remove(localPath)
-			delete(downloads, remotePath)
-
-			log.Println("^^^^^^^^^^^ remove temp local file: ", localPath, "download from Zus:", ds.downloadTime)
 		}
 	}
-
-	r := io.NewSectionReader(f, startOffset, length)
-	log.Printf("~~~~~~~~~~~~~~~~~~~~~~~~~~~~section reader : %v\n", r)
-	gr, err = minio.NewGetObjectReaderFromReader(r, *objectInfo, opts, fCloser)
+	gr, err = minio.NewGetObjectReaderFromReader(f, *objectInfo, opts, fCloser)
 	return
 }
 
