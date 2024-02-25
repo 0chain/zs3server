@@ -270,9 +270,9 @@ func getFileReader(ctx context.Context,
 		}
 	} else {
 		localFilePath = ""
-		// create a memory file to store the data
-		// memoryFile := make([]byte, fileRangeSize)
-		// r = bytes.NewReader(memoryFile)
+		data := &sys.MemFile{}
+		data.InitBuffer(int(fileRangeSize))
+		r = data
 	}
 
 	err = alloc.DownloadByBlocksToFileHandler(r, remotePath, startBlock, endBlock, numBlocks, false, &cb, true)
