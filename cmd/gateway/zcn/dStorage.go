@@ -176,15 +176,15 @@ var (
 	mu sync.Mutex
 )
 
-func getObjectRef(alloc *sdk.Allocation, bucket, object, remotePath string) (*minio.ObjectInfo, error, bool) {
+func getObjectRef(alloc *sdk.Allocation, bucket, object, remotePath string) (*minio.ObjectInfo, bool, error) {
 	log.Printf("~~~~~~~~~~~~~~~~~~~~~~~~ get object info remotePath: %v\n", remotePath)
 	var isEncrypted bool
 	ref, err := getSingleRegularRef(alloc, remotePath)
 	if err != nil {
 		if isPathNoExistError(err) {
-			return nil, minio.ObjectNotFound{Bucket: bucket, Object: object}, isEncrypted
+			return nil, isEncrypted, minio.ObjectNotFound{Bucket: bucket, Object: object}
 		}
-		return nil, err, isEncrypted
+		return nil, isEncrypted, err
 	}
 	if ref.EncryptedKey != "" {
 		isEncrypted = true
@@ -198,7 +198,7 @@ func getObjectRef(alloc *sdk.Allocation, bucket, object, remotePath string) (*mi
 		ModTime: ref.UpdatedAt.ToTime(),
 		Size:    ref.ActualFileSize,
 		IsDir:   ref.Type == dirType,
-	}, nil, isEncrypted
+	}, isEncrypted, nil
 }
 
 func getFileReader(ctx context.Context,
@@ -216,7 +216,7 @@ func getFileReader(ctx context.Context,
 		errCh:  make(chan error, 1),
 	}
 
-	objectInfo, err, isEncrypted := getObjectRef(alloc, bucket, object, remotePath)
+	objectInfo, isEncrypted, err := getObjectRef(alloc, bucket, object, remotePath)
 	if err != nil {
 		return nil, nil, "", err
 	}
@@ -270,7 +270,6 @@ func getFileReader(ctx context.Context,
 	if startOffset < 0 {
 		startOffset = 0
 	}
-	mu.Lock()
 	_, err = r.Seek(startOffset, io.SeekStart)
 	if err != nil {
 		return nil, nil, "", err
@@ -278,7 +277,6 @@ func getFileReader(ctx context.Context,
 
 	// create a new limited reader
 	f := io.LimitReader(r, fileRangeSize)
-	mu.Unlock()
 	log.Println("^^^^^^^^getFileReader: finish download")
 	return f, objectInfo, localFilePath, nil
 
