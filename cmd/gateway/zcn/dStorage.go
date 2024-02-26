@@ -172,28 +172,22 @@ func getSingleRegularRef(alloc *sdk.Allocation, remotePath string) (*sdk.ORef, e
 	return &oREsult.Refs[0], nil
 }
 
-type downloadStatus struct {
-	wg           sync.WaitGroup
-	done         bool
-	reader       io.Reader
-	objectInfo   *minio.ObjectInfo
-	downloadTime time.Duration
-	downloaded   int64 // indicates the totay data that has responsed to client
-}
-
 var (
 	mu sync.Mutex
 )
 
-func getObjectRef(alloc *sdk.Allocation, bucket, object, remotePath string) (*minio.ObjectInfo, error) {
+func getObjectRef(alloc *sdk.Allocation, bucket, object, remotePath string) (*minio.ObjectInfo, error, bool) {
 	log.Printf("~~~~~~~~~~~~~~~~~~~~~~~~ get object info remotePath: %v\n", remotePath)
-
+	var isEncrypted bool
 	ref, err := getSingleRegularRef(alloc, remotePath)
 	if err != nil {
 		if isPathNoExistError(err) {
-			return nil, minio.ObjectNotFound{Bucket: bucket, Object: object}
+			return nil, minio.ObjectNotFound{Bucket: bucket, Object: object}, isEncrypted
 		}
-		return nil, err
+		return nil, err, isEncrypted
+	}
+	if ref.EncryptedKey != "" {
+		isEncrypted = true
 	}
 
 	log.Println("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~get object info, ref: ", ref)
@@ -204,7 +198,7 @@ func getObjectRef(alloc *sdk.Allocation, bucket, object, remotePath string) (*mi
 		ModTime: ref.UpdatedAt.ToTime(),
 		Size:    ref.ActualFileSize,
 		IsDir:   ref.Type == dirType,
-	}, nil
+	}, nil, isEncrypted
 }
 
 func getFileReader(ctx context.Context,
@@ -215,42 +209,29 @@ func getFileReader(ctx context.Context,
 	md5Sum := hasher.Sum(nil)
 	hash := hex.EncodeToString(md5Sum)
 	localFilePath := filepath.Join(tempdir, hash)
-
-	mu.Lock()
-
-	ds := &downloadStatus{}
-	ds.wg.Add(1)
-	mu.Unlock()
+	fileRangeSize := rangeEnd - rangeStart + 1
 
 	cb := statusCB{
 		doneCh: make(chan struct{}, 1),
 		errCh:  make(chan error, 1),
 	}
 
-	objectInfo, err := getObjectRef(alloc, bucket, object, remotePath)
+	objectInfo, err, isEncrypted := getObjectRef(alloc, bucket, object, remotePath)
 	if err != nil {
 		return nil, nil, "", err
 	}
-	ref, err := getSingleRegularRef(alloc, remotePath)
-	if err != nil {
-		return nil, nil, "", err
-	}
-	mu.Lock()
-	ds.objectInfo = objectInfo
-	mu.Unlock()
 
 	var ctxCncl context.CancelFunc
-	ctx, ctxCncl = context.WithTimeout(ctx, getTimeOut(uint64(objectInfo.Size)))
+	ctx, ctxCncl = context.WithTimeout(ctx, getTimeOut(uint64(fileRangeSize)))
 	defer ctxCncl()
 
 	var startBlock, endBlock int64
 	dataShards := int64(alloc.DataShards)
 	effectiveBlockSize := int64(defaultChunkSize)
-	if ref.EncryptedKey != "" {
+	if isEncrypted {
 		effectiveBlockSize -= sdk.EncryptionHeaderSize + sdk.EncryptedDataPaddingSize
 	}
 	effectiveChunkSize := effectiveBlockSize * int64(dataShards)
-	fileRangeSize := rangeEnd - rangeStart
 
 	if rangeEnd >= rangeStart {
 		startBlock = int64(rangeStart / effectiveChunkSize)
@@ -261,7 +242,6 @@ func getFileReader(ctx context.Context,
 	}
 
 	log.Println("^^^^^^^^getFileReader: starting download: ", localFilePath)
-	st := time.Now()
 	var r sys.File
 	if fileRangeSize > maxSizeForMemoryFile {
 		r, err = os.Create(localFilePath)
@@ -270,9 +250,7 @@ func getFileReader(ctx context.Context,
 		}
 	} else {
 		localFilePath = ""
-		data := &sys.MemFile{}
-		data.InitBuffer(int(fileRangeSize))
-		r = data
+		r = &sys.MemFile{}
 	}
 
 	err = alloc.DownloadByBlocksToFileHandler(r, remotePath, startBlock, endBlock, numBlocks, false, &cb, true)
@@ -287,19 +265,12 @@ func getFileReader(ctx context.Context,
 	case <-ctx.Done():
 		return nil, nil, "", errors.New("exceeded timeout")
 	}
-	tm := time.Since(st)
-
-	mu.Lock()
-	ds.done = true
-	ds.downloadTime = tm
-	ds.wg.Done()
 
 	startOffset := rangeStart - startBlock*effectiveChunkSize
 	if startOffset < 0 {
 		startOffset = 0
 	}
-
-	// create a new limited reader
+	mu.Lock()
 	_, err = r.Seek(startOffset, io.SeekStart)
 	if err != nil {
 		return nil, nil, "", err
@@ -307,10 +278,9 @@ func getFileReader(ctx context.Context,
 
 	// create a new limited reader
 	f := io.LimitReader(r, fileRangeSize)
-	ds.reader = f
 	mu.Unlock()
 	log.Println("^^^^^^^^getFileReader: finish download")
-	return f, ds.objectInfo, localFilePath, nil
+	return f, objectInfo, localFilePath, nil
 
 }
 
