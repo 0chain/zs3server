@@ -220,7 +220,9 @@ func getFileReader(ctx context.Context,
 	if err != nil {
 		return nil, nil, "", err
 	}
-
+	if rangeEnd < rangeStart {
+		fileRangeSize = objectInfo.Size
+	}
 	var ctxCncl context.CancelFunc
 	ctx, ctxCncl = context.WithTimeout(ctx, getTimeOut(uint64(fileRangeSize)))
 	defer ctxCncl()
@@ -235,7 +237,7 @@ func getFileReader(ctx context.Context,
 
 	if rangeEnd >= rangeStart {
 		startBlock = int64(rangeStart / effectiveChunkSize)
-		endBlock = int64(rangeEnd+effectiveChunkSize) / effectiveChunkSize
+		endBlock = int64(rangeEnd) / effectiveChunkSize
 	} else {
 		startBlock = 1
 		endBlock = 0
