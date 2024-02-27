@@ -62,10 +62,10 @@ github.com/0chain/common v0.0.6-0.20230127095721-8df4d1d72565 h1:z+DtCR8mBsjPnEs
 github.com/0chain/common v0.0.6-0.20230127095721-8df4d1d72565/go.mod h1:UyDC8Qyl5z9lGkCnf9RHJPMektnFX8XtCJZHXCCVj8E=
 github.com/0chain/errors v1.0.3 h1:QQZPFxTfnMcRdt32DXbzRQIfGWmBsKoEdszKQDb0rRM=
 github.com/0chain/errors v1.0.3/go.mod h1:xymD6nVgrbgttWwkpSCfLLEJbFO6iHGQwk/yeSuYkIc=
-github.com/0chain/gosdk v1.12.2-0.20240211180915-7e7c6e1f5750 h1:22jLXhw1+5DHl7zhx/mkG6lBraUin1o9igoshVp500g=
-github.com/0chain/gosdk v1.12.2-0.20240211180915-7e7c6e1f5750/go.mod h1:X4zmThbQVx6oWLgTihV3reMrPPoVnINb3s7WRJXbxR4=
 github.com/0chain/gosdk v1.12.2-0.20240216083031-ccd3c071678d h1:SYl+N0KBf1/HNfDy/khyTR3jV/7qWd1UY2QW0wBQ4zQ=
 github.com/0chain/gosdk v1.12.2-0.20240216083031-ccd3c071678d/go.mod h1:Mr2n7yz2pH2mfr1IZSuQ6Cvtw36UQjV0rYmnyHMBEYg=
+github.com/0chain/gosdk v1.12.2-0.20240227031105-dacf631c781d h1:ZL6Gos9Smir7FXZz3Du8JbTSW2inIpX8vdsxJ2kA3j4=
+github.com/0chain/gosdk v1.12.2-0.20240227031105-dacf631c781d/go.mod h1:UhPOdN/1HKqEjVPNS8Zph1Kl4NpWsBmQnqlh9NRsVDY=
 github.com/Azure/azure-amqp-common-go/v2 v2.1.0/go.mod h1:R8rea+gJRuJR6QxTir/XuEd+YuKoUiazDC/N96FiDEU=
 github.com/Azure/azure-pipeline-go v0.2.1/go.mod h1:UGSo8XybXnIGZ3epmeBw7Jdz+HiUVpqIlpz/HKHylF4=
 github.com/Azure/azure-pipeline-go v0.2.2 h1:6oiIS9yaG6XCCzhgAgKFfIWyo4LLCiDhZot6ltoThhY=
@@ -876,6 +876,7 @@ github.com/herumi/bls-go-binary v1.31.0 h1:L1goQ2tMtGgpXCg5AwHAdJQpLs/pfnWWEc3Wo
 github.com/herumi/bls-go-binary v1.31.0/go.mod h1:O4Vp1AfR4raRGwFeQpr9X/PQtncEicMoOe6BQt1oX0Y=
 github.com/hitenjain14/fasthttp v0.0.0-20240201092245-8e4835c0e974 h1:oEjH9SSKBlzwDyYjzZaqRpxo7GlfUJCyRoOk7QHKSDs=
 github.com/hitenjain14/fasthttp v0.0.0-20240201092245-8e4835c0e974/go.mod h1:RZMcXy7u4S+E97IXYTe7WHZ3+mCYOh4vys8PkIGZeXk=
+github.com/hitenjain14/fasthttp v0.0.0-20240223160417-7458814cf3d0/go.mod h1:RZMcXy7u4S+E97IXYTe7WHZ3+mCYOh4vys8PkIGZeXk=
 github.com/holiman/bloomfilter/v2 v2.0.3 h1:73e0e/V0tCydx14a0SCYS/EWCxgwLZ18CZcZKVu0fao=
 github.com/holiman/uint256 v1.2.2-0.20230321075855-87b91420868c h1:DZfsyhDK1hnSS5lH8l+JggqzEleHteTYfutAiVlSUM8=
 github.com/holiman/uint256 v1.2.2-0.20230321075855-87b91420868c/go.mod h1:SC8Ryt4n+UBbPbIBKaG9zbbDlp4jOru9xFZmPzLUTxw=
