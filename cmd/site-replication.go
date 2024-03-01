@@ -757,7 +757,7 @@ func (c *SiteReplicationSys) PeerBucketMakeWithVersioningHandler(ctx context.Con
 	}
 
 	meta, err := globalBucketMetadataSys.Get(bucket)
-	if err != nil {
+	if err != nil && err != errConfigNotFound {
 		logger.LogIf(ctx, c.annotateErr("MakeBucketErr on peer call", err))
 		return wrapSRErr(err)
 	}
