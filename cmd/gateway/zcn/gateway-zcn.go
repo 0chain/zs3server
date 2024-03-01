@@ -113,7 +113,7 @@ func (z *ZCN) NewGatewayLayer(creds madmin.Credentials) (minio.ObjectLayer, erro
 	if err != nil {
 		return nil, err
 	}
-
+	log.Println("0chain gosdk initialized: ", allocationID)
 	allocation, err := sdk.GetAllocation(allocationID)
 	if err != nil {
 		return nil, err
