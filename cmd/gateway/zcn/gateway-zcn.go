@@ -485,6 +485,9 @@ func getRelativePathOfObj(refPath, bucketName string) string {
 
 func (zob *zcnObjects) MakeBucketWithLocation(ctx context.Context, bucket string, opts minio.BucketOptions) error {
 	// Create a directory; ignore opts
+	if bucket == rootBucketName {
+		return nil
+	}
 	remotePath := filepath.Join(rootPath, bucket)
 	createDirOp := sdk.OperationRequest{
 		OperationType: constants.FileOperationCreateDir,
