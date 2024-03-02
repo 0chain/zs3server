@@ -73,7 +73,8 @@ func (api objectAPIHandlers) GetBucketNotificationHandler(w http.ResponseWriter,
 		return
 	}
 	config.SetRegion(globalSite.Region)
-	if err = config.Validate(globalSite.Region, globalNotificationSys.targetList); err != nil {
+	globalNotificationSys.targetList = globalConfigTargetList
+	if err = config.Validate(globalSite.Region, globalConfigTargetList); err != nil {
 		arnErr, ok := err.(*event.ErrARNNotFound)
 		if ok {
 			for i, queue := range config.QueueList {
