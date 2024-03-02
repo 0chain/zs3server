@@ -280,8 +280,10 @@ func (conf *Config) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {
 
 // Validate - checks whether config has valid values or not.
 func (conf Config) Validate(region string, targetList *TargetList) error {
+	log.Println("configList: ", conf.QueueList)
 	for _, queue := range conf.QueueList {
 		if err := queue.Validate(region, targetList); err != nil {
+			log.Println("queueErr: ", err, queue.ARN.TargetID)
 			return err
 		}
 	}
