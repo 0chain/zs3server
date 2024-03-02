@@ -309,10 +309,12 @@ func putFile(ctx context.Context, alloc *sdk.Allocation, remotePath, contentType
 		RemotePath:    remotePath,
 		FileMeta:      fileMeta,
 		Opts: []sdk.ChunkedUploadOption{
-			sdk.WithChunkNumber(250),
+			sdk.WithChunkNumber(120),
 		},
 	}
-
+	if isUpdate {
+		opRequest.OperationType = constants.FileOperationUpdate
+	}
 	err = alloc.DoMultiOperation([]sdk.OperationRequest{opRequest})
 	if err != nil {
 		logger.Error(err.Error())
