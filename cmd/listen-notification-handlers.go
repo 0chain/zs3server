@@ -40,15 +40,15 @@ func (api objectAPIHandlers) ListenNotificationHandler(w http.ResponseWriter, r 
 		return
 	}
 
-	if !objAPI.IsNotificationSupported() {
-		writeErrorResponse(ctx, w, errorCodes.ToAPIErr(ErrNotImplemented), r.URL)
-		return
-	}
+	// if !objAPI.IsNotificationSupported() {
+	// 	writeErrorResponse(ctx, w, errorCodes.ToAPIErr(ErrNotImplemented), r.URL)
+	// 	return
+	// }
 
-	if !objAPI.IsListenSupported() {
-		writeErrorResponse(ctx, w, errorCodes.ToAPIErr(ErrNotImplemented), r.URL)
-		return
-	}
+	// if !objAPI.IsListenSupported() {
+	// 	writeErrorResponse(ctx, w, errorCodes.ToAPIErr(ErrNotImplemented), r.URL)
+	// 	return
+	// }
 
 	vars := mux.Vars(r)
 	bucketName := vars["bucket"]
