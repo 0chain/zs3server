@@ -99,9 +99,10 @@ func (api objectAPIHandlers) GetBucketNotificationHandler(w http.ResponseWriter,
 			return
 		}
 	}
-
+	log.Println("putConfiDone")
 	configData, err := xml.Marshal(config)
 	if err != nil {
+		log.Println("putErr:", err)
 		writeErrorResponse(ctx, w, toAPIError(ctx, err), r.URL)
 		return
 	}
