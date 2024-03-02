@@ -22,6 +22,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -307,6 +308,7 @@ func FetchRegisteredTargets(ctx context.Context, cfg config.Config, transport *h
 	}
 
 	for id, args := range postgresTargets {
+		log.Println("adding postgres target: ", id)
 		if !args.Enable {
 			continue
 		}
@@ -318,6 +320,7 @@ func FetchRegisteredTargets(ctx context.Context, cfg config.Config, transport *h
 			}
 			_ = newTarget.Close()
 		}
+		log.Println("newTarget: ", newTarget.ID())
 		if err = targetList.Add(newTarget); err != nil {
 			logger.LogIf(context.Background(), err)
 			if returnOnTargetError {
