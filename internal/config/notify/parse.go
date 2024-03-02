@@ -74,9 +74,10 @@ func GetNotificationTargets(ctx context.Context, cfg config.Config, transport *h
 func RegisterNotificationTargets(ctx context.Context, cfg config.Config, transport *http.Transport, targetIDs []event.TargetID, test bool, returnOnTargetError bool) (*event.TargetList, error) {
 	targetList, err := FetchRegisteredTargets(ctx, cfg, transport, test, returnOnTargetError)
 	if err != nil {
+		log.Println("error: ", err)
 		return targetList, err
 	}
-
+	log.Println("targetList: ", targetList.List())
 	if test {
 		// Verify if user is trying to disable already configured
 		// notification targets, based on their target IDs
