@@ -95,6 +95,7 @@ func (api objectAPIHandlers) GetBucketNotificationHandler(w http.ResponseWriter,
 				// notification configs.
 			}
 		} else {
+			log.Println("putErr:", err)
 			writeErrorResponse(ctx, w, toAPIError(ctx, err), r.URL)
 			return
 		}
