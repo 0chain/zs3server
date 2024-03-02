@@ -20,6 +20,7 @@ package cmd
 import (
 	"encoding/xml"
 	"io"
+	"log"
 	"net/http"
 	"reflect"
 
@@ -54,7 +55,7 @@ func (api objectAPIHandlers) GetBucketNotificationHandler(w http.ResponseWriter,
 	// 	writeErrorResponse(ctx, w, errorCodes.ToAPIErr(ErrNotImplemented), r.URL)
 	// 	return
 	// }
-	logger.Info("bucketName: ", bucketName)
+	log.Println("bucketName: ", bucketName)
 	if s3Error := checkRequestAuthType(ctx, r, policy.GetBucketNotificationAction, bucketName, ""); s3Error != ErrNone {
 		writeErrorResponse(ctx, w, errorCodes.ToAPIErr(s3Error), r.URL)
 		return

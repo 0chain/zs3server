@@ -384,7 +384,7 @@ func (sys *BucketMetadataSys) GetConfig(bucket string) (BucketMetadata, error) {
 	}
 
 	if globalIsGateway {
-		return newBucketMetadata(bucket), NotImplemented{}
+		return newBucketMetadata(bucket), nil
 	}
 
 	if bucket == minioMetaBucket {
