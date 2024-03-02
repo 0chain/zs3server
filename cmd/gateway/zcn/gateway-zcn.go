@@ -139,6 +139,10 @@ func (zob *zcnObjects) Shutdown(ctx context.Context) error {
 	return nil
 }
 
+func (zob *zcnObjects) IsNotificationSupported() bool {
+	return true
+}
+
 func (zob *zcnObjects) Production() bool {
 	return true
 }
