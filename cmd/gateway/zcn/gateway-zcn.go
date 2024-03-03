@@ -220,13 +220,15 @@ func (zob *zcnObjects) DeleteObjects(ctx context.Context, bucket string, objects
 		err := zob.alloc.DeleteFile(remotePath)
 		if err != nil {
 			errs = append(errs, err)
+			delObs = append(delObs, minio.DeletedObject{})
 		} else {
 			delObs = append(delObs, minio.DeletedObject{
 				ObjectName: object.ObjectName,
 			})
+			errs = append(errs, nil)
 		}
 	}
-	log.Println("DeletedObjects")
+	log.Println("DeletedObjects", len(delObs), len(errs))
 	return
 }
 
