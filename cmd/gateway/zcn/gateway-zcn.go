@@ -226,6 +226,7 @@ func (zob *zcnObjects) DeleteObjects(ctx context.Context, bucket string, objects
 			})
 		}
 	}
+	log.Println("DeletedObjects")
 	return
 }
 

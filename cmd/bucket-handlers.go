@@ -25,6 +25,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/textproto"
 	"net/url"
@@ -69,11 +70,16 @@ const (
 // - Check if a bucket has an entry in etcd backend
 // -- If no, make an entry
 // -- If yes, check if the entry matches local IP check if we
-//    need to update the entry then proceed to update
+//
+//	need to update the entry then proceed to update
+//
 // -- If yes, check if the IP of entry matches local IP.
-//    This means entry is for this instance.
+//
+//	This means entry is for this instance.
+//
 // -- If IP of the entry doesn't match, this means entry is
-//    for another instance. Log an error to console.
+//
+//	for another instance. Log an error to console.
 func initFederatorBackend(buckets []BucketInfo, objLayer ObjectLayer) {
 	if len(buckets) == 0 {
 		return
@@ -229,7 +235,6 @@ func (api objectAPIHandlers) GetBucketLocationHandler(w http.ResponseWriter, r *
 // using the Initiate Multipart Upload request, but has not yet been
 // completed or aborted. This operation returns at most 1,000 multipart
 // uploads in the response.
-//
 func (api objectAPIHandlers) ListMultipartUploadsHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := newContext(r, w, "ListMultipartUploads")
 
@@ -447,7 +452,7 @@ func (api objectAPIHandlers) DeleteMultipleObjectsHandler(w http.ResponseWriter,
 	if api.CacheAPI() != nil {
 		deleteObjectsFn = api.CacheAPI().DeleteObjects
 	}
-
+	log.Println("multipleDeleteCalled")
 	// Return Malformed XML as S3 spec if the number of objects is empty
 	if len(deleteObjectsReq.Objects) == 0 || len(deleteObjectsReq.Objects) > maxDeleteList {
 		writeErrorResponse(ctx, w, errorCodes.ToAPIErr(ErrMalformedXML), r.URL)
