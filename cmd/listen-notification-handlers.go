@@ -19,6 +19,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"time"
 
@@ -137,7 +138,9 @@ func (api objectAPIHandlers) ListenNotificationHandler(w http.ResponseWriter, r 
 				return false
 			}
 		}
-		return rulesMap.MatchSimple(ev.EventName, ev.S3.Object.Key)
+		match := rulesMap.MatchSimple(ev.EventName, ev.S3.Object.Key)
+		log.Println("matchRule: ", ev.EventName, ev.S3.Object.Key, match)
+		return match
 	})
 
 	if bucketName != "" {
