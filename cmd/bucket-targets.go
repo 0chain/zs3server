@@ -30,7 +30,6 @@ import (
 	miniogo "github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/minio/minio/internal/bucket/replication"
-	"github.com/minio/minio/internal/bucket/versioning"
 	"github.com/minio/minio/internal/crypto"
 	"github.com/minio/minio/internal/kms"
 	"github.com/minio/minio/internal/logger"
@@ -122,24 +121,24 @@ func (sys *BucketTargetSys) SetTarget(ctx context.Context, bucket string, tgt *m
 		}
 		return BucketRemoteConnectionErr{Bucket: tgt.TargetBucket, Err: err}
 	}
-	if tgt.Type == madmin.ReplicationService {
-		if !globalIsErasure {
-			return NotImplemented{Message: "Replication is not implemented in " + getMinioMode()}
-		}
-		if !globalBucketVersioningSys.Enabled(bucket) {
-			log.Println("versioningSysError: ", err)
-			return BucketReplicationSourceNotVersioned{Bucket: bucket}
-		}
-		vcfg, err := clnt.GetBucketVersioning(ctx, tgt.TargetBucket)
-		if err != nil {
-			log.Println("getBucketVersioning: ", err)
-			return BucketRemoteConnectionErr{Bucket: tgt.TargetBucket, Err: err}
-		}
-		if vcfg.Status != string(versioning.Enabled) {
-			log.Println("noVersioning")
-			return BucketRemoteTargetNotVersioned{Bucket: tgt.TargetBucket}
-		}
-	}
+	// if tgt.Type == madmin.ReplicationService {
+	// 	if !globalIsErasure {
+	// 		return NotImplemented{Message: "Replication is not implemented in " + getMinioMode()}
+	// 	}
+	// 	if !globalBucketVersioningSys.Enabled(bucket) {
+	// 		log.Println("versioningSysError: ", err)
+	// 		return BucketReplicationSourceNotVersioned{Bucket: bucket}
+	// 	}
+	// vcfg, err := clnt.GetBucketVersioning(ctx, tgt.TargetBucket)
+	// if err != nil {
+	// 	log.Println("getBucketVersioning: ", err)
+	// 	return BucketRemoteConnectionErr{Bucket: tgt.TargetBucket, Err: err}
+	// }
+	// if vcfg.Status != string(versioning.Enabled) {
+	// 	log.Println("noVersioning")
+	// 	return BucketRemoteTargetNotVersioned{Bucket: tgt.TargetBucket}
+	// }
+	// }
 	sys.Lock()
 	defer sys.Unlock()
 
