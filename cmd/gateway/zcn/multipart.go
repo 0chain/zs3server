@@ -37,7 +37,7 @@ type MultiPartFile struct {
 	lastPartSize  int64
 	lastPartID    int
 	readyToUpload bool
-	opWg          sync.WaitGroup
+	errorC        chan error
 	seqPQ         *seqpriorityqueue.SeqPriorityQueue
 	doneC         chan struct{} // indicates that the uploading is done
 	readyUploadC  chan struct{} // indicates we are ready to start the uploading
@@ -107,10 +107,22 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object string
 	// log.Println("initial upload...")
 
 	// Generate a unique upload ID
+	var isUpdate bool
+	remotePath := "/" + filepath.Join(bucket, object)
+	ref, err := getSingleRegularRef(zob.alloc, remotePath)
+	if err != nil {
+		if !isPathNoExistError(err) {
+			return "", err
+		}
+	}
+
+	if ref != nil {
+		isUpdate = true
+	}
 	uploadID := uuid.New().String()
 	mapLock.Lock()
 	memFile := &sys.MemChanFile{
-		Buffer: make(chan []byte, 10),
+		Buffer: make(chan []byte, 100),
 		// false means encrypt is false
 		ChunkWriteSize: int(zob.alloc.GetChunkReadSize(false)),
 	}
@@ -118,8 +130,9 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object string
 	multiPartFile := &MultiPartFile{
 		memFile:      memFile,
 		seqPQ:        seqpriorityqueue.NewSeqPriorityQueue(),
+		errorC:       make(chan error),
 		doneC:        make(chan struct{}),
-		dataC:        make(chan []byte, 100),
+		dataC:        make(chan []byte, 120),
 		readyUploadC: make(chan struct{}),
 		cancelC:      make(chan struct{}),
 	}
@@ -191,7 +204,7 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object string
 		fileMeta := sdk.FileMeta{
 			ActualSize: multiPartFile.fileSize, // Need to set the actual size
 			RemoteName: object,
-			RemotePath: "/" + filepath.Join(bucket, object),
+			RemotePath: remotePath,
 			MimeType:   "application/octet-stream", // can get from request
 		}
 		options := []sdk.ChunkedUploadOption{
@@ -205,12 +218,15 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object string
 			RemotePath:    fileMeta.RemotePath,
 		}
 		// if its update change operation type
-		multiPartFile.opWg.Add(1)
+		if isUpdate {
+			operationRequest.OperationType = constants.FileOperationUpdate
+		}
+
 		go func() {
 			// run this in background, will block until the data is written to memFile
 			// We should add ctx here to cancel the operation
-			_ = zob.alloc.DoMultiOperation([]sdk.OperationRequest{operationRequest})
-			multiPartFile.opWg.Done()
+			multiPartFile.errorC <- zob.alloc.DoMultiOperation([]sdk.OperationRequest{operationRequest})
+
 		}()
 
 		for {
@@ -354,7 +370,11 @@ func (zob *zcnObjects) CompleteMultipartUpload(ctx context.Context, bucket, obje
 	// wait for upload to finish
 	multiPartFile.seqPQ.Done()
 	<-multiPartFile.doneC
-	multiPartFile.opWg.Wait()
+	err = <-multiPartFile.errorC
+	if err != nil && !isSameRootError(err) {
+		log.Println("Error uploading to Zus storage:", err)
+		return minio.ObjectInfo{}, fmt.Errorf("error uploading to Zus storage: %v", err)
+	}
 	log.Println("finish uploading!!")
 
 	eTag, err := zob.constructCompleteObject(bucket, uploadID, object, localStorageDir, multiPartFile)

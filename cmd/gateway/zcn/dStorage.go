@@ -316,11 +316,11 @@ func putFile(ctx context.Context, alloc *sdk.Allocation, remotePath, contentType
 		opRequest.OperationType = constants.FileOperationUpdate
 	}
 	err = alloc.DoMultiOperation([]sdk.OperationRequest{opRequest})
-	if err != nil {
+	if err != nil && !isSameRootError(err) {
 		logger.Error(err.Error())
 		return
 	}
-
+	err = nil
 	return
 }
 
@@ -366,4 +366,11 @@ func isConsensusFailedError(err error) bool {
 		}
 	}
 	return false
+}
+
+func isSameRootError(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(err.Error(), "previous allocation root are same")
 }
