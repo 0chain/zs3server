@@ -370,9 +370,11 @@ func (zob *zcnObjects) CompleteMultipartUpload(ctx context.Context, bucket, obje
 	}
 
 	return minio.ObjectInfo{
-		Bucket: bucket,
-		Name:   object,
-		ETag:   eTag,
+		Bucket:  bucket,
+		Name:    object,
+		ETag:    eTag,
+		Size:    multiPartFile.fileSize,
+		ModTime: time.Now(),
 	}, nil
 }
 
