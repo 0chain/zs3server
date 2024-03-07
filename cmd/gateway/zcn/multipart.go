@@ -33,21 +33,25 @@ var (
 const PartSize = 1024 * 1024 * 5
 
 type MultiPartFile struct {
-	memFile      *sys.MemChanFile
-	lock         sync.Mutex
-	fileSize     int64
-	lastPartSize int64
-	lastPartID   int
-	errorC       chan error
-	seqPQ        *seqpriorityqueue.SeqPriorityQueue
-	doneC        chan struct{} // indicates that the uploading is done
-	cancelC      chan struct{} // indicate the cancel of the uploading
-	dataC        chan []byte   // data to be uploaded
+	memFile         *sys.MemChanFile
+	lock            sync.Mutex
+	fileSize        int64
+	lastPartSize    int64
+	lastPartID      int
+	lastPartUpdated bool
+	errorC          chan error
+	seqPQ           *seqpriorityqueue.SeqPriorityQueue
+	doneC           chan struct{} // indicates that the uploading is done
+	cancelC         chan struct{} // indicate the cancel of the uploading
+	dataC           chan []byte   // data to be uploaded
 }
 
 func (mpf *MultiPartFile) UpdateFileSize(partID int, size int64) {
 	mpf.lock.Lock()
 	defer mpf.lock.Unlock()
+	if mpf.lastPartUpdated {
+		return
+	}
 
 	// the first arrived part
 	if mpf.lastPartSize == 0 {
@@ -73,6 +77,7 @@ func (mpf *MultiPartFile) UpdateFileSize(partID int, size int64) {
 
 	// this is last part
 	mpf.fileSize = int64(partID-1)*mpf.lastPartSize + size
+	mpf.lastPartUpdated = true
 	log.Println("see last part, partID:", partID, "file size:", mpf.fileSize)
 }
 
@@ -158,12 +163,12 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object string
 						log.Panic(err)
 					}
 
-					cn, err := io.Copy(multiPartFile.memFile, bytes.NewBuffer(bbuf))
+					cn, err := multiPartFile.memFile.Write(bbuf)
 					if err != nil {
 						log.Panicf("upoad part failed, err: %v", err)
 					}
 					multiPartFile.memFile.Sync() //nolint:errcheck
-					total += cn
+					total += int64(cn)
 					log.Println("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ uploaded:", total, " new:", cn)
 				} else {
 					cn, err := io.Copy(multiPartFile.memFile, &buf)
@@ -181,14 +186,6 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object string
 	}()
 
 	go func() {
-		// select {
-		// case <-multiPartFile.readyUploadC:
-		// 	log.Println("ready to upload to Zus storage...")
-		// case <-multiPartFile.cancelC:
-		// 	log.Println("uploading is canceled, clean up temp dirs")
-		// 	// TODO: clean up temp dirs
-		// 	return
-		// }
 		// Create fileMeta and sdk.OperationRequest
 		fileMeta := sdk.FileMeta{
 			RemoteName: object,
@@ -380,7 +377,7 @@ func (zob *zcnObjects) CompleteMultipartUpload(ctx context.Context, bucket, obje
 		// http.Error(w, "Error cleaning up part files and directories", http.StatusInternalServerError)
 		return minio.ObjectInfo{}, fmt.Errorf("error cleaning up part files and directories: %v", err)
 	}
-
+	log.Println("finish uploading: ", multiPartFile.fileSize, " name: ", object)
 	return minio.ObjectInfo{
 		Bucket:  bucket,
 		Name:    object,
