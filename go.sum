@@ -62,10 +62,8 @@ github.com/0chain/common v0.0.6-0.20230127095721-8df4d1d72565 h1:z+DtCR8mBsjPnEs
 github.com/0chain/common v0.0.6-0.20230127095721-8df4d1d72565/go.mod h1:UyDC8Qyl5z9lGkCnf9RHJPMektnFX8XtCJZHXCCVj8E=
 github.com/0chain/errors v1.0.3 h1:QQZPFxTfnMcRdt32DXbzRQIfGWmBsKoEdszKQDb0rRM=
 github.com/0chain/errors v1.0.3/go.mod h1:xymD6nVgrbgttWwkpSCfLLEJbFO6iHGQwk/yeSuYkIc=
-github.com/0chain/gosdk v1.12.2-0.20240228142253-4ef37441dc02 h1:AihoSDeQWyIj8G6jyPckOYSa9aUixwTBRT2LkzAyL/M=
-github.com/0chain/gosdk v1.12.2-0.20240228142253-4ef37441dc02/go.mod h1:S0+qLC3UFkV9YCl8UpfGtF7v/vnY2v/gWYcP1lkksFM=
-github.com/0chain/gosdk v1.12.2-0.20240305162515-c1492fd537a3 h1:kTe/Fcw4MvUgmQnuEmT5Jce/tuV0wGbVXjlTaFNshvA=
-github.com/0chain/gosdk v1.12.2-0.20240305162515-c1492fd537a3/go.mod h1:RRBLJvF1FsPkG95D+8UxeasgpFxnLO5s7QV2svXg69E=
+github.com/0chain/gosdk v1.13.0-RC2.0.20240307132527-ffeeb086a3fc h1:TY3IxqckPFTFoiqWyJitazMcXCJ8N9cA35ljcUSCLPQ=
+github.com/0chain/gosdk v1.13.0-RC2.0.20240307132527-ffeeb086a3fc/go.mod h1:RRBLJvF1FsPkG95D+8UxeasgpFxnLO5s7QV2svXg69E=
 github.com/Azure/azure-amqp-common-go/v2 v2.1.0/go.mod h1:R8rea+gJRuJR6QxTir/XuEd+YuKoUiazDC/N96FiDEU=
 github.com/Azure/azure-pipeline-go v0.2.1/go.mod h1:UGSo8XybXnIGZ3epmeBw7Jdz+HiUVpqIlpz/HKHylF4=
 github.com/Azure/azure-pipeline-go v0.2.2 h1:6oiIS9yaG6XCCzhgAgKFfIWyo4LLCiDhZot6ltoThhY=
@@ -758,6 +756,8 @@ github.com/google/uuid v1.1.2/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+
 github.com/google/uuid v1.2.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
 github.com/google/uuid v1.3.0 h1:t6JiXgmwXMjEs8VusXIJk2BXHsn+wx8BZdTaoZ5fu7I=
 github.com/google/uuid v1.3.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
+github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
+github.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
 github.com/google/wire v0.3.0/go.mod h1:i1DMg/Lu8Sz5yYl25iOdmc5CT5qusaa+zmRWs16741s=
 github.com/google/wire v0.4.0/go.mod h1:ngWDr9Qvq3yZA10YrxfyGELY/AFWGVpy9c1LTRi1EoU=
 github.com/googleapis/enterprise-certificate-proxy v0.2.3 h1:yk9/cqRKtT9wXZSsRH9aurXEpJX+U6FLtpYTdC3R06k=
@@ -874,8 +874,7 @@ github.com/hashicorp/yamux v0.0.0-20180604194846-3520598351bb/go.mod h1:+NfK9FKe
 github.com/hashicorp/yamux v0.0.0-20181012175058-2f1d1f20f75d/go.mod h1:+NfK9FKeTrX5uv1uIXGdwYDTeHna2qgaIlx54MXqjAM=
 github.com/herumi/bls-go-binary v1.31.0 h1:L1goQ2tMtGgpXCg5AwHAdJQpLs/pfnWWEc3Wog6OhmI=
 github.com/herumi/bls-go-binary v1.31.0/go.mod h1:O4Vp1AfR4raRGwFeQpr9X/PQtncEicMoOe6BQt1oX0Y=
-github.com/hitenjain14/fasthttp v0.0.0-20240227151421-139719e36869 h1:KHIKUta8OTyHMdmlEsgv3bf1xX3bMw8LswBTfikjfVQ=
-github.com/hitenjain14/fasthttp v0.0.0-20240227151421-139719e36869/go.mod h1:RZMcXy7u4S+E97IXYTe7WHZ3+mCYOh4vys8PkIGZeXk=
+github.com/hitenjain14/fasthttp v0.0.0-20240229173600-722723e15e17 h1:FbyIK0BfvXVZTOxKOe2dlxJqSPSF2ZXOv2Mc7dvS7sc=
 github.com/hitenjain14/fasthttp v0.0.0-20240229173600-722723e15e17/go.mod h1:RZMcXy7u4S+E97IXYTe7WHZ3+mCYOh4vys8PkIGZeXk=
 github.com/holiman/bloomfilter/v2 v2.0.3 h1:73e0e/V0tCydx14a0SCYS/EWCxgwLZ18CZcZKVu0fao=
 github.com/holiman/uint256 v1.2.2-0.20230321075855-87b91420868c h1:DZfsyhDK1hnSS5lH8l+JggqzEleHteTYfutAiVlSUM8=

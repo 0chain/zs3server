@@ -5,7 +5,7 @@ go 1.20
 require (
 	cloud.google.com/go/storage v1.27.0
 	github.com/0chain/errors v1.0.3
-	github.com/0chain/gosdk v1.12.2-0.20240305162515-c1492fd537a3
+	github.com/0chain/gosdk v1.13.0-RC2.0.20240307132527-ffeeb086a3fc
 	github.com/Azure/azure-pipeline-go v0.2.2
 	github.com/Azure/azure-storage-blob-go v0.10.0
 	github.com/Shopify/sarama v1.28.0
@@ -33,7 +33,7 @@ require (
 	github.com/go-sql-driver/mysql v1.5.0
 	github.com/golang-jwt/jwt/v4 v4.3.0
 	github.com/gomodule/redigo v1.8.8
-	github.com/google/uuid v1.3.0
+	github.com/google/uuid v1.6.0
 	github.com/gorilla/mux v1.8.0
 	github.com/hashicorp/golang-lru v0.5.5-0.20210104140557-80c98217689d
 	github.com/inconshreveable/mousetrap v1.0.0
