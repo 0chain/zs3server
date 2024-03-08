@@ -108,7 +108,7 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object string
 	uploadID := uuid.New().String()
 	mapLock.Lock()
 	memFile := &sys.MemChanFile{
-		Buffer: make(chan []byte, 120),
+		Buffer: make(chan []byte, 240),
 		// false means encrypt is false
 		ChunkWriteSize: int(zob.alloc.GetChunkReadSize(false)),
 		ErrChan:        make(chan error),
