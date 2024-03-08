@@ -193,7 +193,7 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object string
 			MimeType:   "application/octet-stream", // can get from request
 		}
 		options := []sdk.ChunkedUploadOption{
-			sdk.WithChunkNumber(160),
+			sdk.WithChunkNumber(80),
 		}
 		operationRequest := sdk.OperationRequest{
 			FileMeta:      fileMeta,
