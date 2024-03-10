@@ -13,7 +13,7 @@ import (
 	"strings"
 	"sync"
 	"time"
-
+"github.com/pierrec/lz4"
 	"github.com/0chain/gosdk/constants"
 	"github.com/0chain/gosdk/core/sys"
 	"github.com/0chain/gosdk/zboxcore/sdk"
@@ -290,13 +290,23 @@ func (zob *zcnObjects) PutObjectPart(ctx context.Context, bucket, object, upload
 		if err == io.EOF {
 			size += n
 			// Write the part data to the part file
-			if _, err := partFile.Write(buf[:n]); err != nil {
+
+			ht := make([]int, 64<<10)
+	compressedbuf := make([]byte, lz4.CompressBlockBound(len(buf)))
+	compressedsize, errr := lz4.CompressBlock(buf, compressedbuf,ht)
+size=compressedsize
+if errr!=nil {
+	fmt.Errorf("Error is %v",errr)
+}
+
+			if _, err := partFile.Write(compressedbuf[:size]); err != nil {
 				log.Println(err)
 				return minio.PartInfo{}, fmt.Errorf("error writing part data: %v", err)
 			}
 
+			
 			// Update the hash with the read data
-			hash.Write(buf[:n])
+			hash.Write(compressedbuf[:n])
 			break // End of file
 		} else if err != nil {
 			log.Println(err)
@@ -304,14 +314,21 @@ func (zob *zcnObjects) PutObjectPart(ctx context.Context, bucket, object, upload
 		}
 		size += n
 
+ht := make([]int, 64<<10)
+	compressed_buf := make([]byte, lz4.CompressBlockBound(len(buf)))
+	compressed_size, errr := lz4.CompressBlock(buf, compressed_buf,ht)
+size=compressed_size
+if errr!=nil {
+	fmt.Errorf("Error is %v",errr)
+}
 		// Write the part data to the part file
-		if _, err := partFile.Write(buf[:n]); err != nil {
+		if _, err := partFile.Write(compressed_buf[:size]); err != nil {
 			log.Println(err)
 			return minio.PartInfo{}, fmt.Errorf("error writing part data: %v", err)
 		}
 
 		// Update the hash with the read data
-		hash.Write(buf[:n])
+		hash.Write(compressed_buf[:size])
 	}
 
 	seqPQ.Push(partID)
