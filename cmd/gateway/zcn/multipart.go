@@ -157,6 +157,9 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object string
 					}
 
 					n := buf.Len() / memFile.ChunkWriteSize
+					if buf.Len()%memFile.ChunkWriteSize == 0 && n > 1 {
+						n--
+					}
 					bbuf := make([]byte, n*memFile.ChunkWriteSize)
 					_, err = buf.Read(bbuf)
 					if err != nil {
