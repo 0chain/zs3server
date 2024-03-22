@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/0chain/gosdk/constants"
-	"github.com/0chain/gosdk/core/sys"
 	"github.com/0chain/gosdk/zboxcore/sdk"
 	"github.com/google/uuid"
 
@@ -33,7 +32,7 @@ var (
 const PartSize = 1024 * 1024 * 5
 
 type MultiPartFile struct {
-	memFile         *sys.MemChanFile
+	memFile         *memFile
 	lock            sync.Mutex
 	fileSize        int64
 	lastPartSize    int64
@@ -107,13 +106,12 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object string
 	}
 	uploadID := uuid.New().String()
 	mapLock.Lock()
-	memFile := &sys.MemChanFile{
-		Buffer: make(chan []byte, 240),
-		// false means encrypt is false
-		ChunkWriteSize: int(zob.alloc.GetChunkReadSize(false)),
-		ErrChan:        make(chan error),
+	memFile := &memFile{
+		memFileDataChan: make(chan memFileData, 240),
+		errChan:         make(chan error),
 	}
-	log.Println("ChunkReadSize:", memFile.ChunkWriteSize)
+	chunkWriteSize := int(zob.alloc.GetChunkReadSize(false))
+	log.Println("ChunkReadSize:", chunkWriteSize)
 	multiPartFile := &MultiPartFile{
 		memFile: memFile,
 		seqPQ:   seqpriorityqueue.NewSeqPriorityQueue(),
@@ -142,12 +140,12 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object string
 			select {
 			case <-multiPartFile.cancelC:
 				log.Println("uploading is canceled, clean up temp dirs")
-				memFile.ErrChan <- fmt.Errorf("uploading is canceled")
+				memFile.errChan <- fmt.Errorf("uploading is canceled")
 				// TODO: clean up temp dirs
 				return
 			case <-ctx.Done():
 				log.Println("uploading is timeout, clean up temp dirs")
-				memFile.ErrChan <- fmt.Errorf("uploading is timeout")
+				memFile.errChan <- fmt.Errorf("uploading is timeout")
 				return
 			case data, ok := <-multiPartFile.dataC:
 				if ok {
@@ -156,31 +154,51 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object string
 						log.Panic(err)
 					}
 
-					n := buf.Len() / memFile.ChunkWriteSize
-					if buf.Len()%memFile.ChunkWriteSize == 0 && n > 1 {
+					n := buf.Len() / chunkWriteSize
+					if buf.Len()%chunkWriteSize == 0 && n > 1 {
 						n--
 					}
-					bbuf := make([]byte, n*memFile.ChunkWriteSize)
+					bbuf := make([]byte, n*chunkWriteSize)
 					_, err = buf.Read(bbuf)
 					if err != nil {
 						log.Panic(err)
 					}
 
-					cn, err := multiPartFile.memFile.Write(bbuf)
-					if err != nil {
-						log.Panicf("upoad part failed, err: %v", err)
+					current := 0
+					for ; current < len(bbuf); current += chunkWriteSize {
+						memFileData := memFileData{}
+						end := current + chunkWriteSize
+						if end > len(bbuf) {
+							end = len(bbuf)
+						}
+						memFileData.buf = bbuf[current:end]
+						multiPartFile.memFile.memFileDataChan <- memFileData
 					}
-					multiPartFile.memFile.Sync() //nolint:errcheck
+					cn := len(bbuf)
+
 					total += int64(cn)
 					log.Println("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ uploaded:", total, " new:", cn)
 				} else {
-					cn, err := io.Copy(multiPartFile.memFile, &buf)
+					bbuf := make([]byte, buf.Len())
+					_, err := buf.Read(bbuf)
 					if err != nil {
-						log.Panic(err)
+						multiPartFile.memFile.errChan <- err
+						return
 					}
-					multiPartFile.memFile.Sync() //nolint:errcheck
-					multiPartFile.memFile.Close()
-					total += cn
+					current := 0
+					for ; current < len(bbuf); current += chunkWriteSize {
+						memFileData := memFileData{}
+						end := current + chunkWriteSize
+						if end > len(bbuf) {
+							end = len(bbuf)
+							memFileData.err = io.EOF
+						}
+						memFileData.buf = bbuf[current:end]
+						multiPartFile.memFile.memFileDataChan <- memFileData
+					}
+					cn := len(bbuf)
+					close(multiPartFile.memFile.memFileDataChan)
+					total += int64(cn)
 					log.Println("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ uploaded:", total, " new:", cn, " duration:", time.Since(st))
 					return
 				}
@@ -222,7 +240,7 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object string
 			select {
 			case <-multiPartFile.cancelC:
 				log.Println("uploading is canceled, clean up temp dirs")
-				multiPartFile.memFile.ErrChan <- fmt.Errorf("uploading is canceled")
+				multiPartFile.memFile.errChan <- fmt.Errorf("uploading is canceled")
 				// TODO: clean up temp dirs
 				return
 			default:
