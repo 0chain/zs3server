@@ -25,7 +25,6 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/textproto"
 	"net/url"
@@ -452,7 +451,7 @@ func (api objectAPIHandlers) DeleteMultipleObjectsHandler(w http.ResponseWriter,
 	if api.CacheAPI() != nil {
 		deleteObjectsFn = api.CacheAPI().DeleteObjects
 	}
-	log.Println("multipleDeleteCalled")
+
 	// Return Malformed XML as S3 spec if the number of objects is empty
 	if len(deleteObjectsReq.Objects) == 0 || len(deleteObjectsReq.Objects) > maxDeleteList {
 		writeErrorResponse(ctx, w, errorCodes.ToAPIErr(ErrMalformedXML), r.URL)

@@ -66,6 +66,8 @@ github.com/0chain/gosdk v1.13.0-RC2.0.20240307132527-ffeeb086a3fc h1:TY3IxqckPFT
 github.com/0chain/gosdk v1.13.0-RC2.0.20240307132527-ffeeb086a3fc/go.mod h1:RRBLJvF1FsPkG95D+8UxeasgpFxnLO5s7QV2svXg69E=
 github.com/0chain/gosdk v1.13.0-RC2.0.20240308193132-4646770f748c h1:YxfwQXl0RQsIu+6UUytezHHtXcbhfWD+RuuwfrzSW8A=
 github.com/0chain/gosdk v1.13.0-RC2.0.20240308193132-4646770f748c/go.mod h1:RRBLJvF1FsPkG95D+8UxeasgpFxnLO5s7QV2svXg69E=
+github.com/0chain/gosdk v1.13.4-0.20240326204309-2af64fe92787 h1:wsvu6pnGzArhAJJwkxCy6/p0jmdsvDIOeqgPCNe4Rac=
+github.com/0chain/gosdk v1.13.4-0.20240326204309-2af64fe92787/go.mod h1:P8ha0wz3B43sDKD0AxqFDI8EyqLghcvY8g29xFJrBsg=
 github.com/Azure/azure-amqp-common-go/v2 v2.1.0/go.mod h1:R8rea+gJRuJR6QxTir/XuEd+YuKoUiazDC/N96FiDEU=
 github.com/Azure/azure-pipeline-go v0.2.1/go.mod h1:UGSo8XybXnIGZ3epmeBw7Jdz+HiUVpqIlpz/HKHylF4=
 github.com/Azure/azure-pipeline-go v0.2.2 h1:6oiIS9yaG6XCCzhgAgKFfIWyo4LLCiDhZot6ltoThhY=
@@ -1577,6 +1579,7 @@ github.com/stretchr/testify v1.7.1/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/
 github.com/stretchr/testify v1.8.0/go.mod h1:yNjHg4UonilssWZ8iaSj1OCr/vHnekPRkoO+kdMU+MU=
 github.com/stretchr/testify v1.8.1 h1:w7B6lhMri9wdJUVmEZPGGhZzrYTPvgJArz7wNPgYKsk=
 github.com/stretchr/testify v1.8.1/go.mod h1:w2LPCIKwWwSfY2zedu0+kehJoqGctiVI29o6fzry7u4=
+github.com/stretchr/testify v1.8.4/go.mod h1:sz/lmYIOXD/1dqDmKjjqLyZ2RngseejIcXlSw2iwfAo=
 github.com/subosito/gotenv v1.2.0/go.mod h1:N0PQaV/YGNqwC0u51sEeR/aUtSLEXKX9iv69rRypqCw=
 github.com/subosito/gotenv v1.4.2 h1:X1TuBLAMDFbaTAChgCBLu3DU3UPyELpnF2jjJ2cz/S8=
 github.com/subosito/gotenv v1.4.2/go.mod h1:ayKnFf/c6rvx/2iiLrJUk1e6plDbT3edrFNGqEflhK0=

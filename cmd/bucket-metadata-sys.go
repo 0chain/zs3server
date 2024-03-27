@@ -80,20 +80,6 @@ func (sys *BucketMetadataSys) Update(bucket string, configFile string, configDat
 		return errServerNotInitialized
 	}
 
-	// if globalIsGateway && globalGatewayName != NASBackendGateway {
-	// 	if configFile == bucketPolicyConfig {
-	// 		if configData == nil {
-	// 			return objAPI.DeleteBucketPolicy(GlobalContext, bucket)
-	// 		}
-	// 		config, err := policy.ParseConfig(bytes.NewReader(configData), bucket)
-	// 		if err != nil {
-	// 			return err
-	// 		}
-	// 		return objAPI.SetBucketPolicy(GlobalContext, bucket, config)
-	// 	}
-	// 	return NotImplemented{}
-	// }
-
 	if bucket == minioMetaBucket {
 		return errInvalidArgument
 	}

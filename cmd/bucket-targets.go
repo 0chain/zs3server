@@ -102,9 +102,6 @@ func (sys *BucketTargetSys) Delete(bucket string) {
 
 // SetTarget - sets a new minio-go client target for this bucket.
 func (sys *BucketTargetSys) SetTarget(ctx context.Context, bucket string, tgt *madmin.BucketTarget, update bool) error {
-	// if globalIsGateway {
-	// 	return nil
-	// }
 	if !tgt.Type.IsValid() && !update {
 		return BucketRemoteArnTypeInvalid{Bucket: bucket}
 	}
@@ -121,24 +118,7 @@ func (sys *BucketTargetSys) SetTarget(ctx context.Context, bucket string, tgt *m
 		}
 		return BucketRemoteConnectionErr{Bucket: tgt.TargetBucket, Err: err}
 	}
-	// if tgt.Type == madmin.ReplicationService {
-	// 	if !globalIsErasure {
-	// 		return NotImplemented{Message: "Replication is not implemented in " + getMinioMode()}
-	// 	}
-	// 	if !globalBucketVersioningSys.Enabled(bucket) {
-	// 		log.Println("versioningSysError: ", err)
-	// 		return BucketReplicationSourceNotVersioned{Bucket: bucket}
-	// 	}
-	// vcfg, err := clnt.GetBucketVersioning(ctx, tgt.TargetBucket)
-	// if err != nil {
-	// 	log.Println("getBucketVersioning: ", err)
-	// 	return BucketRemoteConnectionErr{Bucket: tgt.TargetBucket, Err: err}
-	// }
-	// if vcfg.Status != string(versioning.Enabled) {
-	// 	log.Println("noVersioning")
-	// 	return BucketRemoteTargetNotVersioned{Bucket: tgt.TargetBucket}
-	// }
-	// }
+
 	sys.Lock()
 	defer sys.Unlock()
 
