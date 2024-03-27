@@ -19,6 +19,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"time"
 
@@ -37,16 +38,6 @@ func (api objectAPIHandlers) ListenNotificationHandler(w http.ResponseWriter, r 
 	objAPI := api.ObjectAPI()
 	if objAPI == nil {
 		writeErrorResponse(ctx, w, errorCodes.ToAPIErr(ErrServerNotInitialized), r.URL)
-		return
-	}
-
-	if !objAPI.IsNotificationSupported() {
-		writeErrorResponse(ctx, w, errorCodes.ToAPIErr(ErrNotImplemented), r.URL)
-		return
-	}
-
-	if !objAPI.IsListenSupported() {
-		writeErrorResponse(ctx, w, errorCodes.ToAPIErr(ErrNotImplemented), r.URL)
 		return
 	}
 
@@ -137,7 +128,9 @@ func (api objectAPIHandlers) ListenNotificationHandler(w http.ResponseWriter, r 
 				return false
 			}
 		}
-		return rulesMap.MatchSimple(ev.EventName, ev.S3.Object.Key)
+		match := rulesMap.MatchSimple(ev.EventName, ev.S3.Object.Key)
+		log.Println("matchRule: ", ev.EventName, ev.S3.Object.Key, match)
+		return match
 	})
 
 	if bucketName != "" {

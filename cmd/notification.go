@@ -24,6 +24,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"sort"
@@ -1414,7 +1415,7 @@ func sendEvent(args eventArgs) {
 	if globalNotificationSys == nil {
 		return
 	}
-
+	log.Println("sendEvent:", args.EventName, args.Object.Name)
 	if globalHTTPListen.NumSubscribers() > 0 {
 		globalHTTPListen.Publish(args.ToEvent(false))
 	}
@@ -1525,9 +1526,9 @@ func (sys *NotificationSys) GetClusterMetrics(ctx context.Context) chan Metric {
 // 'freeze' is 'false' would resume all S3 API calls again.
 // NOTE: once a tenant is frozen either two things needs to
 // happen before resuming normal operations.
-// - Server needs to be restarted 'mc admin service restart'
-// - 'freeze' should be set to 'false' for this call
-//   to resume normal operations.
+//   - Server needs to be restarted 'mc admin service restart'
+//   - 'freeze' should be set to 'false' for this call
+//     to resume normal operations.
 func (sys *NotificationSys) ServiceFreeze(ctx context.Context, freeze bool) []NotificationPeerErr {
 	serviceSig := serviceUnFreeze
 	if freeze {

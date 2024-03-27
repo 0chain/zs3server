@@ -18,10 +18,10 @@
 package cmd
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"sync"
 
 	"github.com/minio/madmin-go"
@@ -80,26 +80,13 @@ func (sys *BucketMetadataSys) Update(bucket string, configFile string, configDat
 		return errServerNotInitialized
 	}
 
-	if globalIsGateway && globalGatewayName != NASBackendGateway {
-		if configFile == bucketPolicyConfig {
-			if configData == nil {
-				return objAPI.DeleteBucketPolicy(GlobalContext, bucket)
-			}
-			config, err := policy.ParseConfig(bytes.NewReader(configData), bucket)
-			if err != nil {
-				return err
-			}
-			return objAPI.SetBucketPolicy(GlobalContext, bucket, config)
-		}
-		return NotImplemented{}
-	}
-
 	if bucket == minioMetaBucket {
 		return errInvalidArgument
 	}
 
 	meta, err := loadBucketMetadata(GlobalContext, objAPI, bucket)
 	if err != nil {
+		log.Println("Error loading bucket metadata", err)
 		if !globalIsErasure && !globalIsDistErasure && errors.Is(err, errVolumeNotFound) {
 			// Only single drive mode needs this fallback.
 			meta = newBucketMetadata(bucket)
@@ -384,7 +371,7 @@ func (sys *BucketMetadataSys) GetConfig(bucket string) (BucketMetadata, error) {
 	}
 
 	if globalIsGateway {
-		return newBucketMetadata(bucket), NotImplemented{}
+		return newBucketMetadata(bucket), nil
 	}
 
 	if bucket == minioMetaBucket {

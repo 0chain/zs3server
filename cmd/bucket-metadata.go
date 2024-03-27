@@ -106,7 +106,8 @@ func newBucketMetadata(name string) BucketMetadata {
 		},
 		quotaConfig: &madmin.BucketQuota{},
 		versioningConfig: &versioning.Versioning{
-			XMLNS: "http://s3.amazonaws.com/doc/2006-03-01/",
+			XMLNS:  "http://s3.amazonaws.com/doc/2006-03-01/",
+			Status: "Enabled",
 		},
 		bucketTargetConfig:     &madmin.BucketTargets{},
 		bucketTargetConfigMeta: make(map[string]string),

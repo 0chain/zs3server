@@ -22,6 +22,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -73,9 +74,10 @@ func GetNotificationTargets(ctx context.Context, cfg config.Config, transport *h
 func RegisterNotificationTargets(ctx context.Context, cfg config.Config, transport *http.Transport, targetIDs []event.TargetID, test bool, returnOnTargetError bool) (*event.TargetList, error) {
 	targetList, err := FetchRegisteredTargets(ctx, cfg, transport, test, returnOnTargetError)
 	if err != nil {
+		log.Println("error: ", err)
 		return targetList, err
 	}
-
+	log.Println("targetList: ", targetList.List())
 	if test {
 		// Verify if user is trying to disable already configured
 		// notification targets, based on their target IDs
@@ -307,6 +309,7 @@ func FetchRegisteredTargets(ctx context.Context, cfg config.Config, transport *h
 	}
 
 	for id, args := range postgresTargets {
+		log.Println("adding postgres target: ", id)
 		if !args.Enable {
 			continue
 		}
@@ -318,6 +321,7 @@ func FetchRegisteredTargets(ctx context.Context, cfg config.Config, transport *h
 			}
 			_ = newTarget.Close()
 		}
+		log.Println("newTarget: ", newTarget.ID())
 		if err = targetList.Add(newTarget); err != nil {
 			logger.LogIf(context.Background(), err)
 			if returnOnTargetError {

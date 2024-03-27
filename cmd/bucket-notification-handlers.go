@@ -20,6 +20,7 @@ package cmd
 import (
 	"encoding/xml"
 	"io"
+	"log"
 	"net/http"
 	"reflect"
 
@@ -50,11 +51,6 @@ func (api objectAPIHandlers) GetBucketNotificationHandler(w http.ResponseWriter,
 		return
 	}
 
-	if !objAPI.IsNotificationSupported() {
-		writeErrorResponse(ctx, w, errorCodes.ToAPIErr(ErrNotImplemented), r.URL)
-		return
-	}
-
 	if s3Error := checkRequestAuthType(ctx, r, policy.GetBucketNotificationAction, bucketName, ""); s3Error != ErrNone {
 		writeErrorResponse(ctx, w, errorCodes.ToAPIErr(s3Error), r.URL)
 		return
@@ -72,7 +68,9 @@ func (api objectAPIHandlers) GetBucketNotificationHandler(w http.ResponseWriter,
 		return
 	}
 	config.SetRegion(globalSite.Region)
-	if err = config.Validate(globalSite.Region, globalNotificationSys.targetList); err != nil {
+	globalNotificationSys.targetList = globalConfigTargetList
+	if err = config.Validate(globalSite.Region, globalConfigTargetList); err != nil {
+		log.Println("putErr:", err)
 		arnErr, ok := err.(*event.ErrARNNotFound)
 		if ok {
 			for i, queue := range config.QueueList {
@@ -92,13 +90,15 @@ func (api objectAPIHandlers) GetBucketNotificationHandler(w http.ResponseWriter,
 				// notification configs.
 			}
 		} else {
+			log.Println("putErr:", err)
 			writeErrorResponse(ctx, w, toAPIError(ctx, err), r.URL)
 			return
 		}
 	}
-
+	log.Println("putConfiDone")
 	configData, err := xml.Marshal(config)
 	if err != nil {
+		log.Println("putErr:", err)
 		writeErrorResponse(ctx, w, toAPIError(ctx, err), r.URL)
 		return
 	}
@@ -119,13 +119,10 @@ func (api objectAPIHandlers) PutBucketNotificationHandler(w http.ResponseWriter,
 		return
 	}
 
-	if !objectAPI.IsNotificationSupported() {
-		writeErrorResponse(ctx, w, errorCodes.ToAPIErr(ErrNotImplemented), r.URL)
-		return
-	}
-
 	vars := mux.Vars(r)
 	bucketName := vars["bucket"]
+
+	log.Println("putEventBucketName: ", bucketName)
 
 	if s3Error := checkRequestAuthType(ctx, r, policy.PutBucketNotificationAction, bucketName, ""); s3Error != ErrNone {
 		writeErrorResponse(ctx, w, errorCodes.ToAPIErr(s3Error), r.URL)
