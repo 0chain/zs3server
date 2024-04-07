@@ -114,7 +114,7 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object string
 	multiPartFile := &MultiPartFile{
 		memFile: memFile,
 		seqPQ:   seqpriorityqueue.NewSeqPriorityQueue(),
-		errorC:  make(chan error),
+		errorC:  make(chan error, 1),
 		doneC:   make(chan struct{}),
 		dataC:   make(chan []byte, 20),
 		cancelC: make(chan struct{}),
@@ -386,7 +386,6 @@ func (zob *zcnObjects) CompleteMultipartUpload(ctx context.Context, bucket, obje
 
 	// wait for upload to finish
 	multiPartFile.seqPQ.Done()
-	<-multiPartFile.doneC
 	err = <-multiPartFile.errorC
 	if err != nil && !isSameRootError(err) {
 		log.Println("Error uploading to Zus storage:", err)
