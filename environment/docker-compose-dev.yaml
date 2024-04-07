@@ -46,7 +46,7 @@ services:
       MINIO_NOTIFY_POSTGRES_ENABLE_PRIMARY: "on"
       MINIO_NOTIFY_POSTGRES_CONNECTION_STRING_PRIMARY: "postgres://postgres:postgres@postgres-db/postgres?sslmode=disable"
       MINIO_NOTIFY_POSTGRES_TABLE_PRIMARY: "minioevents"
-      MINIO_NOTIFY_POSTGRES_FORMAT_PRIMARY: "namespace|access"
+      MINIO_NOTIFY_POSTGRES_FORMAT_PRIMARY: "namespace"
       
     links:
       - logsearchapi:logsearchapi
