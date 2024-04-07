@@ -118,7 +118,7 @@ func (z *ZCN) NewGatewayLayer(creds madmin.Credentials) (minio.ObjectLayer, erro
 	if err != nil {
 		return nil, err
 	}
-
+	sdk.CurrentMode = sdk.UploadModeHigh
 	zob := &zcnObjects{
 		alloc:   allocation,
 		metrics: minio.NewMetrics(),
