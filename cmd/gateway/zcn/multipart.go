@@ -111,7 +111,6 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object string
 		errChan:         make(chan error),
 	}
 	chunkWriteSize := int(zob.alloc.GetChunkReadSize(false))
-	log.Println("ChunkReadSize:", chunkWriteSize)
 	multiPartFile := &MultiPartFile{
 		memFile: memFile,
 		seqPQ:   seqpriorityqueue.NewSeqPriorityQueue(),
@@ -142,10 +141,12 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object string
 				log.Println("uploading is canceled, clean up temp dirs")
 				memFile.errChan <- fmt.Errorf("uploading is canceled")
 				// TODO: clean up temp dirs
+				_ = os.Remove(bucketPath)
 				return
 			case <-ctx.Done():
 				log.Println("uploading is timeout, clean up temp dirs")
 				memFile.errChan <- fmt.Errorf("uploading is timeout")
+				_ = os.Remove(bucketPath)
 				return
 			case data, ok := <-multiPartFile.dataC:
 				if ok {
@@ -242,6 +243,7 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object string
 				log.Println("uploading is canceled, clean up temp dirs")
 				multiPartFile.memFile.errChan <- fmt.Errorf("uploading is canceled")
 				// TODO: clean up temp dirs
+				_ = os.Remove(bucketPath)
 				return
 			default:
 				partNumber := multiPartFile.seqPQ.Popup()
@@ -250,6 +252,7 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object string
 				if partNumber == -1 {
 					close(multiPartFile.dataC)
 					close(multiPartFile.doneC)
+					_ = os.Remove(bucketPath)
 					log.Println("==================================== popup done")
 					return
 				}
@@ -263,8 +266,12 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object string
 						log.Panicf("could not open part file: %v, err: %v", partFilename, err)
 					}
 					defer partFile.Close()
-
-					data, err := io.ReadAll(partFile)
+					stat, err := partFile.Stat()
+					if err != nil {
+						log.Panicf("could not stat part file: %v, err: %v", partFilename, err)
+					}
+					data := make([]byte, stat.Size())
+					_, err = io.ReadFull(partFile, data)
 					if err != nil {
 						log.Panicf("read part: %v failed, err: %v", partNumber, err)
 					}
