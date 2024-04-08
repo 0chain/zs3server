@@ -320,12 +320,6 @@ func (zob *zcnObjects) GetObjectNInfo(ctx context.Context, bucket, object string
 			rangeEnd = rs.End
 		}
 	}
-	if rangeStart <= 0 {
-		rangeStart = 1
-	}
-	if rangeEnd < 0 {
-		rangeEnd = 0
-	}
 
 	f, objectInfo, localPath, err := getFileReader(ctx, zob.alloc, bucket, object, remotePath, rangeStart, rangeEnd)
 	if err != nil {

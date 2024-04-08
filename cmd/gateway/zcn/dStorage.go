@@ -237,14 +237,21 @@ func getFileReader(ctx context.Context,
 
 	if rangeEnd >= rangeStart {
 		startBlock = int64(rangeStart / effectiveChunkSize)
+		if startBlock == 0 {
+			startBlock = 1
+		}
 		endBlock = int64(rangeEnd) / effectiveChunkSize
 	} else {
 		startBlock = 1
 		endBlock = 0
 	}
 
-	if rangeStart > rangeEnd && rangeEnd == 0 && rangeStart > 0 {
+	if rangeEnd == -1 {
 		endBlock = 0
+		startBlock = int64(rangeStart / effectiveChunkSize)
+		if startBlock == 0 {
+			startBlock = 1
+		}
 		fileRangeSize = objectInfo.Size - rangeStart
 	}
 	log.Println("^^^^^^^^getFileReader: starting download: ", startBlock, endBlock, rangeStart, rangeEnd)
