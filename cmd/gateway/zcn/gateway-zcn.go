@@ -305,6 +305,7 @@ func (zob *zcnObjects) GetObjectNInfo(ctx context.Context, bucket, object string
 	var rangeStart int64 = 1
 	var rangeEnd int64 = 0
 	if rs != nil {
+		log.Println("rsSpec: ", rs.IsSuffixLength, rs.Start, rs.End)
 		if rs.IsSuffixLength {
 			rangeStart = -rs.Start
 			// take absolute value of difference between start and end

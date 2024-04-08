@@ -257,6 +257,7 @@ func getFileReader(ctx context.Context,
 
 	err = alloc.DownloadByBlocksToFileHandler(r, remotePath, startBlock, endBlock, numBlocks, false, &cb, true)
 	if err != nil {
+		log.Println("download error: ", startBlock, endBlock, rangeStart, rangeEnd)
 		return nil, nil, "", err
 	}
 
