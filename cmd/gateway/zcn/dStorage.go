@@ -2,8 +2,6 @@ package zcn
 
 import (
 	"context"
-	"crypto/md5"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -18,6 +16,7 @@ import (
 	"github.com/0chain/gosdk/constants"
 	"github.com/0chain/gosdk/core/sys"
 	"github.com/0chain/gosdk/zboxcore/sdk"
+	"github.com/google/uuid"
 	minio "github.com/minio/minio/cmd"
 	"github.com/minio/minio/internal/logger"
 	"github.com/mitchellh/go-homedir"
@@ -204,11 +203,8 @@ func getObjectRef(alloc *sdk.Allocation, bucket, object, remotePath string) (*mi
 func getFileReader(ctx context.Context,
 	alloc *sdk.Allocation,
 	bucket, object, remotePath string, rangeStart int64, rangeEnd int64) (io.Reader, *minio.ObjectInfo, string, error) {
-	hasher := md5.New()
-	hasher.Write([]byte(remotePath))
-	md5Sum := hasher.Sum(nil)
-	hash := hex.EncodeToString(md5Sum)
-	localFilePath := filepath.Join(tempdir, hash)
+	downloadID := uuid.New().String()
+	localFilePath := filepath.Join(tempdir, downloadID)
 	fileRangeSize := rangeEnd - rangeStart + 1
 
 	cb := statusCB{
