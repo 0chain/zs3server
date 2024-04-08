@@ -243,6 +243,10 @@ func getFileReader(ctx context.Context,
 		endBlock = 0
 	}
 
+	if rangeStart > rangeEnd && rangeEnd == 0 && rangeStart > 0 {
+		endBlock = 0
+		fileRangeSize = objectInfo.Size - rangeStart
+	}
 	log.Println("^^^^^^^^getFileReader: starting download: ", startBlock, endBlock, rangeStart, rangeEnd)
 	var r sys.File
 	if fileRangeSize > maxSizeForMemoryFile {

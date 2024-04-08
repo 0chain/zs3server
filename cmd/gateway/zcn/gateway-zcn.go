@@ -320,7 +320,7 @@ func (zob *zcnObjects) GetObjectNInfo(ctx context.Context, bucket, object string
 			rangeEnd = rs.End
 		}
 	}
-	if rangeStart < 0 {
+	if rangeStart <= 0 {
 		rangeStart = 1
 	}
 	if rangeEnd < 0 {
