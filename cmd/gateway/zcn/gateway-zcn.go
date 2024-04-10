@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"os"
@@ -114,12 +113,12 @@ func (z *ZCN) NewGatewayLayer(creds madmin.Credentials) (minio.ObjectLayer, erro
 	if err != nil {
 		return nil, err
 	}
-
+	log.Println("0chain gosdk initialized: ", allocationID)
 	allocation, err := sdk.GetAllocation(allocationID)
 	if err != nil {
 		return nil, err
 	}
-
+	sdk.CurrentMode = sdk.UploadModeHigh
 	zob := &zcnObjects{
 		alloc:   allocation,
 		metrics: minio.NewMetrics(),
@@ -138,6 +137,10 @@ type zcnObjects struct {
 func (zob *zcnObjects) Shutdown(ctx context.Context) error {
 	os.RemoveAll(tempdir)
 	return nil
+}
+
+func (zob *zcnObjects) IsNotificationSupported() bool {
+	return true
 }
 
 func (zob *zcnObjects) Production() bool {
@@ -194,7 +197,7 @@ func (zob *zcnObjects) DeleteObject(ctx context.Context, bucket, object string, 
 	if err != nil {
 		return
 	}
-
+	log.Println("Deleted object: ", remotePath)
 	return minio.ObjectInfo{
 		Bucket:  bucket,
 		Name:    ref.Name,
@@ -217,12 +220,15 @@ func (zob *zcnObjects) DeleteObjects(ctx context.Context, bucket string, objects
 		err := zob.alloc.DeleteFile(remotePath)
 		if err != nil {
 			errs = append(errs, err)
+			delObs = append(delObs, minio.DeletedObject{})
 		} else {
 			delObs = append(delObs, minio.DeletedObject{
 				ObjectName: object.ObjectName,
 			})
+			errs = append(errs, nil)
 		}
 	}
+	log.Println("DeletedObjects", len(delObs), len(errs))
 	return
 }
 
@@ -296,44 +302,36 @@ func (zob *zcnObjects) GetObjectNInfo(ctx context.Context, bucket, object string
 		remotePath = filepath.Join(rootPath, bucket, object)
 	}
 
-	f, objectInfo, localPath, err := getFileReader(ctx, zob.alloc, bucket, object, remotePath)
-	if err != nil {
-		return nil, err
+	var rangeStart int64 = 1
+	var rangeEnd int64 = 0
+	if rs != nil {
+		log.Println("rsSpec: ", rs.IsSuffixLength, rs.Start, rs.End)
+		if rs.IsSuffixLength {
+			rangeStart = -rs.Start
+			// take absolute value of difference between start and end
+			rangeEnd = rangeStart
+			if rs.End-rs.Start > 0 {
+				rangeEnd += rs.End - rs.Start
+			} else {
+				rangeEnd += rs.Start - rs.End
+			}
+		} else {
+			rangeStart = rs.Start
+			rangeEnd = rs.End
+		}
 	}
 
-	finfo, err := f.Stat()
+	f, objectInfo, localPath, err := getFileReader(ctx, zob.alloc, bucket, object, remotePath, rangeStart, rangeEnd)
 	if err != nil {
 		return nil, err
 	}
-
-	startOffset, length, err := rs.GetOffsetLength(finfo.Size())
-	if err != nil {
-		return nil, err
-	}
-	log.Printf("~~~~~~~~~~~~~~~~~~~~~~~~ startOffset: %v, length: %v\n", startOffset, length)
 
 	fCloser := func() {
-		mu.Lock()
-		defer mu.Unlock()
-		ds, ok := downloads[remotePath]
-		if !ok {
-			log.Println("file closer - download status not found for ", remotePath)
-			return
-		}
-
-		ds.downloaded += length
-		if ds.downloaded >= ds.objectInfo.Size {
-			f.Close()
+		if localPath != "" {
 			os.Remove(localPath)
-			delete(downloads, remotePath)
-
-			log.Println("^^^^^^^^^^^ remove temp local file: ", localPath, "download from Zus:", ds.downloadTime)
 		}
 	}
-
-	r := io.NewSectionReader(f, startOffset, length)
-	log.Printf("~~~~~~~~~~~~~~~~~~~~~~~~~~~~section reader : %v\n", r)
-	gr, err = minio.NewGetObjectReaderFromReader(r, *objectInfo, opts, fCloser)
+	gr, err = minio.NewGetObjectReaderFromReader(f, *objectInfo, opts, fCloser)
 	return
 }
 
@@ -402,7 +400,7 @@ func (zob *zcnObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 	} else {
 		remotePath = filepath.Join(rootPath, bucket, prefix)
 	}
-
+	log.Println("ListObjects remotePath: ", remotePath, " objFileType: ", objFileType)
 	var ref *sdk.ORef
 	ref, err = getSingleRegularRef(zob.alloc, remotePath)
 	if err != nil {
@@ -446,7 +444,7 @@ func (zob *zcnObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 	if delimiter != "" {
 		isDelimited = true
 	}
-
+	log.Println("ListObjects listRegularRefs: ", remotePath, " objFileType: ", objFileType)
 	refs, isTruncated, nextMarker, prefixes, err := listRegularRefs(zob.alloc, remotePath, marker, objFileType, maxKeys, isDelimited)
 	if err != nil {
 		if remotePath == rootPath && isPathNoExistError(err) {
@@ -495,6 +493,9 @@ func getRelativePathOfObj(refPath, bucketName string) string {
 
 func (zob *zcnObjects) MakeBucketWithLocation(ctx context.Context, bucket string, opts minio.BucketOptions) error {
 	// Create a directory; ignore opts
+	if bucket == rootBucketName {
+		return nil
+	}
 	remotePath := filepath.Join(rootPath, bucket)
 	createDirOp := sdk.OperationRequest{
 		OperationType: constants.FileOperationCreateDir,

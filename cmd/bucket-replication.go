@@ -21,6 +21,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"math"
 	"net/http"
 	"reflect"
@@ -172,20 +173,22 @@ func getMustReplicateOptions(o ObjectInfo, op replication.Type, opts ObjectOptio
 // mustReplicate returns 2 booleans - true if object meets replication criteria and true if replication is to be done in
 // a synchronous manner.
 func mustReplicate(ctx context.Context, bucket, object string, mopts mustReplicateOptions) (dsc ReplicateDecision) {
-	if globalIsGateway {
-		return
-	}
+	// if globalIsGateway {
+	// 	return
+	// }
 
 	replStatus := mopts.ReplicationStatus()
 	if replStatus == replication.Replica && !mopts.isMetadataReplication() {
+		log.Println("replication.Replica")
 		return
 	}
 
-	if mopts.replicationRequest { // incoming replication request on target cluster
-		return
-	}
+	// if mopts.replicationRequest { // incoming replication request on target cluster
+	// 	return
+	// }
 	cfg, err := getReplicationConfig(ctx, bucket)
 	if err != nil {
+		log.Println("getReplicationConfig: ", err)
 		return
 	}
 	opts := replication.ObjectOpts{
@@ -209,6 +212,7 @@ func mustReplicate(ctx context.Context, bucket, object string, mopts mustReplica
 		if tgt != nil {
 			synchronous = tgt.replicateSync
 		}
+		log.Println("replicate: ", synchronous)
 		dsc.Set(newReplicateTargetDecision(tgtArn, replicate, synchronous))
 	}
 	return dsc
@@ -866,20 +870,20 @@ func replicateObject(ctx context.Context, ri ReplicateObjectInfo, objectAPI Obje
 	})
 	// Lock the object name before starting replication.
 	// Use separate lock that doesn't collide with regular objects.
-	lk := objectAPI.NewNSLock(bucket, "/[replicate]/"+object)
-	lkctx, err := lk.GetLock(ctx, globalOperationTimeout)
-	if err != nil {
-		sendEvent(eventArgs{
-			EventName:  event.ObjectReplicationNotTracked,
-			BucketName: bucket,
-			Object:     objInfo,
-			Host:       "Internal: [Replication]",
-		})
-		logger.LogIf(ctx, fmt.Errorf("failed to get lock for object: %s bucket:%s arn:%s", object, bucket, cfg.RoleArn))
-		return
-	}
-	ctx = lkctx.Context()
-	defer lk.Unlock(lkctx.Cancel)
+	// lk := objectAPI.NewNSLock(bucket, "/[replicate]/"+object)
+	// lkctx, err := lk.GetLock(ctx, globalOperationTimeout)
+	// if err != nil {
+	// 	sendEvent(eventArgs{
+	// 		EventName:  event.ObjectReplicationNotTracked,
+	// 		BucketName: bucket,
+	// 		Object:     objInfo,
+	// 		Host:       "Internal: [Replication]",
+	// 	})
+	// 	logger.LogIf(ctx, fmt.Errorf("failed to get lock for object: %s bucket:%s arn:%s", object, bucket, cfg.RoleArn))
+	// 	return
+	// }
+	// ctx = lkctx.Context()
+	// defer lk.Unlock(lkctx.Cancel)
 
 	var wg sync.WaitGroup
 	var rinfos replicatedInfos

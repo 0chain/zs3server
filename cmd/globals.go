@@ -134,7 +134,7 @@ var (
 	globalIsDistErasure = false
 
 	// Indicates if the running minio server is an erasure-code backend.
-	globalIsErasure = false
+	globalIsErasure = true
 
 	// Indicates if the running minio is in gateway mode.
 	globalIsGateway = false

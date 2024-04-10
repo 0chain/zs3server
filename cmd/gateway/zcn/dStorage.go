@@ -14,7 +14,9 @@ import (
 
 	zerror "github.com/0chain/errors"
 	"github.com/0chain/gosdk/constants"
+	"github.com/0chain/gosdk/core/sys"
 	"github.com/0chain/gosdk/zboxcore/sdk"
+	"github.com/google/uuid"
 	minio "github.com/minio/minio/cmd"
 	"github.com/minio/minio/internal/logger"
 	"github.com/mitchellh/go-homedir"
@@ -24,15 +26,17 @@ var tempdir string
 
 const (
 	pageLimit = 100
+	numBlocks = 100
 	dirType   = "d"
 	fileType  = "f"
 
-	defaultChunkSize = 64 * 1024
-	fiveHunderedKB   = 500 * 1024
-	oneMB            = 1024 * 1024
-	tenMB            = 10 * oneMB
-	hundredMB        = 10 * tenMB
-	oneGB            = 1024 * oneMB
+	defaultChunkSize     = 64 * 1024
+	maxSizeForMemoryFile = 16 * 1024 * 1024
+	fiveHunderedKB       = 500 * 1024
+	oneMB                = 1024 * 1024
+	tenMB                = 10 * oneMB
+	hundredMB            = 10 * tenMB
+	oneGB                = 1024 * oneMB
 
 	// Error codes
 	pathDoesNotExist = "path_no_exist"
@@ -167,29 +171,22 @@ func getSingleRegularRef(alloc *sdk.Allocation, remotePath string) (*sdk.ORef, e
 	return &oREsult.Refs[0], nil
 }
 
-type downloadStatus struct {
-	wg           sync.WaitGroup
-	done         bool
-	reader       *os.File
-	objectInfo   *minio.ObjectInfo
-	downloadTime time.Duration
-	downloaded   int64 // indicates the totay data that has responsed to client
-}
-
 var (
-	mu        sync.Mutex
-	downloads = make(map[string]*downloadStatus)
+	mu sync.Mutex
 )
 
-func getObjectRef(alloc *sdk.Allocation, bucket, object, remotePath string) (*minio.ObjectInfo, error) {
+func getObjectRef(alloc *sdk.Allocation, bucket, object, remotePath string) (*minio.ObjectInfo, bool, error) {
 	log.Printf("~~~~~~~~~~~~~~~~~~~~~~~~ get object info remotePath: %v\n", remotePath)
-
+	var isEncrypted bool
 	ref, err := getSingleRegularRef(alloc, remotePath)
 	if err != nil {
 		if isPathNoExistError(err) {
-			return nil, minio.ObjectNotFound{Bucket: bucket, Object: object}
+			return nil, isEncrypted, minio.ObjectNotFound{Bucket: bucket, Object: object}
 		}
-		return nil, err
+		return nil, isEncrypted, err
+	}
+	if ref.EncryptedKey != "" {
+		isEncrypted = true
 	}
 
 	log.Println("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~get object info, ref: ", ref)
@@ -200,78 +197,98 @@ func getObjectRef(alloc *sdk.Allocation, bucket, object, remotePath string) (*mi
 		ModTime: ref.UpdatedAt.ToTime(),
 		Size:    ref.ActualFileSize,
 		IsDir:   ref.Type == dirType,
-	}, nil
+	}, isEncrypted, nil
 }
 
 func getFileReader(ctx context.Context,
 	alloc *sdk.Allocation,
-	bucket, object, remotePath string) (*os.File, *minio.ObjectInfo, string, error) {
+	bucket, object, remotePath string, rangeStart int64, rangeEnd int64) (io.Reader, *minio.ObjectInfo, string, error) {
+	downloadID := uuid.New().String()
+	localFilePath := filepath.Join(tempdir, downloadID)
+	fileRangeSize := rangeEnd - rangeStart + 1
 
-	localFilePath := filepath.Join(tempdir, remotePath)
+	cb := statusCB{
+		doneCh: make(chan struct{}, 1),
+		errCh:  make(chan error, 1),
+	}
 
-	mu.Lock()
-	ds, ok := downloads[remotePath]
-	if ok {
-		if !ds.done {
-			mu.Unlock()
-			ds.wg.Wait()
-			return ds.reader, ds.objectInfo, localFilePath, nil
-		} else {
-			mu.Unlock()
-			return ds.reader, ds.objectInfo, localFilePath, nil
+	objectInfo, isEncrypted, err := getObjectRef(alloc, bucket, object, remotePath)
+	if err != nil {
+		return nil, nil, "", err
+	}
+	if rangeEnd < rangeStart {
+		fileRangeSize = objectInfo.Size
+	}
+	var ctxCncl context.CancelFunc
+	ctx, ctxCncl = context.WithTimeout(ctx, getTimeOut(uint64(fileRangeSize)))
+	defer ctxCncl()
+
+	var startBlock, endBlock int64
+	dataShards := int64(alloc.DataShards)
+	effectiveBlockSize := int64(defaultChunkSize)
+	if isEncrypted {
+		effectiveBlockSize -= sdk.EncryptionHeaderSize + sdk.EncryptedDataPaddingSize
+	}
+	effectiveChunkSize := effectiveBlockSize * int64(dataShards)
+
+	if rangeEnd >= rangeStart {
+		startBlock = int64(rangeStart / effectiveChunkSize)
+		if startBlock == 0 {
+			startBlock = 1
+		}
+		endBlock = int64(rangeEnd) / effectiveChunkSize
+	} else {
+		startBlock = 1
+		endBlock = 0
+	}
+
+	if rangeEnd == -1 {
+		endBlock = 0
+		startBlock = int64(rangeStart / effectiveChunkSize)
+		if startBlock == 0 {
+			startBlock = 1
+		}
+		fileRangeSize = objectInfo.Size - rangeStart
+	}
+	log.Println("^^^^^^^^getFileReader: starting download: ", startBlock, endBlock, rangeStart, rangeEnd)
+	var r sys.File
+	if fileRangeSize > maxSizeForMemoryFile {
+		r, err = os.Create(localFilePath)
+		if err != nil {
+			return nil, nil, "", err
 		}
 	} else {
-		ds = &downloadStatus{}
-		downloads[remotePath] = ds
-		ds.wg.Add(1)
-		mu.Unlock()
-
-		cb := statusCB{
-			doneCh: make(chan struct{}, 1),
-			errCh:  make(chan error, 1),
-		}
-
-		objectInfo, err := getObjectRef(alloc, bucket, object, remotePath)
-		if err != nil {
-			return nil, nil, "", err
-		}
-		mu.Lock()
-		ds.objectInfo = objectInfo
-		mu.Unlock()
-
-		var ctxCncl context.CancelFunc
-		ctx, ctxCncl = context.WithTimeout(ctx, getTimeOut(uint64(objectInfo.Size)))
-		defer ctxCncl()
-
-		log.Println("^^^^^^^^getFileReader: starting download")
-		st := time.Now()
-		err = alloc.DownloadFile(localFilePath, remotePath, false, &cb, true)
-		if err != nil {
-			return nil, nil, "", err
-		}
-
-		select {
-		case <-cb.doneCh:
-		case err := <-cb.errCh:
-			return nil, nil, "", err
-		case <-ctx.Done():
-			return nil, nil, "", errors.New("exceeded timeout")
-		}
-		tm := time.Since(st)
-
-		mu.Lock()
-		ds.done = true
-		ds.downloadTime = tm
-		ds.wg.Done()
-		r, err := os.Open(localFilePath)
-		if err != nil {
-			return nil, nil, "", err
-		}
-		ds.reader = r
-		mu.Unlock()
-		log.Println("^^^^^^^^getFileReader: finish download")
-		return r, ds.objectInfo, localFilePath, nil
+		localFilePath = ""
+		r = &sys.MemFile{}
 	}
+
+	err = alloc.DownloadByBlocksToFileHandler(r, remotePath, startBlock, endBlock, numBlocks, false, &cb, true)
+	if err != nil {
+		return nil, nil, "", err
+	}
+
+	select {
+	case <-cb.doneCh:
+	case err := <-cb.errCh:
+		return nil, nil, "", err
+	case <-ctx.Done():
+		return nil, nil, "", errors.New("exceeded timeout")
+	}
+
+	startOffset := rangeStart - startBlock*effectiveChunkSize
+	if startOffset < 0 {
+		startOffset = 0
+	}
+	_, err = r.Seek(startOffset, io.SeekStart)
+	if err != nil {
+		return nil, nil, "", err
+	}
+
+	// create a new limited reader
+	f := io.LimitReader(r, fileRangeSize)
+	log.Println("^^^^^^^^getFileReader: finish download")
+	return f, objectInfo, localFilePath, nil
+
 }
 
 func putFile(ctx context.Context, alloc *sdk.Allocation, remotePath, contentType string, r io.Reader, size int64, isUpdate, shouldEncrypt bool) (err error) {
@@ -299,16 +316,18 @@ func putFile(ctx context.Context, alloc *sdk.Allocation, remotePath, contentType
 		RemotePath:    remotePath,
 		FileMeta:      fileMeta,
 		Opts: []sdk.ChunkedUploadOption{
-			sdk.WithChunkNumber(250),
+			sdk.WithChunkNumber(120),
 		},
 	}
-
+	if isUpdate {
+		opRequest.OperationType = constants.FileOperationUpdate
+	}
 	err = alloc.DoMultiOperation([]sdk.OperationRequest{opRequest})
-	if err != nil {
+	if err != nil && !isSameRootError(err) {
 		logger.Error(err.Error())
 		return
 	}
-
+	err = nil
 	return
 }
 
@@ -354,4 +373,11 @@ func isConsensusFailedError(err error) bool {
 		}
 	}
 	return false
+}
+
+func isSameRootError(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(err.Error(), "previous allocation root are same")
 }
