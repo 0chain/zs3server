@@ -340,17 +340,46 @@ func (zob *zcnObjects) PutObjectPart(ctx context.Context, bucket, object, upload
 	for {
 		n, err := data.Reader.Read(buf)
 		if err == io.EOF {
-			size += n
 			// Write the part data to the part file
+			if compress {
+				compressedBuf := make([]byte, lz4.CompressBlockBound(len(buf)))
+				compressedSize, compressErr := lz4.CompressBlockHC(buf, compressedBuf, lz4.Level5, nil, nil)
+				if compressErr != nil {
+					return minio.PartInfo{}, fmt.Errorf("error compressing part data: %v", compressErr)
+				}
+				compressedBuf = compressedBuf[:compressedSize]
 
+				if _, err := partFile.Write(compressedBuf); err != nil {
+					log.Println(err)
+					return minio.PartInfo{}, fmt.Errorf("error writing part data: %v", err)
+				}
+
+				// Update the hash with the read data
+				hash.Write(compressedBuf)
+				size += compressedSize
+			} else {
+				if _, err := partFile.Write(buf); err != nil {
+					log.Println(err)
+					return minio.PartInfo{}, fmt.Errorf("error writing part data: %v", err)
+				}
+
+				// Update the hash with the read data
+				hash.Write(buf)
+				size += n
+			}
+			break // End of file
+		} else if err != nil {
+			log.Println(err)
+			return minio.PartInfo{}, fmt.Errorf("error reading part data: %v", err)
+		}
+		if compress {
 			compressedBuf := make([]byte, lz4.CompressBlockBound(len(buf)))
-			compressedSize, compressErr := lz4.CompressBlock(buf, compressedBuf, nil)
+			compressedSize, compressErr := lz4.CompressBlockHC(buf, compressedBuf, lz4.Level5, nil, nil)
 			if compressErr != nil {
 				return minio.PartInfo{}, fmt.Errorf("error compressing part data: %v", compressErr)
 			}
-			size = compressedSize
-			compressedBuf = compressedBuf[:size]
-
+			compressedBuf = compressedBuf[:compressedSize]
+			// Write the part data to the part file
 			if _, err := partFile.Write(compressedBuf); err != nil {
 				log.Println(err)
 				return minio.PartInfo{}, fmt.Errorf("error writing part data: %v", err)
@@ -358,28 +387,18 @@ func (zob *zcnObjects) PutObjectPart(ctx context.Context, bucket, object, upload
 
 			// Update the hash with the read data
 			hash.Write(compressedBuf)
-			break // End of file
-		} else if err != nil {
-			log.Println(err)
-			return minio.PartInfo{}, fmt.Errorf("error reading part data: %v", err)
-		}
-		size += n
+			size += compressedSize
+		} else {
+			// Write the part data to the part file
+			if _, err := partFile.Write(buf); err != nil {
+				log.Println(err)
+				return minio.PartInfo{}, fmt.Errorf("error writing part data: %v", err)
+			}
 
-		compressedBuf := make([]byte, lz4.CompressBlockBound(len(buf)))
-		compressedSize, compressErr := lz4.CompressBlock(buf, compressedBuf, nil)
-		if compressErr != nil {
-			return minio.PartInfo{}, fmt.Errorf("error compressing part data: %v", compressErr)
+			// Update the hash with the read data
+			hash.Write(buf)
+			size += n
 		}
-		size = compressedSize
-		compressedBuf = compressedBuf[:size]
-		// Write the part data to the part file
-		if _, err := partFile.Write(compressedBuf); err != nil {
-			log.Println(err)
-			return minio.PartInfo{}, fmt.Errorf("error writing part data: %v", err)
-		}
-
-		// Update the hash with the read data
-		hash.Write(compressedBuf)
 	}
 
 	seqPQ.Push(partID)
