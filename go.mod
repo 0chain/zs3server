@@ -68,7 +68,7 @@ require (
 	github.com/ncw/directio v1.0.5
 	github.com/nsqio/go-nsq v1.0.8
 	github.com/philhofer/fwd v1.1.2-0.20210722190033-5c56ac6d0bb9
-	github.com/pierrec/lz4 v2.6.0+incompatible
+	github.com/pierrec/lz4 v2.6.1+incompatible
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.14.0
 	github.com/prometheus/client_model v0.3.0

@@ -13,11 +13,12 @@ import (
 	"strings"
 	"sync"
 	"time"
-"github.com/pierrec/lz4"
+
 	"github.com/0chain/gosdk/constants"
 	"github.com/0chain/gosdk/core/sys"
 	"github.com/0chain/gosdk/zboxcore/sdk"
 	"github.com/google/uuid"
+	"github.com/pierrec/lz4"
 
 	minio "github.com/minio/minio/cmd"
 	"github.com/minio/minio/cmd/gateway/zcn/seqpriorityqueue"
@@ -291,22 +292,21 @@ func (zob *zcnObjects) PutObjectPart(ctx context.Context, bucket, object, upload
 			size += n
 			// Write the part data to the part file
 
-			ht := make([]int, 64<<10)
-	compressedbuf := make([]byte, lz4.CompressBlockBound(len(buf)))
-	compressedsize, errr := lz4.CompressBlock(buf, compressedbuf,ht)
-size=compressedsize
-if errr!=nil {
-	fmt.Errorf("Error is %v",errr)
-}
+			compressedBuf := make([]byte, lz4.CompressBlockBound(len(buf)))
+			compressedSize, compressErr := lz4.CompressBlock(buf, compressedBuf, nil)
+			if compressErr != nil {
+				return minio.PartInfo{}, fmt.Errorf("error compressing part data: %v", compressErr)
+			}
+			size = compressedSize
+			compressedBuf = compressedBuf[:size]
 
-			if _, err := partFile.Write(compressedbuf[:size]); err != nil {
+			if _, err := partFile.Write(compressedBuf); err != nil {
 				log.Println(err)
 				return minio.PartInfo{}, fmt.Errorf("error writing part data: %v", err)
 			}
 
-			
 			// Update the hash with the read data
-			hash.Write(compressedbuf[:n])
+			hash.Write(compressedBuf)
 			break // End of file
 		} else if err != nil {
 			log.Println(err)
@@ -314,21 +314,21 @@ if errr!=nil {
 		}
 		size += n
 
-ht := make([]int, 64<<10)
-	compressed_buf := make([]byte, lz4.CompressBlockBound(len(buf)))
-	compressed_size, errr := lz4.CompressBlock(buf, compressed_buf,ht)
-size=compressed_size
-if errr!=nil {
-	fmt.Errorf("Error is %v",errr)
-}
+		compressedBuf := make([]byte, lz4.CompressBlockBound(len(buf)))
+		compressedSize, compressErr := lz4.CompressBlock(buf, compressedBuf, nil)
+		if compressErr != nil {
+			return minio.PartInfo{}, fmt.Errorf("error compressing part data: %v", compressErr)
+		}
+		size = compressedSize
+		compressedBuf = compressedBuf[:size]
 		// Write the part data to the part file
-		if _, err := partFile.Write(compressed_buf[:size]); err != nil {
+		if _, err := partFile.Write(compressedBuf); err != nil {
 			log.Println(err)
 			return minio.PartInfo{}, fmt.Errorf("error writing part data: %v", err)
 		}
 
 		// Update the hash with the read data
-		hash.Write(compressed_buf[:size])
+		hash.Write(compressedBuf)
 	}
 
 	seqPQ.Push(partID)
