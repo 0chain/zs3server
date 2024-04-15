@@ -19,7 +19,6 @@ import (
 	"github.com/google/uuid"
 	minio "github.com/minio/minio/cmd"
 	"github.com/minio/minio/internal/logger"
-	"github.com/mitchellh/go-homedir"
 )
 
 var tempdir string
@@ -302,12 +301,6 @@ func putFile(ctx context.Context, alloc *sdk.Allocation, remotePath, contentType
 		RemoteName: fileName,
 	}
 
-	workDir, err := homedir.Dir()
-	if err != nil {
-		logger.Error(err.Error())
-		return err
-	}
-
 	logger.Info("starting chunked upload")
 	opRequest := sdk.OperationRequest{
 		OperationType: constants.FileOperationInsert,
@@ -317,6 +310,7 @@ func putFile(ctx context.Context, alloc *sdk.Allocation, remotePath, contentType
 		FileMeta:      fileMeta,
 		Opts: []sdk.ChunkedUploadOption{
 			sdk.WithChunkNumber(120),
+			sdk.WithEncrypt(encrypt),
 		},
 	}
 	if isUpdate {

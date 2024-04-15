@@ -1,6 +1,7 @@
 package zcn
 
 import (
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -14,6 +15,11 @@ import (
 	"github.com/0chain/gosdk/zcncore"
 	"github.com/mitchellh/go-homedir"
 )
+
+type serverOptions struct {
+	Encrypt  bool `json:"encrypt"`
+	Compress bool `json:"compress"`
+}
 
 func initializeSDK(configDir, allocid string, nonce int64) error {
 	if configDir == "" {
@@ -30,7 +36,7 @@ func initializeSDK(configDir, allocid string, nonce int64) error {
 
 	if allocid == "" {
 		allocFile := filepath.Join(configDir, "allocation.txt")
-		allocBytes, err := ioutil.ReadFile(allocFile)
+		allocBytes, err := os.ReadFile(allocFile)
 		if err != nil {
 			return err
 		}
@@ -41,6 +47,18 @@ func initializeSDK(configDir, allocid string, nonce int64) error {
 		if len(allocationID) != 64 {
 			return fmt.Errorf("allocation id has length %d, should be 64", len(allocationID))
 		}
+	}
+
+	optionFile := filepath.Join(configDir, "zs3server.json")
+	optionBytes, err := os.ReadFile(optionFile)
+	if err == nil {
+		var options serverOptions
+		err = json.Unmarshal(optionBytes, &options)
+		if err != nil {
+			return err
+		}
+		encrypt = options.Encrypt
+		compress = options.Compress
 	}
 
 	cfg, err := conf.LoadConfigFile(filepath.Join(configDir, "config.yaml"))

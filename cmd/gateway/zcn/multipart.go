@@ -9,6 +9,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -21,6 +22,7 @@ import (
 
 	minio "github.com/minio/minio/cmd"
 	"github.com/minio/minio/cmd/gateway/zcn/seqpriorityqueue"
+	"github.com/minio/pkg/mimedb"
 )
 
 var (
@@ -29,6 +31,8 @@ var (
 	// alloc   *sdk.Allocation
 	localStorageDir = "store"
 )
+
+const lz4MimeType = "application/x-lz4"
 
 const PartSize = 1024 * 1024 * 5
 
@@ -83,10 +87,19 @@ func (mpf *MultiPartFile) UpdateFileSize(partID int, size int64) {
 
 func (zob *zcnObjects) NewMultipartUpload(ctx context.Context, bucket string, object string, opts minio.ObjectOptions) (uploadID string, err error) {
 	log.Println("initial multipart upload, partNumber:", opts.PartNumber)
-	return zob.newMultiPartUpload(localStorageDir, bucket, object)
+	var contentType string
+	if compress {
+		contentType = lz4MimeType
+	} else {
+		contentType = opts.UserDefined["content-type"]
+		if contentType == "" {
+			contentType = mimedb.TypeByExtension(path.Ext(object))
+		}
+	}
+	return zob.newMultiPartUpload(localStorageDir, bucket, object, contentType)
 }
 
-func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object string) (string, error) {
+func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object, contentType string) (string, error) {
 	// var objectSize int64
 	// objectSize := int64(371917281)
 	// objectSize := int64(22491196)
@@ -111,7 +124,7 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object string
 		memFileDataChan: make(chan memFileData, 240),
 		errChan:         make(chan error),
 	}
-	chunkWriteSize := int(zob.alloc.GetChunkReadSize(false))
+	chunkWriteSize := int(zob.alloc.GetChunkReadSize(encrypt))
 	multiPartFile := &MultiPartFile{
 		memFile: memFile,
 		seqPQ:   seqpriorityqueue.NewSeqPriorityQueue(),
@@ -214,10 +227,11 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object string
 		fileMeta := sdk.FileMeta{
 			RemoteName: object,
 			RemotePath: remotePath,
-			MimeType:   "application/octet-stream", // can get from request
+			MimeType:   contentType, // can get from request
 		}
 		options := []sdk.ChunkedUploadOption{
 			sdk.WithChunkNumber(80),
+			sdk.WithEncrypt(encrypt),
 		}
 		operationRequest := sdk.OperationRequest{
 			FileMeta:      fileMeta,
@@ -226,6 +240,7 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object string
 			Opts:          options,
 			RemotePath:    fileMeta.RemotePath,
 			StreamUpload:  true,
+			Workdir:       workDir,
 		}
 		// if its update change operation type
 		if isUpdate {

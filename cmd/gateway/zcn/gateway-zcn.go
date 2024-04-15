@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -14,6 +15,8 @@ import (
 
 	"github.com/0chain/gosdk/constants"
 	"github.com/minio/minio/internal/logger"
+	"github.com/minio/pkg/mimedb"
+	"github.com/mitchellh/go-homedir"
 
 	"github.com/0chain/gosdk/zboxcore/sdk"
 	"github.com/minio/cli"
@@ -26,9 +29,14 @@ const (
 	rootBucketName = "root"
 )
 
-var configDir string
-var allocationID string
-var nonce int64
+var (
+	configDir    string
+	allocationID string
+	nonce        int64
+	encrypt      bool
+	compress     bool
+	workDir      string
+)
 
 var zFlags = []cli.Flag{
 	cli.StringFlag{
@@ -123,7 +131,10 @@ func (z *ZCN) NewGatewayLayer(creds madmin.Credentials) (minio.ObjectLayer, erro
 		alloc:   allocation,
 		metrics: minio.NewMetrics(),
 	}
-
+	workDir, err = homedir.Dir()
+	if err != nil {
+		return nil, err
+	}
 	return zob, nil
 }
 
@@ -529,7 +540,7 @@ func (zob *zcnObjects) PutObject(ctx context.Context, bucket, object string, r *
 
 	contentType := opts.UserDefined["content-type"]
 	if contentType == "" {
-		contentType = "application/octet-stream"
+		contentType = mimedb.TypeByExtension(path.Ext(object))
 	}
 
 	err = putFile(ctx, zob.alloc, remotePath, contentType, r, r.Size(), isUpdate, false)
