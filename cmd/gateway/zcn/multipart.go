@@ -18,7 +18,7 @@ import (
 	"github.com/0chain/gosdk/constants"
 	"github.com/0chain/gosdk/zboxcore/sdk"
 	"github.com/google/uuid"
-	"github.com/pierrec/lz4"
+	"github.com/pierrec/lz4/v4"
 
 	minio "github.com/minio/minio/cmd"
 	"github.com/minio/minio/cmd/gateway/zcn/seqpriorityqueue"
