@@ -303,7 +303,9 @@ func (c *SiteReplicationSys) getSiteStatuses(ctx context.Context, sites []madmin
 				return psi, errSRBackendIssue(err)
 			}
 			if len(res) > 0 {
-				pi.Empty = false
+				if len(res) != 1 || (res[0].Name != "root") {
+					pi.Empty = false
+				}
 			}
 			pi.self = true
 		} else {
@@ -315,7 +317,12 @@ func (c *SiteReplicationSys) getSiteStatuses(ctx context.Context, sites []madmin
 			if err != nil {
 				return psi, errSRPeerResp(fmt.Errorf("unable to list buckets for %s: %v", v.Name, err))
 			}
-			pi.Empty = len(buckets) == 0
+			if len(buckets) > 0 {
+				if len(buckets) != 1 || (buckets[0].Name != "root") {
+					logger.Info("peer has buckets: ", buckets)
+					pi.Empty = false
+				}
+			}
 		}
 		psi = append(psi, pi)
 	}
@@ -750,7 +757,7 @@ func (c *SiteReplicationSys) PeerBucketMakeWithVersioningHandler(ctx context.Con
 	}
 
 	meta, err := globalBucketMetadataSys.Get(bucket)
-	if err != nil {
+	if err != nil && err != errConfigNotFound {
 		logger.LogIf(ctx, c.annotateErr("MakeBucketErr on peer call", err))
 		return wrapSRErr(err)
 	}

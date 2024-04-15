@@ -19,6 +19,7 @@ package cmd
 
 import (
 	"context"
+	"log"
 	"net/http"
 	"sync"
 	"time"
@@ -29,7 +30,6 @@ import (
 	miniogo "github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/minio/minio/internal/bucket/replication"
-	"github.com/minio/minio/internal/bucket/versioning"
 	"github.com/minio/minio/internal/crypto"
 	"github.com/minio/minio/internal/kms"
 	"github.com/minio/minio/internal/logger"
@@ -102,38 +102,23 @@ func (sys *BucketTargetSys) Delete(bucket string) {
 
 // SetTarget - sets a new minio-go client target for this bucket.
 func (sys *BucketTargetSys) SetTarget(ctx context.Context, bucket string, tgt *madmin.BucketTarget, update bool) error {
-	if globalIsGateway {
-		return nil
-	}
 	if !tgt.Type.IsValid() && !update {
 		return BucketRemoteArnTypeInvalid{Bucket: bucket}
 	}
 	clnt, err := sys.getRemoteTargetClient(tgt)
 	if err != nil {
+		log.Println("getRemoteClientError: ", err)
 		return BucketRemoteTargetNotFound{Bucket: tgt.TargetBucket}
 	}
 	// validate if target credentials are ok
 	if _, err = clnt.BucketExists(ctx, tgt.TargetBucket); err != nil {
 		if minio.ToErrorResponse(err).Code == "NoSuchBucket" {
+			log.Println("noSuchBucketError: ", err)
 			return BucketRemoteTargetNotFound{Bucket: tgt.TargetBucket}
 		}
 		return BucketRemoteConnectionErr{Bucket: tgt.TargetBucket, Err: err}
 	}
-	if tgt.Type == madmin.ReplicationService {
-		if !globalIsErasure {
-			return NotImplemented{Message: "Replication is not implemented in " + getMinioMode()}
-		}
-		if !globalBucketVersioningSys.Enabled(bucket) {
-			return BucketReplicationSourceNotVersioned{Bucket: bucket}
-		}
-		vcfg, err := clnt.GetBucketVersioning(ctx, tgt.TargetBucket)
-		if err != nil {
-			return BucketRemoteConnectionErr{Bucket: tgt.TargetBucket, Err: err}
-		}
-		if vcfg.Status != string(versioning.Enabled) {
-			return BucketRemoteTargetNotVersioned{Bucket: tgt.TargetBucket}
-		}
-	}
+
 	sys.Lock()
 	defer sys.Unlock()
 
@@ -163,6 +148,7 @@ func (sys *BucketTargetSys) SetTarget(ctx context.Context, bucket string, tgt *m
 	sys.targetsMap[bucket] = newtgts
 	sys.arnRemotesMap[tgt.Arn] = clnt
 	sys.updateBandwidthLimit(bucket, tgt.BandwidthLimit)
+	log.Println("setTarget: ", bucket)
 	return nil
 }
 
