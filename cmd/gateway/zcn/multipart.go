@@ -48,6 +48,7 @@ type MultiPartFile struct {
 	doneC           chan struct{} // indicates that the uploading is done
 	cancelC         chan struct{} // indicate the cancel of the uploading
 	dataC           chan []byte   // data to be uploaded
+	compress        bool
 }
 
 func (mpf *MultiPartFile) UpdateFileSize(partID int, size int64) {
@@ -87,19 +88,21 @@ func (mpf *MultiPartFile) UpdateFileSize(partID int, size int64) {
 
 func (zob *zcnObjects) NewMultipartUpload(ctx context.Context, bucket string, object string, opts minio.ObjectOptions) (uploadID string, err error) {
 	log.Println("initial multipart upload, partNumber:", opts.PartNumber)
-	var contentType string
-	if compress {
-		contentType = lz4MimeType
-	} else {
-		contentType = opts.UserDefined["content-type"]
-		if contentType == "" {
-			contentType = mimedb.TypeByExtension(path.Ext(object))
-		}
+	contentType := opts.UserDefined["content-type"]
+	if contentType == "" {
+		contentType = mimedb.TypeByExtension(path.Ext(object))
 	}
-	return zob.newMultiPartUpload(localStorageDir, bucket, object, contentType)
+
+	var toCompress bool
+
+	if compress && !hasStringSuffixInSlice(object, minio.StandardExcludeCompressExtensions) && !hasPattern(minio.StandardExcludeCompressContentTypes, contentType) {
+		toCompress = true
+	}
+
+	return zob.newMultiPartUpload(localStorageDir, bucket, object, contentType, toCompress)
 }
 
-func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object, contentType string) (string, error) {
+func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object, contentType string, toCompress bool) (string, error) {
 	// var objectSize int64
 	// objectSize := int64(371917281)
 	// objectSize := int64(22491196)
@@ -126,12 +129,13 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object, conte
 	}
 	chunkWriteSize := int(zob.alloc.GetChunkReadSize(encrypt))
 	multiPartFile := &MultiPartFile{
-		memFile: memFile,
-		seqPQ:   seqpriorityqueue.NewSeqPriorityQueue(),
-		errorC:  make(chan error, 1),
-		doneC:   make(chan struct{}),
-		dataC:   make(chan []byte, 20),
-		cancelC: make(chan struct{}),
+		memFile:  memFile,
+		seqPQ:    seqpriorityqueue.NewSeqPriorityQueue(),
+		errorC:   make(chan error, 1),
+		doneC:    make(chan struct{}),
+		dataC:    make(chan []byte, 20),
+		cancelC:  make(chan struct{}),
+		compress: toCompress,
 	}
 	FileMap[uploadID] = multiPartFile
 	mapLock.Unlock()
@@ -341,7 +345,7 @@ func (zob *zcnObjects) PutObjectPart(ctx context.Context, bucket, object, upload
 		n, err := data.Reader.Read(buf)
 		if err == io.EOF {
 			// Write the part data to the part file
-			if compress {
+			if multiPartFile.compress {
 				compressedBuf := make([]byte, lz4.CompressBlockBound(len(buf)))
 				compressedSize, compressErr := lz4.CompressBlockHC(buf, compressedBuf, lz4.Level5, nil, nil)
 				if compressErr != nil {
@@ -372,7 +376,7 @@ func (zob *zcnObjects) PutObjectPart(ctx context.Context, bucket, object, upload
 			log.Println(err)
 			return minio.PartInfo{}, fmt.Errorf("error reading part data: %v", err)
 		}
-		if compress {
+		if multiPartFile.compress {
 			compressedBuf := make([]byte, lz4.CompressBlockBound(len(buf)))
 			compressedSize, compressErr := lz4.CompressBlockHC(buf, compressedBuf, lz4.Level5, nil, nil)
 			if compressErr != nil {
