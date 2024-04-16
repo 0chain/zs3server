@@ -479,6 +479,7 @@ func (zob *zcnObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 			ETag:         ref.ActualFileHash,
 			StorageClass: "STANDARD",
 		})
+		log.Println("ListObjects object: ", objects[len(objects)-1].ContentType, objects[len(objects)-1].Name)
 	}
 
 	result.IsTruncated = isTruncated
