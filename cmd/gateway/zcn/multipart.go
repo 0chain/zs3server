@@ -174,6 +174,9 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object, conte
 					}
 
 					n := buf.Len() / chunkWriteSize
+					if n == 0 {
+						continue
+					}
 					if buf.Len()%chunkWriteSize == 0 && n > 1 {
 						n--
 					}
@@ -211,7 +214,7 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object, conte
 						if end >= len(bbuf) {
 							end = len(bbuf)
 							memFileData.err = io.EOF
-							log.Println("uploading last part", current, end, current-end+1)
+							log.Println("uploading last part", current, end, end-current+1)
 						}
 						memFileData.buf = bbuf[current:end]
 						multiPartFile.memFile.memFileDataChan <- memFileData
