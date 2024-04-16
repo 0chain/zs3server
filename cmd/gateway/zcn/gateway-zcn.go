@@ -479,6 +479,11 @@ func (zob *zcnObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 			ETag:         ref.ActualFileHash,
 			StorageClass: "STANDARD",
 		})
+		if objects[len(objects)-1].ContentType == lz4MimeType {
+			objects[len(objects)-1].UserDefined = map[string]string{
+				"compression": lz4MimeType,
+			}
+		}
 		log.Println("ListObjects object: ", objects[len(objects)-1].ContentType, objects[len(objects)-1].Name)
 	}
 
