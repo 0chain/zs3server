@@ -97,6 +97,7 @@ func (zob *zcnObjects) NewMultipartUpload(ctx context.Context, bucket string, ob
 
 	if compress && !hasStringSuffixInSlice(object, minio.StandardExcludeCompressExtensions) && !hasPattern(minio.StandardExcludeCompressContentTypes, contentType) {
 		toCompress = true
+		contentType = lz4MimeType
 	}
 
 	return zob.newMultiPartUpload(localStorageDir, bucket, object, contentType, toCompress)
