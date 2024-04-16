@@ -347,11 +347,13 @@ func (zob *zcnObjects) PutObjectPart(ctx context.Context, bucket, object, upload
 			// Write the part data to the part file
 			if multiPartFile.compress {
 				compressedBuf := make([]byte, lz4.CompressBlockBound(len(buf)))
-				compressedSize, compressErr := lz4.CompressBlockHC(buf, compressedBuf, lz4.Level5, nil, nil)
+				compressedSize, compressErr := lz4.CompressBlockHC(buf, compressedBuf, lz4.Level2, nil, nil)
 				if compressErr != nil {
 					return minio.PartInfo{}, fmt.Errorf("error compressing part data: %v", compressErr)
 				}
 				compressedBuf = compressedBuf[:compressedSize]
+
+				log.Println("compressed size: ", compressedSize, " original size: ", n)
 
 				if _, err := partFile.Write(compressedBuf); err != nil {
 					log.Println(err)
@@ -378,11 +380,12 @@ func (zob *zcnObjects) PutObjectPart(ctx context.Context, bucket, object, upload
 		}
 		if multiPartFile.compress {
 			compressedBuf := make([]byte, lz4.CompressBlockBound(len(buf)))
-			compressedSize, compressErr := lz4.CompressBlockHC(buf, compressedBuf, lz4.Level5, nil, nil)
+			compressedSize, compressErr := lz4.CompressBlockHC(buf, compressedBuf, lz4.Level2, nil, nil)
 			if compressErr != nil {
 				return minio.PartInfo{}, fmt.Errorf("error compressing part data: %v", compressErr)
 			}
 			compressedBuf = compressedBuf[:compressedSize]
+			log.Println("compressed size: ", compressedSize, " original size: ", n)
 			// Write the part data to the part file
 			if _, err := partFile.Write(compressedBuf); err != nil {
 				log.Println(err)
