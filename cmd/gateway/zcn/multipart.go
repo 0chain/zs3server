@@ -333,21 +333,18 @@ func (zob *zcnObjects) PutObjectPart(ctx context.Context, bucket, object, upload
 	// Create an MD5 hash to calculate ETag
 	hash := md5.New()
 
-	partSize := data.Reader.ActualSize()
-	if partSize <= 0 {
-		partSize = PartSize
-	}
-	buf := make([]byte, partSize)
+	buf := make([]byte, PartSize)
 	// Read each part from the request body
 	// We need to make sure we write atleast ChunkWriteSize bytes to memFile unless its the last part
 	var size int
 	for {
 		n, err := data.Reader.Read(buf)
+		buf = buf[:n]
 		if err == io.EOF {
 			// Write the part data to the part file
 			if multiPartFile.compress {
 				compressedBuf := make([]byte, lz4.CompressBlockBound(len(buf)))
-				compressedSize, compressErr := lz4.CompressBlockHC(buf, compressedBuf, lz4.Level2, nil, nil)
+				compressedSize, compressErr := lz4.CompressBlockHC(buf, compressedBuf, lz4.Level1, nil, nil)
 				if compressErr != nil {
 					return minio.PartInfo{}, fmt.Errorf("error compressing part data: %v", compressErr)
 				}
@@ -380,7 +377,7 @@ func (zob *zcnObjects) PutObjectPart(ctx context.Context, bucket, object, upload
 		}
 		if multiPartFile.compress {
 			compressedBuf := make([]byte, lz4.CompressBlockBound(len(buf)))
-			compressedSize, compressErr := lz4.CompressBlockHC(buf, compressedBuf, lz4.Level2, nil, nil)
+			compressedSize, compressErr := lz4.CompressBlockHC(buf, compressedBuf, lz4.Level1, nil, nil)
 			if compressErr != nil {
 				return minio.PartInfo{}, fmt.Errorf("error compressing part data: %v", compressErr)
 			}
