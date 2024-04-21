@@ -48,7 +48,6 @@ type MultiPartFile struct {
 	doneC           chan struct{} // indicates that the uploading is done
 	cancelC         chan struct{} // indicate the cancel of the uploading
 	dataC           chan []byte   // data to be uploaded
-	compress        bool
 }
 
 func (mpf *MultiPartFile) UpdateFileSize(partID int, size int64) {
@@ -130,13 +129,12 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object, conte
 	}
 	chunkWriteSize := int(zob.alloc.GetChunkReadSize(encrypt))
 	multiPartFile := &MultiPartFile{
-		memFile:  memFile,
-		seqPQ:    seqpriorityqueue.NewSeqPriorityQueue(),
-		errorC:   make(chan error, 1),
-		doneC:    make(chan struct{}),
-		dataC:    make(chan []byte, 20),
-		cancelC:  make(chan struct{}),
-		compress: toCompress,
+		memFile: memFile,
+		seqPQ:   seqpriorityqueue.NewSeqPriorityQueue(),
+		errorC:  make(chan error, 1),
+		doneC:   make(chan struct{}),
+		dataC:   make(chan []byte, 20),
+		cancelC: make(chan struct{}, 1),
 	}
 	FileMap[uploadID] = multiPartFile
 	mapLock.Unlock()
@@ -149,8 +147,16 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object, conte
 	}
 
 	go func() {
-		var buf bytes.Buffer
-		var total int64
+		buf := &bytes.Buffer{}
+		var (
+			zw    *lz4.Writer
+			total int64
+			err   error
+		)
+		if toCompress {
+			zw = lz4.NewWriter(buf)
+			zw.Apply(lz4.CompressionLevelOption(lz4.Level1)) //nolint:errcheck
+		}
 		st := time.Now()
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		defer cancel()
@@ -169,9 +175,15 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object, conte
 				return
 			case data, ok := <-multiPartFile.dataC:
 				if ok {
-					_, err := buf.Write(data)
+					if toCompress {
+						_, err = zw.Write(data)
+					} else {
+						_, err = buf.Write(data)
+					}
 					if err != nil {
-						log.Panic(err)
+						log.Println("write data to buffer failed:", err)
+						multiPartFile.cancelC <- struct{}{}
+						break
 					}
 
 					n := buf.Len() / chunkWriteSize
@@ -202,6 +214,13 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object, conte
 					total += int64(cn)
 					log.Println("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ uploaded:", total, " new:", cn)
 				} else {
+					if toCompress {
+						err = zw.Close()
+						if err != nil {
+							multiPartFile.cancelC <- struct{}{}
+							break
+						}
+					}
 					bbuf := make([]byte, buf.Len())
 					_, err := buf.Read(bbuf)
 					if err != nil {
@@ -224,6 +243,9 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object, conte
 					close(multiPartFile.memFile.memFileDataChan)
 					total += int64(cn)
 					log.Println("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ uploaded:", total, " new:", cn, " duration:", time.Since(st))
+					if toCompress {
+						multiPartFile.fileSize = total
+					}
 					return
 				}
 			}
@@ -345,59 +367,11 @@ func (zob *zcnObjects) PutObjectPart(ctx context.Context, bucket, object, upload
 		n, err := data.Reader.Read(buf)
 		buf = buf[:n]
 		if err == io.EOF {
-			// Write the part data to the part file
-			if multiPartFile.compress {
-				compressedBuf := make([]byte, lz4.CompressBlockBound(len(buf)))
-				compressedSize, compressErr := lz4.CompressBlockHC(buf, compressedBuf, lz4.Level1, nil, nil)
-				if compressErr != nil {
-					return minio.PartInfo{}, fmt.Errorf("error compressing part data: %v", compressErr)
-				}
-				compressedBuf = compressedBuf[:compressedSize]
-
-				log.Println("compressed size: ", compressedSize, " original size: ", n)
-
-				if _, err := partFile.Write(compressedBuf); err != nil {
-					log.Println(err)
-					return minio.PartInfo{}, fmt.Errorf("error writing part data: %v", err)
-				}
-
-				// Update the hash with the read data
-				hash.Write(compressedBuf)
-				size += compressedSize
-			} else {
-				if _, err := partFile.Write(buf); err != nil {
-					log.Println(err)
-					return minio.PartInfo{}, fmt.Errorf("error writing part data: %v", err)
-				}
-
-				// Update the hash with the read data
-				hash.Write(buf)
-				size += n
+			if n == 0 {
+				break
 			}
-			break // End of file
-		} else if err != nil {
-			log.Println(err)
-			return minio.PartInfo{}, fmt.Errorf("error reading part data: %v", err)
-		}
-		if multiPartFile.compress {
-			compressedBuf := make([]byte, lz4.CompressBlockBound(len(buf)))
-			compressedSize, compressErr := lz4.CompressBlockHC(buf, compressedBuf, lz4.Level1, nil, nil)
-			if compressErr != nil {
-				return minio.PartInfo{}, fmt.Errorf("error compressing part data: %v", compressErr)
-			}
-			compressedBuf = compressedBuf[:compressedSize]
-			log.Println("compressed size: ", compressedSize, " original size: ", n)
 			// Write the part data to the part file
-			if _, err := partFile.Write(compressedBuf); err != nil {
-				log.Println(err)
-				return minio.PartInfo{}, fmt.Errorf("error writing part data: %v", err)
-			}
 
-			// Update the hash with the read data
-			hash.Write(compressedBuf)
-			size += compressedSize
-		} else {
-			// Write the part data to the part file
 			if _, err := partFile.Write(buf); err != nil {
 				log.Println(err)
 				return minio.PartInfo{}, fmt.Errorf("error writing part data: %v", err)
@@ -406,7 +380,22 @@ func (zob *zcnObjects) PutObjectPart(ctx context.Context, bucket, object, upload
 			// Update the hash with the read data
 			hash.Write(buf)
 			size += n
+			break // End of file
+		} else if err != nil {
+			log.Println(err)
+			return minio.PartInfo{}, fmt.Errorf("error reading part data: %v", err)
 		}
+
+		// Write the part data to the part file
+		if _, err := partFile.Write(buf); err != nil {
+			log.Println(err)
+			return minio.PartInfo{}, fmt.Errorf("error writing part data: %v", err)
+		}
+
+		// Update the hash with the read data
+		hash.Write(buf)
+		size += n
+
 	}
 
 	seqPQ.Push(partID)
@@ -453,13 +442,13 @@ func (zob *zcnObjects) CompleteMultipartUpload(ctx context.Context, bucket, obje
 	}
 	log.Println("finish uploading!!")
 
-	eTag, err := zob.constructCompleteObject(bucket, uploadID, object, localStorageDir, multiPartFile)
+	eTag, err := zob.constructCompleteObject(bucket, uploadID, object, localStorageDir)
 	if err != nil {
 		log.Println("Error constructing complete object:", err)
 		return minio.ObjectInfo{}, fmt.Errorf("error constructing complete object: %v", err)
 	}
 
-	if err = cleanupPartFilesAndDirs(bucket, uploadID, object, localStorageDir); err != nil {
+	if err = cleanupPartFilesAndDirs(bucket, uploadID, localStorageDir); err != nil {
 		log.Println("Error cleaning up part files and directories:", err)
 		// http.Error(w, "Error cleaning up part files and directories", http.StatusInternalServerError)
 		return minio.ObjectInfo{}, fmt.Errorf("error cleaning up part files and directories: %v", err)
@@ -475,7 +464,7 @@ func (zob *zcnObjects) CompleteMultipartUpload(ctx context.Context, bucket, obje
 }
 
 // Function to construct the complete object file
-func (zob *zcnObjects) constructCompleteObject(bucket, uploadID, object, localStorageDir string, multiPartFile *MultiPartFile) (string, error) {
+func (zob *zcnObjects) constructCompleteObject(bucket, uploadID, object, localStorageDir string) (string, error) {
 	// Create a slice to store individual part ETags
 	var partETags []string
 	for partNumber := 1; ; partNumber++ {
@@ -532,7 +521,7 @@ func (zob *zcnObjects) constructCompleteObject(bucket, uploadID, object, localSt
 }
 
 // Function to clean up temporary part files and directories
-func cleanupPartFilesAndDirs(bucket, uploadID, object, localStorageDir string) error {
+func cleanupPartFilesAndDirs(bucket, uploadID, localStorageDir string) error {
 	// Remove the upload directory
 	uploadDir := filepath.Join(localStorageDir, bucket, uploadID)
 	if err := os.RemoveAll(uploadDir); err != nil {
@@ -609,5 +598,5 @@ func (zob *zcnObjects) AbortMultipartUpload(ctx context.Context, bucket string, 
 		return fmt.Errorf("abort - uploadID: %v not found", uploadID)
 	}
 	close(multiPartFile.cancelC)
-	return cleanupPartFilesAndDirs(bucket, uploadID, object, localStorageDir)
+	return cleanupPartFilesAndDirs(bucket, uploadID, localStorageDir)
 }
