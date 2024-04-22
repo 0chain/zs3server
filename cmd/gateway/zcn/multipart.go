@@ -33,7 +33,7 @@ var (
 
 const lz4MimeType = "application/x-lz4"
 
-const PartSize = 1024 * 1024 * 5
+const PartSize = 1024 * 128
 
 type MultiPartFile struct {
 	memFile         *memFile
@@ -359,11 +359,13 @@ func (zob *zcnObjects) PutObjectPart(ctx context.Context, bucket, object, upload
 	// hash := md5.New()
 
 	buf := make([]byte, PartSize)
+	now := time.Now()
 	size, err := io.CopyBuffer(partFile, data.Reader, buf)
 	if err != nil {
 		log.Println(err)
 		return minio.PartInfo{}, fmt.Errorf("error writing part data: %v", err)
 	}
+	log.Println("part size:", size, " duration:", time.Since(now).Milliseconds())
 	// Read each part from the request body
 	// We need to make sure we write atleast ChunkWriteSize bytes to memFile unless its the last part
 	// var size int

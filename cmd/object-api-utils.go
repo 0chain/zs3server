@@ -24,7 +24,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"math/rand"
 	"net"
 	"net/http"
@@ -819,7 +818,6 @@ func (p *PutObjReader) MD5CurrentHexString() string {
 	// - server is running in strict compatibility mode
 	// - client set Content-Md5 during PUT operation
 	if len(md5sumCurr) == 0 {
-		log.Println("md5sumCurr is empty")
 		// md5sumCurr is only empty when we are running
 		// in non-compatibility mode.
 		md5sumCurr = make([]byte, 16)
