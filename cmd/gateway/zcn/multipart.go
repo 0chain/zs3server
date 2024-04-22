@@ -359,50 +359,11 @@ func (zob *zcnObjects) PutObjectPart(ctx context.Context, bucket, object, upload
 	// hash := md5.New()
 
 	buf := make([]byte, PartSize)
-	now := time.Now()
 	size, err := io.CopyBuffer(partFile, data.Reader, buf)
 	if err != nil {
 		log.Println(err)
 		return minio.PartInfo{}, fmt.Errorf("error writing part data: %v", err)
 	}
-	log.Println("part size:", size, " duration:", time.Since(now).Milliseconds())
-	// Read each part from the request body
-	// We need to make sure we write atleast ChunkWriteSize bytes to memFile unless its the last part
-	// var size int
-	// for {
-	// 	n, err := data.Reader.Read(buf)
-	// 	buf = buf[:n]
-	// 	if err == io.EOF {
-	// 		if n == 0 {
-	// 			break
-	// 		}
-	// 		// Write the part data to the part file
-
-	// 		if _, err := partFile.Write(buf); err != nil {
-	// 			log.Println(err)
-	// 			return minio.PartInfo{}, fmt.Errorf("error writing part data: %v", err)
-	// 		}
-
-	// 		// Update the hash with the read data
-	// 		// hash.Write(buf)
-	// 		size += n
-	// 		break // End of file
-	// 	} else if err != nil {
-	// 		log.Println(err)
-	// 		return minio.PartInfo{}, fmt.Errorf("error reading part data: %v", err)
-	// 	}
-
-	// 	// Write the part data to the part file
-	// 	if _, err := partFile.Write(buf); err != nil {
-	// 		log.Println(err)
-	// 		return minio.PartInfo{}, fmt.Errorf("error writing part data: %v", err)
-	// 	}
-
-	// 	// Update the hash with the read data
-	// 	// hash.Write(buf)
-	// 	size += n
-
-	// }
 
 	seqPQ.Push(partID)
 	log.Println("VVVVVVVVVVVVVV pushed part:", partID)
@@ -410,7 +371,6 @@ func (zob *zcnObjects) PutObjectPart(ctx context.Context, bucket, object, upload
 	// Calculate ETag for the part
 	// eTag := hex.EncodeToString(hash.Sum(nil))
 	eTag := data.MD5CurrentHexString()
-	log.Println("eTag:", eTag)
 
 	// Save the ETag to a separate file
 	if err := os.WriteFile(partETagFilename, []byte(eTag), 0644); err != nil {
