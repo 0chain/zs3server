@@ -201,7 +201,7 @@ func getObjectRef(alloc *sdk.Allocation, bucket, object, remotePath string) (*mi
 
 func getFileReader(ctx context.Context,
 	alloc *sdk.Allocation,
-	bucket, object, remotePath string, rangeStart int64, rangeEnd int64) (io.Reader, *minio.ObjectInfo, string, error) {
+	bucket, object, remotePath string, rangeStart int64, rangeEnd int64) (io.Reader, *minio.ObjectInfo, func(), string, error) {
 	downloadID := uuid.New().String()
 	localFilePath := filepath.Join(tempdir, downloadID)
 	fileRangeSize := rangeEnd - rangeStart + 1
@@ -213,14 +213,13 @@ func getFileReader(ctx context.Context,
 
 	objectInfo, isEncrypted, err := getObjectRef(alloc, bucket, object, remotePath)
 	if err != nil {
-		return nil, nil, "", err
+		return nil, nil, nil, "", err
 	}
 	if rangeEnd < rangeStart {
 		fileRangeSize = objectInfo.Size
 	}
 	var ctxCncl context.CancelFunc
 	ctx, ctxCncl = context.WithTimeout(ctx, getTimeOut(uint64(fileRangeSize)))
-	defer ctxCncl()
 
 	var startBlock, endBlock int64
 	dataShards := int64(alloc.DataShards)
@@ -249,29 +248,54 @@ func getFileReader(ctx context.Context,
 		}
 		fileRangeSize = objectInfo.Size - rangeStart
 	}
-	log.Println("^^^^^^^^getFileReader: starting download: ", startBlock, endBlock, rangeStart, rangeEnd)
+	log.Println("^^^^^^^^getFileReader: starting download: ", startBlock, endBlock, rangeStart, rangeEnd, fileRangeSize)
 	var r sys.File
-	if fileRangeSize > maxSizeForMemoryFile {
-		r, err = os.Create(localFilePath)
-		if err != nil {
-			return nil, nil, "", err
-		}
+	if startBlock == 1 && endBlock == 0 {
+		log.Println("^^^^^^^^getFileReader: stream download ")
+		pr, pw := io.Pipe()
+		r = &pipeFile{w: pw}
+		go func() {
+			defer ctxCncl()
+			err = alloc.DownloadByBlocksToFileHandler(r, remotePath, startBlock, endBlock, numBlocks, false, &cb, true)
+			if err != nil {
+				pw.CloseWithError(err)
+				return
+			}
+			select {
+			case <-cb.doneCh:
+				pw.Close()
+			case err := <-cb.errCh:
+				pw.CloseWithError(err)
+				return
+			case <-ctx.Done():
+				pw.CloseWithError(errors.New("exceeded timeout"))
+				return
+			}
+		}()
+		return pr, objectInfo, func() { pr.Close() }, localFilePath, nil
 	} else {
-		localFilePath = ""
-		r = &sys.MemFile{}
+		defer ctxCncl()
+		if fileRangeSize > maxSizeForMemoryFile {
+			r, err = os.Create(localFilePath)
+			if err != nil {
+				return nil, nil, nil, "", err
+			}
+		} else {
+			localFilePath = ""
+			r = &sys.MemFile{}
+		}
 	}
-
 	err = alloc.DownloadByBlocksToFileHandler(r, remotePath, startBlock, endBlock, numBlocks, false, &cb, true)
 	if err != nil {
-		return nil, nil, "", err
+		return nil, nil, nil, "", err
 	}
 
 	select {
 	case <-cb.doneCh:
 	case err := <-cb.errCh:
-		return nil, nil, "", err
+		return nil, nil, nil, "", err
 	case <-ctx.Done():
-		return nil, nil, "", errors.New("exceeded timeout")
+		return nil, nil, nil, "", errors.New("exceeded timeout")
 	}
 
 	startOffset := rangeStart - startBlock*effectiveChunkSize
@@ -280,13 +304,19 @@ func getFileReader(ctx context.Context,
 	}
 	_, err = r.Seek(startOffset, io.SeekStart)
 	if err != nil {
-		return nil, nil, "", err
+		return nil, nil, nil, "", err
 	}
 
 	// create a new limited reader
 	f := io.LimitReader(r, fileRangeSize)
 	log.Println("^^^^^^^^getFileReader: finish download")
-	return f, objectInfo, localFilePath, nil
+	fCloser := func() {
+		r.Close() //nolint:errcheck
+		if localFilePath != "" {
+			os.Remove(localFilePath) // nolint:errcheck
+		}
+	}
+	return f, objectInfo, fCloser, localFilePath, nil
 
 }
 

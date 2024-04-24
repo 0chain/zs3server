@@ -128,6 +128,7 @@ func (z *ZCN) NewGatewayLayer(creds madmin.Credentials) (minio.ObjectLayer, erro
 	}
 	sdk.CurrentMode = sdk.UploadModeHigh
 	sdk.SetSingleClietnMode(true)
+	sdk.SetShouldVerifyHash(false)
 	zob := &zcnObjects{
 		alloc:   allocation,
 		metrics: minio.NewMetrics(),
@@ -333,16 +334,11 @@ func (zob *zcnObjects) GetObjectNInfo(ctx context.Context, bucket, object string
 		}
 	}
 
-	f, objectInfo, localPath, err := getFileReader(ctx, zob.alloc, bucket, object, remotePath, rangeStart, rangeEnd)
+	f, objectInfo, fCloser, _, err := getFileReader(ctx, zob.alloc, bucket, object, remotePath, rangeStart, rangeEnd)
 	if err != nil {
 		return nil, err
 	}
 
-	fCloser := func() {
-		if localPath != "" {
-			os.Remove(localPath)
-		}
-	}
 	gr, err = minio.NewGetObjectReaderFromReader(f, *objectInfo, opts, fCloser)
 	return
 }
