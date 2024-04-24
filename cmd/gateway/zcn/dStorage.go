@@ -280,9 +280,10 @@ func getFileReader(ctx context.Context,
 			if err != nil {
 				return nil, nil, nil, "", err
 			}
+		} else {
+			localFilePath = ""
+			r = &sys.MemFile{}
 		}
-		localFilePath = ""
-		r = &sys.MemFile{}
 	}
 	err = alloc.DownloadByBlocksToFileHandler(r, remotePath, startBlock, endBlock, numBlocks, false, &cb, true)
 	if err != nil {
