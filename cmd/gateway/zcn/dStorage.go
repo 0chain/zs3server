@@ -250,12 +250,8 @@ func getFileReader(ctx context.Context,
 	}
 	log.Println("^^^^^^^^getFileReader: starting download: ", startBlock, endBlock, rangeStart, rangeEnd, fileRangeSize)
 	var r sys.File
-	if fileRangeSize > maxSizeForMemoryFile || (startBlock == 1 && endBlock == 0) {
+	if startBlock == 1 && endBlock == 0 {
 		log.Println("^^^^^^^^getFileReader: stream download ")
-		// r, err = os.Create(localFilePath)
-		// if err != nil {
-		// 	return nil, nil, nil, "", err
-		// }
 		pr, pw := io.Pipe()
 		r = &pipeFile{w: pw}
 		go func() {
@@ -278,10 +274,16 @@ func getFileReader(ctx context.Context,
 		}()
 		return pr, objectInfo, func() { pr.Close() }, localFilePath, nil
 	} else {
+		defer ctxCncl()
+		if fileRangeSize > maxSizeForMemoryFile {
+			r, err = os.Create(localFilePath)
+			if err != nil {
+				return nil, nil, nil, "", err
+			}
+		}
 		localFilePath = ""
 		r = &sys.MemFile{}
 	}
-	defer ctxCncl()
 	err = alloc.DownloadByBlocksToFileHandler(r, remotePath, startBlock, endBlock, numBlocks, false, &cb, true)
 	if err != nil {
 		return nil, nil, nil, "", err
