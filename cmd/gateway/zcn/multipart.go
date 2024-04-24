@@ -355,8 +355,6 @@ func (zob *zcnObjects) PutObjectPart(ctx context.Context, bucket, object, upload
 		return minio.PartInfo{}, fmt.Errorf("uploadID: %v not found", uploadID)
 	}
 	seqPQ := multiPartFile.seqPQ
-	// Create an MD5 hash to calculate ETag
-	// hash := md5.New()
 
 	buf := make([]byte, PartSize)
 	size, err := io.CopyBuffer(partFile, data.Reader, buf)
