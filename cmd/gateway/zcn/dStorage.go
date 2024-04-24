@@ -312,9 +312,9 @@ func getFileReader(ctx context.Context,
 	log.Println("^^^^^^^^getFileReader: finish download")
 	fCloser := func() {
 		r.Close() //nolint:errcheck
-		// if localFilePath != "" {
-		// 	os.Remove(localFilePath) // nolint:errcheck
-		// }
+		if localFilePath != "" {
+			os.Remove(localFilePath) // nolint:errcheck
+		}
 	}
 	return f, objectInfo, fCloser, localFilePath, nil
 
