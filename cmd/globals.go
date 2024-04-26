@@ -285,10 +285,10 @@ var (
 	globalCompressConfig   compress.Config
 
 	// Some standard object extensions which we strictly dis-allow for compression.
-	standardExcludeCompressExtensions = []string{".gz", ".bz2", ".rar", ".zip", ".7z", ".xz", ".mp4", ".mkv", ".mov", ".jpg", ".png", ".gif"}
+	StandardExcludeCompressExtensions = []string{".gz", ".bz2", ".rar", ".zip", ".7z", ".xz", ".mp4", ".mkv", ".mov", ".jpg", ".png", ".gif"}
 
 	// Some standard content-types which we strictly dis-allow for compression.
-	standardExcludeCompressContentTypes = []string{"video/*", "audio/*", "application/zip", "application/x-gzip", "application/x-zip-compressed", " application/x-compress", "application/x-spoon"}
+	StandardExcludeCompressContentTypes = []string{"video/*", "audio/*", "application/zip", "application/x-gzip", "application/x-zip-compressed", " application/x-compress", "application/x-spoon"}
 
 	// Authorization validators list.
 	globalOpenIDValidators *openid.Validators

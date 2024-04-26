@@ -40,7 +40,6 @@ import (
 	"github.com/minio/minio/internal/s3select/simdj"
 	"github.com/minio/minio/internal/s3select/sql"
 	"github.com/minio/simdjson-go"
-	"github.com/pierrec/lz4"
 )
 
 type recordReader interface {
@@ -323,7 +322,6 @@ func (s3Select *S3Select) Open(getReader func(offset, length int64) (io.ReadClos
 				gzip.ErrHeader, gzip.ErrChecksum,
 				s2.ErrCorrupt, s2.ErrUnsupported, s2.ErrCRC,
 				zstd.ErrBlockTooSmall, zstd.ErrMagicMismatch, zstd.ErrWindowSizeExceeded, zstd.ErrUnknownDictionary, zstd.ErrWindowSizeTooSmall,
-				lz4.ErrInvalid, lz4.ErrBlockDependency,
 			}
 			for _, e := range errs {
 				if errors.Is(err, e) {

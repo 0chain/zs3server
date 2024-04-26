@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -14,6 +15,8 @@ import (
 
 	"github.com/0chain/gosdk/constants"
 	"github.com/minio/minio/internal/logger"
+	"github.com/minio/pkg/mimedb"
+	"github.com/mitchellh/go-homedir"
 
 	"github.com/0chain/gosdk/zboxcore/sdk"
 	"github.com/minio/cli"
@@ -26,9 +29,14 @@ const (
 	rootBucketName = "root"
 )
 
-var configDir string
-var allocationID string
-var nonce int64
+var (
+	configDir    string
+	allocationID string
+	nonce        int64
+	encrypt      bool
+	compress     bool
+	workDir      string
+)
 
 var zFlags = []cli.Flag{
 	cli.StringFlag{
@@ -113,17 +121,22 @@ func (z *ZCN) NewGatewayLayer(creds madmin.Credentials) (minio.ObjectLayer, erro
 	if err != nil {
 		return nil, err
 	}
-	log.Println("0chain gosdk initialized: ", allocationID)
+	log.Println("0chain gosdk initialized: ", allocationID, "compress: ", compress, "encrypt: ", encrypt)
 	allocation, err := sdk.GetAllocation(allocationID)
 	if err != nil {
 		return nil, err
 	}
 	sdk.CurrentMode = sdk.UploadModeHigh
+	sdk.SetSingleClietnMode(true)
+	sdk.SetShouldVerifyHash(false)
 	zob := &zcnObjects{
 		alloc:   allocation,
 		metrics: minio.NewMetrics(),
 	}
-
+	workDir, err = homedir.Dir()
+	if err != nil {
+		return nil, err
+	}
 	return zob, nil
 }
 
@@ -321,16 +334,11 @@ func (zob *zcnObjects) GetObjectNInfo(ctx context.Context, bucket, object string
 		}
 	}
 
-	f, objectInfo, localPath, err := getFileReader(ctx, zob.alloc, bucket, object, remotePath, rangeStart, rangeEnd)
+	f, objectInfo, fCloser, _, err := getFileReader(ctx, zob.alloc, bucket, object, remotePath, rangeStart, rangeEnd)
 	if err != nil {
 		return nil, err
 	}
 
-	fCloser := func() {
-		if localPath != "" {
-			os.Remove(localPath)
-		}
-	}
 	gr, err = minio.NewGetObjectReaderFromReader(f, *objectInfo, opts, fCloser)
 	return
 }
@@ -529,7 +537,7 @@ func (zob *zcnObjects) PutObject(ctx context.Context, bucket, object string, r *
 
 	contentType := opts.UserDefined["content-type"]
 	if contentType == "" {
-		contentType = "application/octet-stream"
+		contentType = mimedb.TypeByExtension(path.Ext(object))
 	}
 
 	err = putFile(ctx, zob.alloc, remotePath, contentType, r, r.Size(), isUpdate, false)
@@ -601,8 +609,8 @@ func (zob *zcnObjects) PutMultipleObjects(
 			}
 
 			options := []sdk.ChunkedUploadOption{
-				sdk.WithEncrypt(false),
-				sdk.WithChunkNumber(200),
+				sdk.WithEncrypt(encrypt),
+				sdk.WithChunkNumber(120),
 			}
 			operationRequests[idx] = sdk.OperationRequest{
 				FileMeta:      fileMeta,
