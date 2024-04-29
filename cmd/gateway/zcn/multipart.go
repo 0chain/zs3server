@@ -102,11 +102,6 @@ func (zob *zcnObjects) NewMultipartUpload(ctx context.Context, bucket string, ob
 }
 
 func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object, contentType string, toCompress bool) (string, error) {
-	// var objectSize int64
-	// objectSize := int64(371917281)
-	// objectSize := int64(22491196)
-	// log.Println("initial upload...")
-
 	// Generate a unique upload ID
 	var isUpdate bool
 	remotePath := "/" + filepath.Join(bucket, object)
@@ -333,10 +328,6 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object, conte
 }
 
 func (zob *zcnObjects) PutObjectPart(ctx context.Context, bucket, object, uploadID string, partID int, data *minio.PutObjReader, opts minio.ObjectOptions) (pi minio.PartInfo, err error) {
-	// func (zob *zcnObjects) PutObjectPart(ctx context.Context, bucket, object, uploadID string, partID int, data *minio.PutObjReader, opts minio.ObjectOptions) (info minio.PartInfo, err error) {
-	// Buffer to read each part
-
-	// Create a unique filename for each part
 	partFilename := filepath.Join(localStorageDir, bucket, uploadID, object, fmt.Sprintf("part%d", partID))
 	partETagFilename := partFilename + ".etag"
 
