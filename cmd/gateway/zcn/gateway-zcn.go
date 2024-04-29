@@ -609,8 +609,8 @@ func (zob *zcnObjects) PutMultipleObjects(
 			}
 
 			options := []sdk.ChunkedUploadOption{
-				sdk.WithEncrypt(false),
-				sdk.WithChunkNumber(200),
+				sdk.WithEncrypt(encrypt),
+				sdk.WithChunkNumber(120),
 			}
 			operationRequests[idx] = sdk.OperationRequest{
 				FileMeta:      fileMeta,
