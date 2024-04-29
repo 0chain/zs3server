@@ -36,6 +36,7 @@ const lz4MimeType = "application/x-lz4"
 const PartSize = 1024 * 128
 
 type MultiPartFile struct {
+	memFile         *memFile
 	lock            sync.Mutex
 	fileSize        int64
 	lastPartSize    int64
@@ -45,6 +46,7 @@ type MultiPartFile struct {
 	seqPQ           *seqpriorityqueue.SeqPriorityQueue
 	doneC           chan struct{} // indicates that the uploading is done
 	cancelC         chan struct{} // indicate the cancel of the uploading
+	dataC           chan []byte   // data to be uploaded
 }
 
 func (mpf *MultiPartFile) UpdateFileSize(partID int, size int64) {
@@ -100,6 +102,7 @@ func (zob *zcnObjects) NewMultipartUpload(ctx context.Context, bucket string, ob
 }
 
 func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object, contentType string, toCompress bool) (string, error) {
+	// Generate a unique upload ID
 	var isUpdate bool
 	remotePath := "/" + filepath.Join(bucket, object)
 	ref, err := getSingleRegularRef(zob.alloc, remotePath)
@@ -112,15 +115,19 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object, conte
 	if ref != nil {
 		isUpdate = true
 	}
-	// Generate a unique upload ID
 	uploadID := uuid.New().String()
 	mapLock.Lock()
-	pr, pw := io.Pipe()
+	memFile := &memFile{
+		memFileDataChan: make(chan memFileData, 240),
+		errChan:         make(chan error),
+	}
 	chunkWriteSize := int(zob.alloc.GetChunkReadSize(encrypt))
 	multiPartFile := &MultiPartFile{
+		memFile: memFile,
 		seqPQ:   seqpriorityqueue.NewSeqPriorityQueue(),
-		errorC:  make(chan error, 3),
+		errorC:  make(chan error, 1),
 		doneC:   make(chan struct{}),
+		dataC:   make(chan []byte, 20),
 		cancelC: make(chan struct{}, 1),
 	}
 	FileMap[uploadID] = multiPartFile
@@ -132,6 +139,112 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object, conte
 		log.Println(err)
 		return "", fmt.Errorf("erro creating bucket: %v", err)
 	}
+
+	go func() {
+		buf := &bytes.Buffer{}
+		var (
+			zw    *lz4.Writer
+			total int64
+			err   error
+		)
+		if toCompress {
+			zw = lz4.NewWriter(buf)
+			zw.Apply(lz4.CompressionLevelOption(lz4.Level1)) //nolint:errcheck
+		}
+		st := time.Now()
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+		for {
+			select {
+			case <-multiPartFile.cancelC:
+				log.Println("uploading is canceled, clean up temp dirs")
+				memFile.errChan <- fmt.Errorf("uploading is canceled")
+				// TODO: clean up temp dirs
+				_ = os.Remove(bucketPath)
+				return
+			case <-ctx.Done():
+				log.Println("uploading is timeout, clean up temp dirs")
+				memFile.errChan <- fmt.Errorf("uploading is timeout")
+				_ = os.Remove(bucketPath)
+				return
+			case data, ok := <-multiPartFile.dataC:
+				if ok {
+					if toCompress {
+						_, err = zw.Write(data)
+					} else {
+						_, err = buf.Write(data)
+					}
+					if err != nil {
+						log.Println("write data to buffer failed:", err)
+						multiPartFile.cancelC <- struct{}{}
+						break
+					}
+
+					n := buf.Len() / chunkWriteSize
+					if n == 0 {
+						continue
+					}
+					if buf.Len()%chunkWriteSize == 0 && n > 1 {
+						n--
+					}
+					bbuf := make([]byte, n*chunkWriteSize)
+					_, err = buf.Read(bbuf)
+					if err != nil {
+						log.Panic(err)
+					}
+
+					current := 0
+					for ; current < len(bbuf); current += chunkWriteSize {
+						memFileData := memFileData{}
+						end := current + chunkWriteSize
+						if end > len(bbuf) {
+							end = len(bbuf)
+						}
+						memFileData.buf = bbuf[current:end]
+						multiPartFile.memFile.memFileDataChan <- memFileData
+					}
+					cn := len(bbuf)
+
+					total += int64(cn)
+					log.Println("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ uploaded:", total, " new:", cn)
+				} else {
+					if toCompress {
+						err = zw.Close()
+						if err != nil {
+							multiPartFile.cancelC <- struct{}{}
+							break
+						}
+					}
+					bbuf := make([]byte, buf.Len())
+					_, err := buf.Read(bbuf)
+					if err != nil {
+						multiPartFile.memFile.errChan <- err
+						return
+					}
+					current := 0
+					for ; current < len(bbuf); current += chunkWriteSize {
+						memFileData := memFileData{}
+						end := current + chunkWriteSize
+						if end >= len(bbuf) {
+							end = len(bbuf)
+							memFileData.err = io.EOF
+							log.Println("uploading last part", current, end, end-current+1)
+						}
+						memFileData.buf = bbuf[current:end]
+						multiPartFile.memFile.memFileDataChan <- memFileData
+					}
+					cn := len(bbuf)
+					close(multiPartFile.memFile.memFileDataChan)
+					total += int64(cn)
+					log.Println("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ uploaded:", total, " new:", cn, " duration:", time.Since(st))
+					if toCompress {
+						multiPartFile.fileSize = total
+					}
+					return
+				}
+			}
+		}
+	}()
 
 	go func() {
 		// Create fileMeta and sdk.OperationRequest
@@ -146,7 +259,7 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object, conte
 		}
 		operationRequest := sdk.OperationRequest{
 			FileMeta:      fileMeta,
-			FileReader:    pr,
+			FileReader:    multiPartFile.memFile,
 			OperationType: constants.FileOperationInsert,
 			Opts:          options,
 			RemotePath:    fileMeta.RemotePath,
@@ -162,24 +275,14 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object, conte
 			// run this in background, will block until the data is written to memFile
 			// We should add ctx here to cancel the operation
 			multiPartFile.errorC <- zob.alloc.DoMultiOperation([]sdk.OperationRequest{operationRequest})
-			_ = pr.Close()
+
 		}()
 
-		var (
-			zw    *lz4.Writer
-			total int64
-			n     int64
-		)
-		bbuf := &bytes.Buffer{}
-		if toCompress {
-			zw = lz4.NewWriter(bbuf)
-			zw.Apply(lz4.CompressionLevelOption(lz4.Level1)) //nolint:errcheck
-		}
-		copyData := make([]byte, chunkWriteSize)
 		for {
 			select {
 			case <-multiPartFile.cancelC:
 				log.Println("uploading is canceled, clean up temp dirs")
+				multiPartFile.memFile.errChan <- fmt.Errorf("uploading is canceled")
 				// TODO: clean up temp dirs
 				_ = os.Remove(bucketPath)
 				return
@@ -188,23 +291,7 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object, conte
 				log.Println("==================================== popup part:", partNumber)
 
 				if partNumber == -1 {
-					if toCompress {
-						err = zw.Close()
-						if err != nil {
-							close(multiPartFile.cancelC)
-							multiPartFile.errorC <- err
-							break
-						}
-						n, err = io.CopyBuffer(pw, bbuf, copyData)
-						if err != nil {
-							close(multiPartFile.cancelC)
-							multiPartFile.errorC <- err
-							break
-						}
-						total += n
-						multiPartFile.fileSize = total
-					}
-					_ = pw.Close()
+					close(multiPartFile.dataC)
 					close(multiPartFile.doneC)
 					_ = os.Remove(bucketPath)
 					log.Println("==================================== popup done")
@@ -212,6 +299,7 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object, conte
 				}
 
 				partFilename := filepath.Join(localStorageDir, bucket, uploadID, object, fmt.Sprintf("part%d", partNumber))
+
 				func() {
 					// Open the part file for reading
 					partFile, err := os.Open(partFilename)
@@ -219,24 +307,18 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object, conte
 						log.Panicf("could not open part file: %v, err: %v", partFilename, err)
 					}
 					defer partFile.Close()
-					if toCompress {
-						_, err = io.CopyBuffer(zw, partFile, copyData)
-						if err != nil {
-							close(multiPartFile.cancelC)
-							multiPartFile.errorC <- err
-							return
-						}
-						n, err = io.CopyBuffer(pw, bbuf, copyData)
-					} else {
-						n, err = io.CopyBuffer(pw, partFile, copyData)
+					stat, err := partFile.Stat()
+					if err != nil {
+						log.Panicf("could not stat part file: %v, err: %v", partFilename, err)
+					}
+					data := make([]byte, stat.Size())
+					_, err = io.ReadFull(partFile, data)
+					if err != nil {
+						log.Panicf("read part: %v failed, err: %v", partNumber, err)
 					}
 
-					if err != nil {
-						close(multiPartFile.cancelC)
-						multiPartFile.errorC <- err
-						return
-					}
-					total += n
+					multiPartFile.dataC <- data
+					log.Println("^^^^^^^^^ uploading part:", partNumber, "size:", len(data))
 				}()
 			}
 		}
@@ -246,10 +328,6 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object, conte
 }
 
 func (zob *zcnObjects) PutObjectPart(ctx context.Context, bucket, object, uploadID string, partID int, data *minio.PutObjReader, opts minio.ObjectOptions) (pi minio.PartInfo, err error) {
-	// func (zob *zcnObjects) PutObjectPart(ctx context.Context, bucket, object, uploadID string, partID int, data *minio.PutObjReader, opts minio.ObjectOptions) (info minio.PartInfo, err error) {
-	// Buffer to read each part
-
-	// Create a unique filename for each part
 	partFilename := filepath.Join(localStorageDir, bucket, uploadID, object, fmt.Sprintf("part%d", partID))
 	partETagFilename := partFilename + ".etag"
 
@@ -267,18 +345,9 @@ func (zob *zcnObjects) PutObjectPart(ctx context.Context, bucket, object, upload
 		log.Printf("uploadID: %v not found\n", uploadID)
 		return minio.PartInfo{}, fmt.Errorf("uploadID: %v not found", uploadID)
 	}
-
-	select {
-	case <-multiPartFile.cancelC:
-		return minio.PartInfo{}, fmt.Errorf("uploading is canceled")
-	case errC := <-multiPartFile.errorC:
-		if errC != nil {
-			return minio.PartInfo{}, fmt.Errorf("uploading is failed: %v", errC)
-		}
-	default:
-	}
-
 	seqPQ := multiPartFile.seqPQ
+	// Create an MD5 hash to calculate ETag
+	// hash := md5.New()
 
 	buf := make([]byte, PartSize)
 	size, err := io.CopyBuffer(partFile, data.Reader, buf)
