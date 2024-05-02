@@ -191,11 +191,12 @@ func getObjectRef(alloc *sdk.Allocation, bucket, object, remotePath string) (*mi
 	log.Println("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~get object info, ref: ", ref)
 
 	return &minio.ObjectInfo{
-		Bucket:  bucket,
-		Name:    ref.Name,
-		ModTime: ref.UpdatedAt.ToTime(),
-		Size:    ref.ActualFileSize,
-		IsDir:   ref.Type == dirType,
+		Bucket:      bucket,
+		Name:        ref.Name,
+		ModTime:     ref.UpdatedAt.ToTime(),
+		Size:        ref.ActualFileSize,
+		IsDir:       ref.Type == dirType,
+		ContentType: ref.MimeType,
 	}, isEncrypted, nil
 }
 
@@ -218,8 +219,14 @@ func getFileReader(ctx context.Context,
 	if rangeEnd < rangeStart {
 		fileRangeSize = objectInfo.Size
 	}
+	var timeout time.Duration
+	if objectInfo.ContentType == lz4MimeType {
+		timeout = time.Minute * 30
+	} else {
+		timeout = getTimeOut(uint64(fileRangeSize))
+	}
 	var ctxCncl context.CancelFunc
-	ctx, ctxCncl = context.WithTimeout(ctx, getTimeOut(uint64(fileRangeSize)))
+	ctx, ctxCncl = context.WithTimeout(ctx, timeout)
 
 	var startBlock, endBlock int64
 	dataShards := int64(alloc.DataShards)
