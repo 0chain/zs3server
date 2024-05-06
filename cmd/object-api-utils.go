@@ -460,7 +460,7 @@ func excludeForCompression(header http.Header, object string, cfg compress.Confi
 	}
 
 	// We strictly disable compression for standard extensions/content-types (`compressed`).
-	if hasStringSuffixInSlice(objStr, standardExcludeCompressExtensions) || hasPattern(standardExcludeCompressContentTypes, contentType) {
+	if hasStringSuffixInSlice(objStr, StandardExcludeCompressExtensions) || hasPattern(StandardExcludeCompressContentTypes, contentType) {
 		return true
 	}
 

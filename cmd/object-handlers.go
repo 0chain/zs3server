@@ -25,6 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -3549,7 +3550,7 @@ func (api objectAPIHandlers) DeleteObjectHandler(w http.ResponseWriter, r *http.
 	if api.CacheAPI() != nil {
 		deleteObject = api.CacheAPI().DeleteObject
 	}
-
+	log.Println("deleteSingleObjectCalled")
 	// http://docs.aws.amazon.com/AmazonS3/latest/API/RESTObjectDELETE.html
 	objInfo, err := deleteObject(ctx, bucket, object, opts)
 	if err != nil {
@@ -3560,7 +3561,7 @@ func (api objectAPIHandlers) DeleteObjectHandler(w http.ResponseWriter, r *http.
 			return
 		}
 	}
-
+	log.Println("deletedObjectInfo: ", objInfo.Name)
 	if objInfo.Name == "" {
 		writeSuccessNoContent(w)
 		return
@@ -3573,7 +3574,7 @@ func (api objectAPIHandlers) DeleteObjectHandler(w http.ResponseWriter, r *http.
 	if objInfo.DeleteMarker {
 		eventName = event.ObjectRemovedDeleteMarkerCreated
 	}
-
+	log.Println("eventName: ", eventName)
 	// Notify object deleted event.
 	sendEvent(eventArgs{
 		EventName:    eventName,

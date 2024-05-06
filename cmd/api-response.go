@@ -519,6 +519,10 @@ func generateListObjectsV1Response(bucket, prefix, marker, delimiter, encodingTy
 			content.StorageClass = globalMinioDefaultStorageClass
 		}
 		content.Owner = owner
+		if object.ContentType == "application/x-lz4" {
+			content.UserMetadata = make(StringMap)
+			content.UserMetadata["X-Minio-Compression"] = "application/x-lz4"
+		}
 		contents = append(contents, content)
 	}
 	data.Name = bucket
@@ -589,6 +593,9 @@ func generateListObjectsV2Response(bucket, prefix, token, nextToken, startAfter,
 					continue
 				}
 				content.UserMetadata[k] = v
+			}
+			if object.ContentType == "application/x-lz4" {
+				content.UserMetadata["X-Minio-Compression"] = "application/x-lz4"
 			}
 		}
 		contents = append(contents, content)

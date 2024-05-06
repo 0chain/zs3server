@@ -21,6 +21,7 @@ import (
 	"encoding/xml"
 	"errors"
 	"io"
+	"log"
 	"reflect"
 	"strings"
 	"unicode/utf8"
@@ -194,6 +195,7 @@ func (q *Queue) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {
 
 // Validate - checks whether queue has valid values or not.
 func (q Queue) Validate(region string, targetList *TargetList) error {
+	log.Println("targetList: ", targetList.targets, q.ARN.TargetID)
 	if q.ARN.region == "" {
 		if !targetList.Exists(q.ARN.TargetID) {
 			return &ErrARNNotFound{q.ARN}
@@ -278,8 +280,10 @@ func (conf *Config) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {
 
 // Validate - checks whether config has valid values or not.
 func (conf Config) Validate(region string, targetList *TargetList) error {
+	log.Println("configList: ", conf.QueueList)
 	for _, queue := range conf.QueueList {
 		if err := queue.Validate(region, targetList); err != nil {
+			log.Println("queueErr: ", err, queue.ARN.TargetID)
 			return err
 		}
 	}

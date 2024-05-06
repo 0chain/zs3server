@@ -3,7 +3,10 @@ package zcn
 import (
 	"errors"
 	"io"
+	"strings"
 	"time"
+
+	"github.com/minio/pkg/wildcard"
 )
 
 func newMinioReader(source io.Reader) *MinioReader {
@@ -37,4 +40,24 @@ func getTimeOut(size uint64) time.Duration {
 	default:
 		return time.Second * 30
 	}
+}
+
+func hasStringSuffixInSlice(str string, list []string) bool {
+	str = strings.ToLower(str)
+	for _, v := range list {
+		if strings.HasSuffix(str, strings.ToLower(v)) {
+			return true
+		}
+	}
+	return false
+}
+
+// Returns true if any of the given wildcard patterns match the matchStr.
+func hasPattern(patterns []string, matchStr string) bool {
+	for _, pattern := range patterns {
+		if ok := wildcard.MatchSimple(pattern, matchStr); ok {
+			return true
+		}
+	}
+	return false
 }
