@@ -1,0 +1,73 @@
+version: '3.8'
+services:
+  db2:
+    image: postgres:13-alpine
+    container_name: postgres-db2
+    restart: always
+    command: -c "log_statement=all"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    # ports:
+    #   - '5431:5432'
+    volumes:
+      - db2:/var/lib/postgresql/data
+
+  logsearchapi2:
+    build: ../logsearchapi
+    container_name: logsearchapi2
+    depends_on:
+      - db2
+    # ports:
+    #   - 8082:8080
+    environment:
+      LOGSEARCH_PG_CONN_STR: "postgres://postgres:postgres@postgres-db2:5432/postgres?sslmode=disable"
+      LOGSEARCH_AUDIT_AUTH_TOKEN: 1234
+      MINIO_LOG_QUERY_AUTH_TOKEN: 1234
+      LOGSEARCH_DISK_CAPACITY_GB: 5
+    links:
+      - db2
+
+  minioserver2:
+    build:
+      context: ../
+      dockerfile: Dockerfile
+    container_name: miniserver2
+    depends_on:
+      - logsearchapi2
+      - etcd2
+    ports:
+       - 9002:9000
+    command: ["minio", "gateway", "zcn"]
+    environment:
+      MINIO_AUDIT_WEBHOOK_ENDPOINT: http://logsearchapi2:8080/api/ingest?token=1234
+      MINIO_AUDIT_WEBHOOK_AUTH_TOKEN: 1234
+      MINIO_AUDIT_WEBHOOK_ENABLE: "on"
+      MINIO_ROOT_USER: rootroot
+      MINIO_ROOT_PASSWORD: rootroot
+      MINIO_BROWSER: "OFF"
+      MINIO_ETCD_ENDPOINTS: http://etcd2:2379
+    links:
+      - logsearchapi2
+    volumes:
+      - ~/.zcn2:/root/.zcn
+
+  minioclinet2:
+    build: ../client-api
+    container_name: miniclient2
+    depends_on:
+      - minioserver2
+    # ports:
+    #   - 3002:3001
+    environment:
+      MINIO_SERVER: "miniserver2:9000"
+
+  etcd2:
+    image: 'bitnami/etcd:latest'
+    container_name: etcd2
+    environment:
+      - ALLOW_NONE_AUTHENTICATION=yes
+      - ETCD_ADVERTISE_CLIENT_URLS=http://etcd2:2379
+    # ports:
+    #   - 2372:2379
+    #   - 2382:2380

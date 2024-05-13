@@ -159,7 +159,7 @@ Install from here for your os: https://min.io/docs/minio/macos/index.html
 ## Configure MinIO Client
 
 ```
-mc config host add zcn http://localhost:9000 miniouser miniopassword
+mc alias set zcn http://localhost:9000 miniouser miniopassword --api S3v2
 ```
 
 ### Examples
@@ -222,3 +222,43 @@ Check `mc --help` for the exhaustive list of cmds available.
 - Use the REST APIs to interact with the server.
 - Postman collection for the same is provided below:
   [Postman Collection](./assets/Zs3ServerCollection.postman_collection.json)
+
+## Replication
+
+To setup replication, you need to have two zs3servers. For running two zs3servers on the same machine, you will need to copy the contents of .zcn folder to .zcn2 folder and change allocation.txt and zs3server.json accordingly. For changes in docker-compose.yaml, you can refer to the following example:
+[docker-compose.yaml](https://github.com/0chain/zs3server/tree/staging/environment/docker-compose-dev2.yaml)
+
+- Configure both the zs3servers using minio client.
+
+```
+mc alias set primary http://<HOST_IP>:9000 miniouser miniopassword --api S3v2
+mc alias set secondary http://<HOST_IP>:9002 miniouser miniopassword --api S3v2
+```
+
+- Set up replication using the following command, for more details refer to [mc mirror](https://min.io/docs/minio/linux/reference/minio-mc/mc-mirror.html) command.
+
+```
+./mc mirror primary/<BUCKET_NAME>/ secondary/<BUCKET_NAME/ --remove --watch
+```
+
+## Disaster Recovery
+
+Disaster recovery is process of replicating data from secondary to primary in case of primary failure. To set up disaster recovery, you need to have replication setup between primary and secondary zs3servers. In case of primary failure, you can use the following command to sync data from secondary to primary.
+
+```
+./mc mirror secondary/<BUCKET_NAME>/ primary/<BUCKET_NAME/ --summary
+```
+
+## Encryption and Compression
+
+To enable encryption and compression, you need to provide the encryption and compression options in the zs3server.json file under .zcn folder. For example:
+
+```
+{
+"encrypt": true,
+"compress": true
+}
+```
+
+If you are using compression, we recommeng using our minio client
+[Minio Client](https://github.com/0chain/mc)
