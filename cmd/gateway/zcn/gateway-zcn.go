@@ -235,18 +235,24 @@ func (zob *zcnObjects) DeleteObjects(ctx context.Context, bucket string, objects
 	} else {
 		basePath = filepath.Join(rootPath, bucket)
 	}
-
+	ops := make([]sdk.OperationRequest, 0, len(objects))
 	for _, object := range objects {
 		remotePath := filepath.Join(basePath, object.ObjectName)
-		err := zob.alloc.DeleteFile(remotePath)
-		if err != nil {
-			errs = append(errs, err)
-			delObs = append(delObs, minio.DeletedObject{})
-		} else {
-			delObs = append(delObs, minio.DeletedObject{
-				ObjectName: object.ObjectName,
-			})
-			errs = append(errs, nil)
+		ops = append(ops, sdk.OperationRequest{
+			OperationType: constants.FileOperationDelete,
+			RemotePath:    remotePath,
+		})
+		delObs = append(delObs, minio.DeletedObject{})
+		errs = append(errs, nil)
+	}
+	err := zob.alloc.DoMultiOperation(ops)
+	if err != nil {
+		for i := 0; i < len(errs); i++ {
+			errs[i] = err
+		}
+	} else {
+		for i := 0; i < len(delObs); i++ {
+			delObs[i].ObjectName = objects[i].ObjectName
 		}
 	}
 	log.Println("DeletedObjects", len(delObs), len(errs))
