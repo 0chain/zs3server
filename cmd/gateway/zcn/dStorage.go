@@ -329,7 +329,7 @@ func getFileReader(ctx context.Context,
 
 func putFile(ctx context.Context, alloc *sdk.Allocation, remotePath, contentType string, r io.Reader, size int64, isUpdate, shouldEncrypt bool) (err error) {
 	logger.Info("started PutFile")
-	_, fileName := filepath.Split(remotePath)
+	fileName := filepath.Base(remotePath)
 	fileMeta := sdk.FileMeta{
 		Path:       "",
 		RemotePath: remotePath,

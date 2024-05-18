@@ -249,7 +249,7 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object, conte
 	go func() {
 		// Create fileMeta and sdk.OperationRequest
 		fileMeta := sdk.FileMeta{
-			RemoteName: object,
+			RemoteName: filepath.Base(remotePath),
 			RemotePath: remotePath,
 			MimeType:   contentType, // can get from request
 		}
