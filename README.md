@@ -238,7 +238,7 @@ mc alias set secondary http://<HOST_IP>:9002 miniouser miniopassword --api S3v2
 - Set up replication using the following command, for more details refer to [mc mirror](https://min.io/docs/minio/linux/reference/minio-mc/mc-mirror.html) command.
 
 ```
-./mc mirror primary/<BUCKET_NAME>/ secondary/<BUCKET_NAME/ --remove --watch
+./mc mirror primary/<BUCKET_PREFIX>/ secondary/<BUCKET_PREFIX>/ --remove --watch
 ```
 
 ## Disaster Recovery
