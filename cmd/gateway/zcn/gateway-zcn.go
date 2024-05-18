@@ -17,6 +17,7 @@ import (
 	"github.com/minio/minio/internal/logger"
 	"github.com/minio/pkg/mimedb"
 	"github.com/mitchellh/go-homedir"
+	"golang.org/x/sync/semaphore"
 
 	"github.com/0chain/gosdk/zboxcore/sdk"
 	"github.com/minio/cli"
@@ -115,6 +116,11 @@ func (z *ZCN) Name() string {
 	return minio.ZCNBAckendGateway
 }
 
+var (
+	contentMap  map[string]*semaphore.Weighted
+	contentLock sync.Mutex
+)
+
 // NewGatewayLayer initializes 0chain gosdk and return zcnObjects
 func (z *ZCN) NewGatewayLayer(creds madmin.Credentials) (minio.ObjectLayer, error) {
 	err := initializeSDK(configDir, allocationID, nonce)
@@ -129,6 +135,7 @@ func (z *ZCN) NewGatewayLayer(creds madmin.Credentials) (minio.ObjectLayer, erro
 	sdk.CurrentMode = sdk.UploadModeHigh
 	sdk.SetSingleClietnMode(true)
 	sdk.SetShouldVerifyHash(false)
+	sdk.SetSaveProgress(false)
 	zob := &zcnObjects{
 		alloc:   allocation,
 		metrics: minio.NewMetrics(),
@@ -137,6 +144,7 @@ func (z *ZCN) NewGatewayLayer(creds madmin.Credentials) (minio.ObjectLayer, erro
 	if err != nil {
 		return nil, err
 	}
+	contentMap = make(map[string]*semaphore.Weighted)
 	return zob, nil
 }
 
@@ -533,6 +541,12 @@ func (zob *zcnObjects) PutObject(ctx context.Context, bucket, object string, r *
 
 	if ref != nil {
 		isUpdate = true
+	} else {
+		err = lockPath(ctx, remotePath)
+		if err != nil {
+			return
+		}
+		defer unlockPath(remotePath)
 	}
 
 	contentType := opts.UserDefined["content-type"]
@@ -689,6 +703,24 @@ func (zob *zcnObjects) StorageInfo(ctx context.Context) (si minio.StorageInfo, _
 	si.Backend.Type = madmin.Gateway
 	si.Backend.GatewayOnline = true
 	return
+}
+
+func lockPath(ctx context.Context, path string) error {
+	contentLock.Lock()
+	defer contentLock.Unlock()
+	if _, ok := contentMap[path]; !ok {
+		contentMap[path] = semaphore.NewWeighted(1)
+	}
+	return contentMap[path].Acquire(ctx, 1)
+}
+
+func unlockPath(path string) {
+	contentLock.Lock()
+	defer contentLock.Unlock()
+	if sem, ok := contentMap[path]; ok {
+		sem.Release(1)
+		delete(contentMap, path)
+	}
 }
 
 /*
