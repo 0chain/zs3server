@@ -532,6 +532,10 @@ func (zob *zcnObjects) PutObject(ctx context.Context, bucket, object string, r *
 
 	var ref *sdk.ORef
 	var isUpdate bool
+	err = lockPath(ctx, remotePath)
+	if err != nil {
+		return
+	}
 	ref, err = getSingleRegularRef(zob.alloc, remotePath)
 	if err != nil {
 		if !isPathNoExistError(err) {
@@ -541,11 +545,8 @@ func (zob *zcnObjects) PutObject(ctx context.Context, bucket, object string, r *
 
 	if ref != nil {
 		isUpdate = true
+		unlockPath(remotePath)
 	} else {
-		err = lockPath(ctx, remotePath)
-		if err != nil {
-			return
-		}
 		defer unlockPath(remotePath)
 	}
 
