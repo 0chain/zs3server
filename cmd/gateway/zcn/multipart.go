@@ -311,7 +311,10 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object, conte
 					if err != nil {
 						log.Panicf("could not open part file: %v, err: %v", partFilename, err)
 					}
-					defer partFile.Close()
+					defer func() {
+						partFile.Close()
+						_ = os.Remove(partFilename)
+					}()
 					stat, err := partFile.Stat()
 					if err != nil {
 						log.Panicf("could not stat part file: %v, err: %v", partFilename, err)
@@ -436,7 +439,7 @@ func (zob *zcnObjects) constructCompleteObject(bucket, uploadID, object, localSt
 		partETagFilename := partFilename + ".etag"
 
 		// Break the loop when there are no more parts
-		if _, err := os.Stat(partFilename); os.IsNotExist(err) {
+		if _, err := os.Stat(partETagFilename); os.IsNotExist(err) {
 			break
 		}
 
@@ -523,15 +526,16 @@ func (zob *zcnObjects) ListObjectParts(ctx context.Context, bucket string, objec
 
 	for i := partNumberMarker; i <= maxParts; i++ {
 		partFilename := filepath.Join(localStorageDir, bucket, uploadID, object, fmt.Sprintf("part%d", i))
+		partETagFilename := partFilename + ".etag"
 		// Check if the part file exists
-		fs, err := os.Stat(partFilename)
+		fs, err := os.Stat(partETagFilename)
 		if err != nil {
 			// If the part file does not exist, we have reached the end of the parts list
 			break
 		}
 
 		// Read the ETag of the part
-		partETagFilename := partFilename + ".etag"
+
 		partETagBytes, err := os.ReadFile(partETagFilename)
 		if err != nil {
 			return minio.ListPartsInfo{}, fmt.Errorf("Unable to read part ETag: %w", err)
