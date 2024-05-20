@@ -104,7 +104,12 @@ func (zob *zcnObjects) NewMultipartUpload(ctx context.Context, bucket string, ob
 func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object, contentType string, toCompress bool) (string, error) {
 	// Generate a unique upload ID
 	var isUpdate bool
-	remotePath := "/" + filepath.Join(bucket, object)
+	var remotePath string
+	if bucket == rootBucketName {
+		remotePath = filepath.Join(rootPath, object)
+	} else {
+		remotePath = filepath.Join(rootPath, bucket, object)
+	}
 	ref, err := getSingleRegularRef(zob.alloc, remotePath)
 	if err != nil {
 		if !isPathNoExistError(err) {
