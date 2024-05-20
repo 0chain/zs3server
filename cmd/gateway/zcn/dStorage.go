@@ -255,10 +255,10 @@ func getFileReader(ctx context.Context,
 		}
 		fileRangeSize = objectInfo.Size - rangeStart
 	}
-	log.Println("^^^^^^^^getFileReader: starting download: ", startBlock, endBlock, rangeStart, rangeEnd, fileRangeSize)
+	// log.Println("^^^^^^^^getFileReader: starting download: ", startBlock, endBlock, rangeStart, rangeEnd, fileRangeSize)
 	var r sys.File
 	if startBlock == 1 && endBlock == 0 {
-		log.Println("^^^^^^^^getFileReader: stream download ")
+		// log.Println("^^^^^^^^getFileReader: stream download ")
 		pr, pw := io.Pipe()
 		r = &pipeFile{w: pw}
 		go func() {
@@ -316,7 +316,7 @@ func getFileReader(ctx context.Context,
 
 	// create a new limited reader
 	f := io.LimitReader(r, fileRangeSize)
-	log.Println("^^^^^^^^getFileReader: finish download")
+	// log.Println("^^^^^^^^getFileReader: finish download")
 	fCloser := func() {
 		r.Close() //nolint:errcheck
 		if localFilePath != "" {
@@ -328,7 +328,7 @@ func getFileReader(ctx context.Context,
 }
 
 func putFile(ctx context.Context, alloc *sdk.Allocation, remotePath, contentType string, r io.Reader, size int64, isUpdate, shouldEncrypt bool) (err error) {
-	logger.Info("started PutFile")
+	// logger.Info("started PutFile")
 	fileName := filepath.Base(remotePath)
 	fileMeta := sdk.FileMeta{
 		Path:       "",
@@ -338,7 +338,7 @@ func putFile(ctx context.Context, alloc *sdk.Allocation, remotePath, contentType
 		RemoteName: fileName,
 	}
 
-	logger.Info("starting chunked upload")
+	// logger.Info("starting chunked upload")
 	opRequest := sdk.OperationRequest{
 		OperationType: constants.FileOperationInsert,
 		FileReader:    newMinioReader(r),
