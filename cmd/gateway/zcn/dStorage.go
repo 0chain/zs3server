@@ -147,7 +147,7 @@ func getSingleRegularRef(alloc *sdk.Allocation, remotePath string) (*sdk.ORef, e
 	oREsult, err := alloc.GetRefs(remotePath, "", "", "", "", "regular", level, 1)
 	if err != nil {
 		logger.Error("error with GetRefs", err.Error(), " this is the error")
-		fmt.Println("error with GetRefs", err)
+		// fmt.Println("error with GetRefs", err)
 		if isConsensusFailedError(err) {
 			time.Sleep(retryWaitTime)
 			oREsult, err = alloc.GetRefs(remotePath, "", "", "", "", "regular", level, 1)

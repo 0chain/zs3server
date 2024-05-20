@@ -422,7 +422,7 @@ func (zob *zcnObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 	} else {
 		remotePath = filepath.Join(rootPath, bucket, prefix)
 	}
-	log.Println("ListObjects remotePath: ", remotePath, " objFileType: ", objFileType)
+	// log.Println("ListObjects remotePath: ", remotePath, " objFileType: ", objFileType)
 	var ref *sdk.ORef
 	ref, err = getSingleRegularRef(zob.alloc, remotePath)
 	if err != nil {
