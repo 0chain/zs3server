@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -175,7 +174,7 @@ var (
 )
 
 func getObjectRef(alloc *sdk.Allocation, bucket, object, remotePath string) (*minio.ObjectInfo, bool, error) {
-	log.Printf("~~~~~~~~~~~~~~~~~~~~~~~~ get object info remotePath: %v\n", remotePath)
+	// log.Printf("~~~~~~~~~~~~~~~~~~~~~~~~ get object info remotePath: %v\n", remotePath)
 	var isEncrypted bool
 	ref, err := getSingleRegularRef(alloc, remotePath)
 	if err != nil {
@@ -188,7 +187,7 @@ func getObjectRef(alloc *sdk.Allocation, bucket, object, remotePath string) (*mi
 		isEncrypted = true
 	}
 
-	log.Println("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~get object info, ref: ", ref)
+	// log.Println("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~get object info, ref: ", ref)
 
 	return &minio.ObjectInfo{
 		Bucket:      bucket,
