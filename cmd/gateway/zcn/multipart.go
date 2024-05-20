@@ -311,7 +311,10 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object, conte
 					if err != nil {
 						log.Panicf("could not open part file: %v, err: %v", partFilename, err)
 					}
-					defer partFile.Close()
+					defer func() {
+						partFile.Close()
+						_ = os.Remove(partFilename)
+					}()
 					stat, err := partFile.Stat()
 					if err != nil {
 						log.Panicf("could not stat part file: %v, err: %v", partFilename, err)
@@ -436,26 +439,9 @@ func (zob *zcnObjects) constructCompleteObject(bucket, uploadID, object, localSt
 		partETagFilename := partFilename + ".etag"
 
 		// Break the loop when there are no more parts
-		if _, err := os.Stat(partFilename); os.IsNotExist(err) {
+		if _, err := os.Stat(partETagFilename); os.IsNotExist(err) {
 			break
 		}
-
-		// func() {
-		// 	// Open the part file for reading
-		// 	partFile, err := os.Open(partFilename)
-		// 	if err != nil {
-		// 		log.Panicf("could not open part file: %v, err: %v", partFilename, err)
-		// 	}
-		// 	defer partFile.Close()
-
-		// 	data, err := io.ReadAll(partFile)
-		// 	if err != nil {
-		// 		log.Panicf("read part: %v failed, err: %v", partNumber, err)
-		// 	}
-
-		// 	multiPartFile.dataC <- data
-		// 	log.Println("^^^^^^^^^ uploading part:", partNumber, "size:", len(data))
-		// }()
 
 		// Read the ETag of the part
 		partETagBytes, err := os.ReadFile(partETagFilename)
@@ -469,17 +455,6 @@ func (zob *zcnObjects) constructCompleteObject(bucket, uploadID, object, localSt
 
 	// Get the concatenated ETag value
 	eTag := strings.Join(partETags, "")
-
-	// Close the temporary file
-	// if err := tmpCompleteObjectFile.Close(); err != nil {
-	// 	return "", err
-	// }
-
-	// Rename the temporary file to its final destination
-	// completeObjectFilename := filepath.Join(localStorageDir, bucket, object)
-	// if err := os.Rename(tmpCompleteObjectFilename, completeObjectFilename); err != nil {
-	// 	return "", err
-	// }
 
 	return eTag, nil
 }
