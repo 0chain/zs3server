@@ -9,6 +9,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -140,6 +141,7 @@ func (z *ZCN) NewGatewayLayer(creds madmin.Credentials) (minio.ObjectLayer, erro
 		alloc:   allocation,
 		metrics: minio.NewMetrics(),
 	}
+	debug.SetGCPercent(50)
 	workDir, err = homedir.Dir()
 	if err != nil {
 		return nil, err
