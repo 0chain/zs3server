@@ -279,8 +279,11 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object, conte
 		go func() {
 			// run this in background, will block until the data is written to memFile
 			// We should add ctx here to cancel the operation
-			multiPartFile.errorC <- zob.alloc.DoMultiOperation([]sdk.OperationRequest{operationRequest})
-			cleanupPartFilesAndDirs(bucket, uploadID, localStorageDir)
+			uploadErr := zob.alloc.DoMultiOperation([]sdk.OperationRequest{operationRequest})
+			if uploadErr != nil {
+				cleanupPartFilesAndDirs(bucket, uploadID, localStorageDir)
+			}
+			multiPartFile.errorC <- uploadErr
 		}()
 
 		for {
