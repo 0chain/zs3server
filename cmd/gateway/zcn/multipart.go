@@ -157,7 +157,7 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object, conte
 			zw.Apply(lz4.CompressionLevelOption(lz4.Level1)) //nolint:errcheck
 		}
 		// st := time.Now()
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 		defer cancel()
 		for {
 			select {
@@ -165,12 +165,12 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object, conte
 				log.Println("uploading is canceled, clean up temp dirs")
 				memFile.errChan <- fmt.Errorf("uploading is canceled")
 				// TODO: clean up temp dirs
-				_ = os.Remove(bucketPath)
+				cleanupPartFilesAndDirs(bucket, uploadID, localStorageDir)
 				return
 			case <-ctx.Done():
 				log.Println("uploading is timeout, clean up temp dirs")
 				memFile.errChan <- fmt.Errorf("uploading is timeout")
-				_ = os.Remove(bucketPath)
+				cleanupPartFilesAndDirs(bucket, uploadID, localStorageDir)
 				return
 			case data, ok := <-multiPartFile.dataC:
 				if ok {
@@ -280,7 +280,7 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object, conte
 			// run this in background, will block until the data is written to memFile
 			// We should add ctx here to cancel the operation
 			multiPartFile.errorC <- zob.alloc.DoMultiOperation([]sdk.OperationRequest{operationRequest})
-
+			cleanupPartFilesAndDirs(bucket, uploadID, localStorageDir)
 		}()
 
 		for {
@@ -288,8 +288,7 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object, conte
 			case <-multiPartFile.cancelC:
 				log.Println("uploading is canceled, clean up temp dirs")
 				multiPartFile.memFile.errChan <- fmt.Errorf("uploading is canceled")
-				// TODO: clean up temp dirs
-				_ = os.Remove(bucketPath)
+				cleanupPartFilesAndDirs(bucket, uploadID, localStorageDir)
 				return
 			default:
 				partNumber := multiPartFile.seqPQ.Popup()
@@ -298,8 +297,6 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object, conte
 				if partNumber == -1 {
 					close(multiPartFile.dataC)
 					close(multiPartFile.doneC)
-					_ = os.Remove(bucketPath)
-					// log.Println("==================================== popup done")
 					return
 				}
 
