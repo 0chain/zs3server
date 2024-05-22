@@ -85,6 +85,8 @@ func initializeSDK(configDir, allocid string, nonce int64) error {
 	logger.SyncLoggers([]*logger.Logger{zcncore.GetLogger(), sdk.GetLogger()})
 	zcncore.SetLogFile("cmdlog.log", true)
 	sdk.SetLogFile("cmd.log", true)
+	zcncore.SetLogLevel(3)
+	sdk.SetLogLevel(3)
 
 	err = zcncore.InitZCNSDK(cfg.BlockWorker, cfg.SignatureScheme,
 		zcncore.WithChainID(cfg.ChainID),

@@ -147,7 +147,6 @@ func getSingleRegularRef(alloc *sdk.Allocation, remotePath string) (*sdk.ORef, e
 	oREsult, err := alloc.GetRefs(remotePath, "", "", "", "", "regular", level, 1)
 	if err != nil {
 		logger.Error("error with GetRefs", err.Error(), " this is the error")
-		fmt.Println("error with GetRefs", err)
 		if isConsensusFailedError(err) {
 			time.Sleep(retryWaitTime)
 			oREsult, err = alloc.GetRefs(remotePath, "", "", "", "", "regular", level, 1)
@@ -175,7 +174,6 @@ var (
 )
 
 func getObjectRef(alloc *sdk.Allocation, bucket, object, remotePath string) (*minio.ObjectInfo, bool, error) {
-	log.Printf("~~~~~~~~~~~~~~~~~~~~~~~~ get object info remotePath: %v\n", remotePath)
 	var isEncrypted bool
 	ref, err := getSingleRegularRef(alloc, remotePath)
 	if err != nil {
@@ -187,8 +185,6 @@ func getObjectRef(alloc *sdk.Allocation, bucket, object, remotePath string) (*mi
 	if ref.EncryptedKey != "" {
 		isEncrypted = true
 	}
-
-	log.Println("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~get object info, ref: ", ref)
 
 	return &minio.ObjectInfo{
 		Bucket:      bucket,
@@ -255,10 +251,9 @@ func getFileReader(ctx context.Context,
 		}
 		fileRangeSize = objectInfo.Size - rangeStart
 	}
-	log.Println("^^^^^^^^getFileReader: starting download: ", startBlock, endBlock, rangeStart, rangeEnd, fileRangeSize)
 	var r sys.File
 	if startBlock == 1 && endBlock == 0 {
-		log.Println("^^^^^^^^getFileReader: stream download ")
+		log.Println("getFileReader: stream download ")
 		pr, pw := io.Pipe()
 		r = &pipeFile{w: pw}
 		go func() {
@@ -316,7 +311,6 @@ func getFileReader(ctx context.Context,
 
 	// create a new limited reader
 	f := io.LimitReader(r, fileRangeSize)
-	log.Println("^^^^^^^^getFileReader: finish download")
 	fCloser := func() {
 		r.Close() //nolint:errcheck
 		if localFilePath != "" {

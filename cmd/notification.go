@@ -24,7 +24,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"sort"
@@ -1415,7 +1414,7 @@ func sendEvent(args eventArgs) {
 	if globalNotificationSys == nil {
 		return
 	}
-	log.Println("sendEvent:", args.EventName, args.Object.Name)
+
 	if globalHTTPListen.NumSubscribers() > 0 {
 		globalHTTPListen.Publish(args.ToEvent(false))
 	}
