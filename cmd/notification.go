@@ -1401,6 +1401,9 @@ func (args eventArgs) ToEvent(escape bool) event.Event {
 
 func sendEvent(args eventArgs) {
 	args.Object.Size, _ = args.Object.GetActualSize()
+	if args.Object.Size == 0 {
+		return
+	}
 
 	// avoid generating a notification for REPLICA creation event.
 	if _, ok := args.ReqParams[xhttp.MinIOSourceReplicationRequest]; ok {
