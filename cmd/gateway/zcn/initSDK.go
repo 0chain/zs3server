@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"github.com/0chain/gosdk/core/conf"
 	"github.com/0chain/gosdk/core/logger"
 	"github.com/0chain/gosdk/zboxcore/blockchain"
+	"github.com/0chain/gosdk/zboxcore/client"
 	"github.com/0chain/gosdk/zboxcore/sdk"
 	"github.com/0chain/gosdk/zcncore"
 	"github.com/mitchellh/go-homedir"
@@ -85,6 +87,8 @@ func initializeSDK(configDir, allocid string, nonce int64) error {
 	logger.SyncLoggers([]*logger.Logger{zcncore.GetLogger(), sdk.GetLogger()})
 	zcncore.SetLogFile("cmdlog.log", true)
 	sdk.SetLogFile("cmd.log", true)
+	sdk.SetLogLevel(2)
+	zcncore.SetLogLevel(2)
 
 	err = zcncore.InitZCNSDK(cfg.BlockWorker, cfg.SignatureScheme,
 		zcncore.WithChainID(cfg.ChainID),
@@ -99,7 +103,7 @@ func initializeSDK(configDir, allocid string, nonce int64) error {
 	if err != nil {
 		return err
 	}
-
+	log.Println("SDK initialized: ", client.GetClientID(), " ", client.GetClientPublicKey())
 	blockchain.SetMaxTxnQuery(cfg.MaxTxnQuery)
 	blockchain.SetQuerySleepTime(cfg.QuerySleepTime)
 	conf.InitClientConfig(&cfg)
