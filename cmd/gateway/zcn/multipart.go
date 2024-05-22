@@ -44,7 +44,6 @@ type MultiPartFile struct {
 	lastPartUpdated bool
 	errorC          chan error
 	seqPQ           *seqpriorityqueue.SeqPriorityQueue
-	doneC           chan struct{} // indicates that the uploading is done
 	cancelC         chan struct{} // indicate the cancel of the uploading
 	dataC           chan []byte   // data to be uploaded
 }
@@ -131,7 +130,6 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object, conte
 		memFile: memFile,
 		seqPQ:   seqpriorityqueue.NewSeqPriorityQueue(),
 		errorC:  make(chan error, 1),
-		doneC:   make(chan struct{}),
 		dataC:   make(chan []byte, 20),
 		cancelC: make(chan struct{}, 1),
 	}
@@ -299,7 +297,6 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object, conte
 
 				if partNumber == -1 {
 					close(multiPartFile.dataC)
-					close(multiPartFile.doneC)
 					return
 				}
 
