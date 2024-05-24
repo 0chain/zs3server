@@ -428,7 +428,7 @@ func (zob *zcnObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 	} else {
 		remotePath = filepath.Join(rootPath, bucket, prefix)
 	}
-
+	log.Println("ListObjects: ", remotePath, prefix)
 	var ref *sdk.ORef
 	ref, err = getSingleRegularRef(zob.alloc, remotePath)
 	if err != nil {
@@ -485,7 +485,7 @@ func (zob *zcnObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 		if ref.Type == dirType {
 			continue
 		}
-
+		log.Println("list_object: ", ref.Path, ref.Name, " ", remotePath)
 		objects = append(objects, minio.ObjectInfo{
 			Bucket:       bucket,
 			Name:         getRelativePathOfObj(ref.Path, bucket),
