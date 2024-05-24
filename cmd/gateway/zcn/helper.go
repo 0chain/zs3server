@@ -32,13 +32,11 @@ func getTimeOut(size uint64) time.Duration {
 	case size >= oneGB:
 		return time.Minute * 30
 	case size >= 500*oneMB:
-		return time.Minute * 5
+		return time.Minute * 10
 	case size >= hundredMB:
-		return time.Minute * 3
-	case size >= 50*oneMB:
-		return time.Minute
+		return time.Minute * 5
 	default:
-		return time.Second * 30
+		return time.Minute * 2
 	}
 }
 
