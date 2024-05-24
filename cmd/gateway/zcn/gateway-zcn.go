@@ -485,7 +485,7 @@ func (zob *zcnObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 		if ref.Type == dirType {
 			continue
 		}
-		log.Println("list_object: ", ref.Path, ref.Name, " ", remotePath)
+		log.Println("list_object: ", ref.Path, " ", remotePath)
 		objects = append(objects, minio.ObjectInfo{
 			Bucket:       bucket,
 			Name:         getRelativePathOfObj(ref.Path, bucket),

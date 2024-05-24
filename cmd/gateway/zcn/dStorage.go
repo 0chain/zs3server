@@ -83,7 +83,7 @@ func listRegularRefs(alloc *sdk.Allocation, remotePath, marker, fileType string,
 	var markedPath string
 
 	remotePath = filepath.Clean(remotePath)
-
+	log.Println("remotePath: ", remotePath, " marker: ", marker, " fileType: ", fileType, " isDelimited: ", isDelimited)
 	directories := []string{remotePath}
 	var currentRemotePath string
 	for len(directories) > 0 && !isTruncated {
@@ -91,6 +91,7 @@ func listRegularRefs(alloc *sdk.Allocation, remotePath, marker, fileType string,
 		directories = directories[1:] // dequeue from the directories queue
 		commonPrefix := getCommonPrefix(currentRemotePath)
 		offsetPath := filepath.Join(currentRemotePath, marker)
+		log.Println("currentRemotePath: ", currentRemotePath, " offsetPath: ", offsetPath, " fileType: ", fileType, " isDelimited: ", isDelimited)
 		for {
 			oResult, err := getRegularRefs(alloc, currentRemotePath, offsetPath, fileType, pageLimit)
 			if err != nil {
@@ -99,6 +100,7 @@ func listRegularRefs(alloc *sdk.Allocation, remotePath, marker, fileType string,
 			if len(oResult.Refs) == 0 {
 				break
 			}
+			log.Println("refResult: ", oResult.Refs)
 
 			for i := 0; i < len(oResult.Refs); i++ {
 				ref := oResult.Refs[i]
@@ -114,7 +116,7 @@ func listRegularRefs(alloc *sdk.Allocation, remotePath, marker, fileType string,
 				}
 
 				ref.Name = filepath.Join(commonPrefix, trimmedPath)
-
+				log.Println("refPath: ", ref.Path)
 				refs = append(refs, ref)
 				if maxRefs != 0 && len(refs) >= maxRefs {
 					markedPath = ref.Path
