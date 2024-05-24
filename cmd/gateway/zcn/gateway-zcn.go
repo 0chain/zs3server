@@ -216,7 +216,12 @@ func (zob *zcnObjects) DeleteObject(ctx context.Context, bucket, object string, 
 		return
 	}
 
-	err = zob.alloc.DeleteFile(remotePath)
+	op := sdk.OperationRequest{
+		OperationType: constants.FileOperationDelete,
+		RemotePath:    remotePath,
+	}
+
+	err = zob.alloc.DoMultiOperation([]sdk.OperationRequest{op})
 	if err != nil {
 		return
 	}
