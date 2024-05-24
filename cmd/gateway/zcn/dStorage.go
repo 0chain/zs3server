@@ -81,6 +81,7 @@ func listRegularRefs(alloc *sdk.Allocation, remotePath, marker, fileType string,
 	var prefixes []string
 	var isTruncated bool
 	var markedPath string
+	dirMap := make(map[string]bool)
 
 	remotePath = filepath.Clean(remotePath)
 
@@ -104,6 +105,9 @@ func listRegularRefs(alloc *sdk.Allocation, remotePath, marker, fileType string,
 				ref := oResult.Refs[i]
 				trimmedPath := strings.TrimPrefix(ref.Path, currentRemotePath+"/")
 				if ref.Type == dirType {
+					if _, ok := dirMap[ref.Path]; ok {
+						continue
+					}
 					if isDelimited {
 						dirPrefix := filepath.Join(commonPrefix, trimmedPath) + "/"
 						prefixes = append(prefixes, dirPrefix)
@@ -111,6 +115,7 @@ func listRegularRefs(alloc *sdk.Allocation, remotePath, marker, fileType string,
 					} else {
 						directories = append(directories, ref.Path)
 					}
+					dirMap[ref.Path] = true
 				}
 
 				ref.Name = filepath.Join(commonPrefix, trimmedPath)
