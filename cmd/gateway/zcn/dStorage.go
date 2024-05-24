@@ -91,6 +91,9 @@ func listRegularRefs(alloc *sdk.Allocation, remotePath, marker, fileType string,
 		directories = directories[1:] // dequeue from the directories queue
 		commonPrefix := getCommonPrefix(currentRemotePath)
 		offsetPath := filepath.Join(currentRemotePath, marker)
+		if currentRemotePath[len(currentRemotePath)-1] != '/' {
+			currentRemotePath += "/"
+		}
 		log.Println("currentRemotePath: ", currentRemotePath, " offsetPath: ", offsetPath, " fileType: ", fileType, " isDelimited: ", isDelimited)
 		for {
 			oResult, err := getRegularRefs(alloc, currentRemotePath, offsetPath, fileType, pageLimit)
