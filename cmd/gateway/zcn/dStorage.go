@@ -87,7 +87,7 @@ func listRegularRefs(alloc *sdk.Allocation, remotePath, marker, fileType string,
 	directories := []string{remotePath}
 	var currentRemotePath string
 	for len(directories) > 0 && !isTruncated {
-		currentRemotePath = directories[0]
+		currentRemotePath = directories[0] + "/"
 		directories = directories[1:] // dequeue from the directories queue
 		commonPrefix := getCommonPrefix(currentRemotePath)
 		offsetPath := filepath.Join(currentRemotePath, marker)
