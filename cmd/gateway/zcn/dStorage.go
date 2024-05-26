@@ -251,6 +251,7 @@ func getFileReader(ctx context.Context,
 		startBlock = 1
 		endBlock = 0
 	}
+	log.Println("download_request:", rangeStart, rangeEnd, startBlock, endBlock, fileRangeSize)
 
 	if rangeEnd == -1 {
 		endBlock = 0
