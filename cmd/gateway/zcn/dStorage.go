@@ -251,7 +251,6 @@ func getFileReader(ctx context.Context,
 		startBlock = 1
 		endBlock = 0
 	}
-	log.Println("download_request:", rangeStart, rangeEnd, startBlock, endBlock, fileRangeSize)
 
 	if rangeEnd == -1 {
 		endBlock = 0
@@ -261,6 +260,8 @@ func getFileReader(ctx context.Context,
 		}
 		fileRangeSize = objectInfo.Size - rangeStart
 	}
+	log.Println("download_request:", rangeStart, rangeEnd, startBlock, endBlock, fileRangeSize)
+
 	var r sys.File
 	if startBlock == 1 && endBlock == 0 {
 		log.Println("getFileReader: stream download ")
