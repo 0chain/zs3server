@@ -243,9 +243,9 @@ func getFileReader(ctx context.Context,
 			startBlock = 1
 		}
 		if rangeEnd < fileRangeSize {
-			endBlock = fileRangeSize / effectiveChunkSize
+			endBlock = (fileRangeSize + effectiveChunkSize - 1) / effectiveChunkSize
 		} else {
-			endBlock = int64(rangeEnd) / effectiveChunkSize
+			endBlock = int64(rangeEnd+effectiveChunkSize-1) / effectiveChunkSize
 		}
 	} else {
 		startBlock = 1
