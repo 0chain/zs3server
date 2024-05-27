@@ -311,7 +311,7 @@ func getFileReader(ctx context.Context,
 		return nil, nil, nil, "", errors.New("exceeded timeout")
 	}
 
-	startOffset := rangeStart - startBlock*effectiveChunkSize
+	startOffset := rangeStart - (startBlock-1)*effectiveChunkSize
 	if startOffset < 0 {
 		startOffset = 0
 	}
