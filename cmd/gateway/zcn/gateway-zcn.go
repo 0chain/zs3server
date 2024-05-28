@@ -38,6 +38,7 @@ var (
 	encrypt      bool
 	compress     bool
 	workDir      string
+	serverConfig serverOptions
 )
 
 var zFlags = []cli.Flag{
@@ -149,7 +150,7 @@ func (z *ZCN) NewGatewayLayer(creds madmin.Credentials) (minio.ObjectLayer, erro
 	contentMap = make(map[string]*semaphore.Weighted)
 	ctx, cancel := context.WithCancel(context.Background())
 	zob.ctxCancel = cancel
-	IntiBatchUploadWorkers(ctx, allocation, 500, 25, 5)
+	IntiBatchUploadWorkers(ctx, allocation, serverConfig.BatchWaitTime, serverConfig.MaxBatchSize, serverConfig.BatchWorkers)
 	return zob, nil
 }
 

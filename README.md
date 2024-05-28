@@ -255,8 +255,11 @@ To enable encryption and compression, you need to provide the encryption and com
 
 ```
 {
-"encrypt": true,
-"compress": true
+  "encrypt": true,
+  "compress": true,
+  "max_batch_size": 25, // set same as concurrency set via rclone or client
+  "batch_wait_time": 500, // can increase the wait time if the time between requests is more
+  "batch_workers": 5 // number of workers, can be increased based on the number of requests
 }
 ```
 
