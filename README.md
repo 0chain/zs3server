@@ -257,6 +257,15 @@ To enable encryption and compression, you need to provide the encryption and com
 {
   "encrypt": true,
   "compress": true,
+}
+```
+
+## Batch Upload settings
+
+The server will batch upload requests for objects which are uploaded using put api and has a defined content length. Max batch size refers to number of objects max objects to upload in one batch, this number should be similar to concurrency or thread set in client or expected number of requests per seconds, batch wait time will wait for this much amount of time before finalizing a batch and uploading it, number of batch workers will determine how many batches can we upload concurrently. For example:
+
+```
+{
   "max_batch_size": 25, // set same as concurrency set via rclone or client
   "batch_wait_time": 500, // can increase the wait time if the time between requests is more
   "batch_workers": 5 // number of workers, can be increased based on the number of requests
