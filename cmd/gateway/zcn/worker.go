@@ -3,6 +3,7 @@ package zcn
 import (
 	"context"
 	"errors"
+	"log"
 	"time"
 
 	"github.com/0chain/gosdk/zboxcore/sdk"
@@ -65,6 +66,7 @@ func batchUploadWorker(ctx context.Context, alloc *sdk.Allocation, opsChan chan 
 			return
 		case ops := <-opsChan:
 			// process the batch upload or wait for more operations
+			log.Println("processing batch upload: ", len(ops))
 			err := alloc.DoMultiOperation(ops)
 			if err != nil {
 				if !isSameRootError(err) {
