@@ -147,18 +147,23 @@ func (z *ZCN) NewGatewayLayer(creds madmin.Credentials) (minio.ObjectLayer, erro
 		return nil, err
 	}
 	contentMap = make(map[string]*semaphore.Weighted)
+	ctx, cancel := context.WithCancel(context.Background())
+	zob.ctxCancel = cancel
+	IntiBatchUploadWorkers(ctx, allocation, 1500, 25, 5)
 	return zob, nil
 }
 
 type zcnObjects struct {
 	minio.GatewayUnsupported
-	alloc   *sdk.Allocation
-	metrics *minio.BackendMetrics
+	alloc     *sdk.Allocation
+	metrics   *minio.BackendMetrics
+	ctxCancel context.CancelFunc
 }
 
 // Shutdown Remove temporary directory
 func (zob *zcnObjects) Shutdown(ctx context.Context) error {
 	os.RemoveAll(tempdir)
+	zob.ctxCancel()
 	return nil
 }
 

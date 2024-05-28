@@ -447,6 +447,7 @@ github.com/hashicorp/go-rootcerts v1.0.2/go.mod h1:pqUvnprVnM5bf7AOirdbb01K4ccR3
 github.com/hashicorp/serf v0.10.1/go.mod h1:yL2t6BqATOLGc5HF7qbFkTfXoPIY0WZdWHfEvMqbG+4=
 github.com/herumi/bls-go-binary v1.30.4 h1:djGiorPb4lFVRF/lsyB+EHVGVlcE7CYRmJKu72Vdpnk=
 github.com/hitenjain14/fasthttp v0.0.0-20240223160417-7458814cf3d0 h1:XCrNCir8+zDo+Ku7B+AXhzFnsJvSelx1YbQQTNpxtqI=
+github.com/hitenjain14/fasthttp v0.0.0-20240527123209-06019e79bff9 h1:Z6Mu2JCsW2hbqx91L0HNPRPQ10RyAFvPocQHlrRo1Jk=
 github.com/holiman/uint256 v1.2.0/go.mod h1:y4ga/t+u+Xwd7CpDgZESaRcWy0I7XMlTMA25ApIH5Jw=
 github.com/huin/goutil v0.0.0-20170803182201-1ca381bf3150/go.mod h1:PpLOETDnJ0o3iZrZfqZzyLl6l7F3c6L1oWn7OICBi6o=
 github.com/hydrogen18/memlistener v0.0.0-20200120041712-dcc25e7acd91/go.mod h1:qEIFzExnS6016fRpRfxrExeVn2gbClQA99gQhnIcdhE=

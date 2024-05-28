@@ -343,6 +343,11 @@ func putFile(ctx context.Context, alloc *sdk.Allocation, remotePath, contentType
 		RemoteName: fileName,
 	}
 
+	isStreamUpload := size == -1
+	if isStreamUpload {
+		fileMeta.ActualSize = 0
+	}
+
 	logger.Info("starting chunked upload")
 	opRequest := sdk.OperationRequest{
 		OperationType: constants.FileOperationInsert,
@@ -354,16 +359,28 @@ func putFile(ctx context.Context, alloc *sdk.Allocation, remotePath, contentType
 			sdk.WithChunkNumber(120),
 			sdk.WithEncrypt(encrypt),
 		},
+		StreamUpload: isStreamUpload,
 	}
 	if isUpdate {
 		opRequest.OperationType = constants.FileOperationUpdate
 	}
-	err = alloc.DoMultiOperation([]sdk.OperationRequest{opRequest})
-	if err != nil && !isSameRootError(err) {
-		logger.Error(err.Error())
-		return
+	if isStreamUpload {
+		err = alloc.DoMultiOperation([]sdk.OperationRequest{opRequest})
+		if err != nil && !isSameRootError(err) {
+			logger.Error(err.Error())
+			return
+		}
+		err = nil
+	} else {
+		opCtx, opCancelCause := context.WithCancelCause(ctx)
+		opRequest.CancelCauseFunc = opCancelCause
+		batchUploadChan <- opRequest
+
+		<-opCtx.Done()
+		if context.Cause(opCtx) != context.Canceled {
+			err = context.Cause(opCtx)
+		}
 	}
-	err = nil
 	return
 }
 
