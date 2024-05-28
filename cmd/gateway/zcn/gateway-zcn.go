@@ -149,7 +149,7 @@ func (z *ZCN) NewGatewayLayer(creds madmin.Credentials) (minio.ObjectLayer, erro
 	contentMap = make(map[string]*semaphore.Weighted)
 	ctx, cancel := context.WithCancel(context.Background())
 	zob.ctxCancel = cancel
-	IntiBatchUploadWorkers(ctx, allocation, 250, 25, 5)
+	IntiBatchUploadWorkers(ctx, allocation, 1000, 25, 5)
 	return zob, nil
 }
 
