@@ -32,7 +32,7 @@ func IntiBatchUploadWorkers(ctx context.Context, alloc *sdk.Allocation, waitTime
 			case op := <-batchUploadChan:
 				// process the batch upload or wait for more operations
 				opRequest = append(opRequest, op)
-				if len(opRequest) == maxOperations || opWaitTime <= waitTime/4 {
+				if len(opRequest) == maxOperations || opWaitTime >= waitTime*3 {
 					log.Println("process batch for time condition")
 					workerChan <- opRequest
 					opRequest = make([]sdk.OperationRequest, 0, 5)
@@ -54,7 +54,7 @@ func IntiBatchUploadWorkers(ctx context.Context, alloc *sdk.Allocation, waitTime
 					opRequest = make([]sdk.OperationRequest, 0, 5)
 					opWaitTime = waitTime
 				} else {
-					opWaitTime -= (opWaitTime / 2)
+					opWaitTime += (opWaitTime / 2)
 				}
 			}
 		}

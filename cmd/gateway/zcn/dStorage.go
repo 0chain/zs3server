@@ -348,7 +348,6 @@ func putFile(ctx context.Context, alloc *sdk.Allocation, remotePath, contentType
 		fileMeta.ActualSize = 0
 	}
 
-	logger.Info("starting chunked upload")
 	opRequest := sdk.OperationRequest{
 		OperationType: constants.FileOperationInsert,
 		FileReader:    newMinioReader(r),
