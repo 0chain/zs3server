@@ -84,16 +84,27 @@ func listRegularRefs(alloc *sdk.Allocation, remotePath, marker, fileType string,
 	dirMap := make(map[string]bool)
 
 	remotePath = filepath.Clean(remotePath)
-
+	if marker != "" {
+		parent, _ := filepath.Split(marker)
+		remotePath = filepath.Join(remotePath, parent)
+	}
 	directories := []string{remotePath}
 	var currentRemotePath string
+	listPageLimit := pageLimit
 	for len(directories) > 0 && !isTruncated {
 		currentRemotePath = directories[0]
 		directories = directories[1:] // dequeue from the directories queue
 		commonPrefix := getCommonPrefix(currentRemotePath)
 		offsetPath := filepath.Join(currentRemotePath, marker)
+		if currentRemotePath == remotePath && marker != "" {
+			offsetPath = filepath.Join(currentRemotePath, filepath.Base(marker))
+		}
+
 		for {
-			oResult, err := getRegularRefs(alloc, currentRemotePath, offsetPath, fileType, pageLimit)
+			if len(refs)+listPageLimit > maxRefs {
+				listPageLimit = maxRefs - len(refs)
+			}
+			oResult, err := getRegularRefs(alloc, currentRemotePath, offsetPath, fileType, listPageLimit)
 			if err != nil {
 				return nil, true, "", nil, err
 			}
@@ -124,18 +135,21 @@ func listRegularRefs(alloc *sdk.Allocation, remotePath, marker, fileType string,
 				if maxRefs != 0 && len(refs) >= maxRefs {
 					markedPath = ref.Path
 					isTruncated = true
-					break
+					goto breakLoop
 				}
 			}
 			offsetPath = oResult.OffsetPath
+			if len(oResult.Refs) < listPageLimit {
+				break
+			}
 		}
 	}
+breakLoop:
 	if isTruncated {
-		marker = strings.TrimPrefix(markedPath, currentRemotePath+"/")
+		marker = strings.TrimPrefix(markedPath, remotePath+"/")
 	} else {
 		marker = ""
 	}
-
 	return refs, isTruncated, marker, prefixes, nil
 }
 

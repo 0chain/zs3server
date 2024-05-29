@@ -232,7 +232,6 @@ func (zob *zcnObjects) DeleteObject(ctx context.Context, bucket, object string, 
 	if err != nil {
 		return
 	}
-	log.Println("Deleted object: ", remotePath)
 	return minio.ObjectInfo{
 		Bucket:  bucket,
 		Name:    ref.Name,
