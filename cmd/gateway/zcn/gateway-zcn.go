@@ -232,7 +232,6 @@ func (zob *zcnObjects) DeleteObject(ctx context.Context, bucket, object string, 
 	if err != nil {
 		return
 	}
-	log.Println("Deleted object: ", remotePath)
 	return minio.ObjectInfo{
 		Bucket:  bucket,
 		Name:    ref.Name,
@@ -428,7 +427,6 @@ func (zob *zcnObjects) ListObjectsV2(ctx context.Context, bucket, prefix, contin
 func (zob *zcnObjects) ListObjects(ctx context.Context, bucket, prefix, marker, delimiter string, maxKeys int) (result minio.ListObjectsInfo, err error) {
 	// objFileType For root path list objects should only provide file and not dirs.
 	// Dirs under root path are presented as buckets as well
-	log.Println("ListObjects", bucket, prefix, marker, delimiter, maxKeys)
 	var remotePath, objFileType string
 	if bucket == rootBucketName {
 		remotePath = filepath.Join(rootPath, prefix)

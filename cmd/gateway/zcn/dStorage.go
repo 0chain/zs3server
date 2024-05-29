@@ -99,7 +99,7 @@ func listRegularRefs(alloc *sdk.Allocation, remotePath, marker, fileType string,
 		if currentRemotePath == remotePath && marker != "" {
 			offsetPath = filepath.Join(currentRemotePath, filepath.Base(marker))
 		}
-		log.Println("listRoot: ", currentRemotePath, offsetPath)
+
 		for {
 			if len(refs)+listPageLimit > maxRefs {
 				listPageLimit = maxRefs - len(refs)
@@ -112,13 +112,10 @@ func listRegularRefs(alloc *sdk.Allocation, remotePath, marker, fileType string,
 				break
 			}
 
-			log.Println("getRegularRefs: ", currentRemotePath, offsetPath, len(oResult.Refs), offsetPath, listPageLimit)
-
 			for i := 0; i < len(oResult.Refs); i++ {
 				ref := oResult.Refs[i]
 				trimmedPath := strings.TrimPrefix(ref.Path, currentRemotePath+"/")
 				if ref.Type == dirType {
-					log.Println("dirType: ", ref.Path)
 					if _, ok := dirMap[ref.Path]; ok {
 						continue
 					}
@@ -153,7 +150,6 @@ breakLoop:
 	} else {
 		marker = ""
 	}
-	log.Println("listRegularRefs: ", marker, len(refs), isTruncated)
 	return refs, isTruncated, marker, prefixes, nil
 }
 
