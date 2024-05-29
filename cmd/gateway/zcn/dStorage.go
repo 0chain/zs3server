@@ -84,7 +84,6 @@ func listRegularRefs(alloc *sdk.Allocation, remotePath, marker, fileType string,
 	dirMap := make(map[string]bool)
 
 	remotePath = filepath.Clean(remotePath)
-	log.Println("listRoot: ", remotePath, marker)
 	directories := []string{remotePath}
 	var currentRemotePath string
 	listPageLimit := pageLimit
@@ -93,6 +92,7 @@ func listRegularRefs(alloc *sdk.Allocation, remotePath, marker, fileType string,
 		directories = directories[1:] // dequeue from the directories queue
 		commonPrefix := getCommonPrefix(currentRemotePath)
 		offsetPath := filepath.Join(currentRemotePath, marker)
+		log.Println("listRoot: ", currentRemotePath, offsetPath)
 		for {
 			if len(refs)+listPageLimit > maxRefs {
 				listPageLimit = maxRefs - len(refs)
