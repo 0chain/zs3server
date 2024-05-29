@@ -73,6 +73,8 @@ github.com/0chain/gosdk v1.14.10-0.20240526130434-05a036ad8aa0 h1:hOBnHwKILdVhVv
 github.com/0chain/gosdk v1.14.10-0.20240526130434-05a036ad8aa0/go.mod h1:tgAiVAuIy+Vs1tGfKCPEuuWWARwNQBEw32y950LrqrU=
 github.com/0chain/gosdk v1.14.10-0.20240527074158-83a4b7018a5c h1:LkGmxOSulLs7L1otUPvn7R5aTEhlMS5py09m/Hu36cc=
 github.com/0chain/gosdk v1.14.10-0.20240527074158-83a4b7018a5c/go.mod h1:tgAiVAuIy+Vs1tGfKCPEuuWWARwNQBEw32y950LrqrU=
+github.com/0chain/gosdk v1.14.11-0.20240529100920-7a9dbdf9e7d2 h1:EpXI6qcpuqqTK4pfcZheI+vGBR0LPyfTjk3DSefFQgQ=
+github.com/0chain/gosdk v1.14.11-0.20240529100920-7a9dbdf9e7d2/go.mod h1:Hzl56JJ66ZmoyNS7CbTJue7wUugBYvNx8/qJzTRWmkI=
 github.com/Azure/azure-amqp-common-go/v2 v2.1.0/go.mod h1:R8rea+gJRuJR6QxTir/XuEd+YuKoUiazDC/N96FiDEU=
 github.com/Azure/azure-pipeline-go v0.2.1/go.mod h1:UGSo8XybXnIGZ3epmeBw7Jdz+HiUVpqIlpz/HKHylF4=
 github.com/Azure/azure-pipeline-go v0.2.2 h1:6oiIS9yaG6XCCzhgAgKFfIWyo4LLCiDhZot6ltoThhY=
@@ -903,6 +905,7 @@ github.com/herumi/bls-go-binary v1.31.0 h1:L1goQ2tMtGgpXCg5AwHAdJQpLs/pfnWWEc3Wo
 github.com/herumi/bls-go-binary v1.31.0/go.mod h1:O4Vp1AfR4raRGwFeQpr9X/PQtncEicMoOe6BQt1oX0Y=
 github.com/hitenjain14/fasthttp v0.0.0-20240229173600-722723e15e17 h1:FbyIK0BfvXVZTOxKOe2dlxJqSPSF2ZXOv2Mc7dvS7sc=
 github.com/hitenjain14/fasthttp v0.0.0-20240229173600-722723e15e17/go.mod h1:RZMcXy7u4S+E97IXYTe7WHZ3+mCYOh4vys8PkIGZeXk=
+github.com/hitenjain14/fasthttp v0.0.0-20240527123209-06019e79bff9/go.mod h1:RZMcXy7u4S+E97IXYTe7WHZ3+mCYOh4vys8PkIGZeXk=
 github.com/holiman/bloomfilter/v2 v2.0.3 h1:73e0e/V0tCydx14a0SCYS/EWCxgwLZ18CZcZKVu0fao=
 github.com/holiman/bloomfilter/v2 v2.0.3/go.mod h1:zpoh+gs7qcpqrHr3dB55AMiJwo0iURXE7ZOP9L9hSkA=
 github.com/holiman/uint256 v1.2.2-0.20230321075855-87b91420868c h1:DZfsyhDK1hnSS5lH8l+JggqzEleHteTYfutAiVlSUM8=
