@@ -105,6 +105,7 @@ func listRegularRefs(alloc *sdk.Allocation, remotePath, marker, fileType string,
 				ref := oResult.Refs[i]
 				trimmedPath := strings.TrimPrefix(ref.Path, currentRemotePath+"/")
 				if ref.Type == dirType {
+					log.Println("dirType: ", ref.Path)
 					if _, ok := dirMap[ref.Path]; ok {
 						continue
 					}
@@ -135,7 +136,7 @@ func listRegularRefs(alloc *sdk.Allocation, remotePath, marker, fileType string,
 	} else {
 		marker = ""
 	}
-
+	log.Println("listRegularRefs: ", marker, len(refs), isTruncated)
 	return refs, isTruncated, marker, prefixes, nil
 }
 
