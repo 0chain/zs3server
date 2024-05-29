@@ -125,14 +125,15 @@ func listRegularRefs(alloc *sdk.Allocation, remotePath, marker, fileType string,
 				if maxRefs != 0 && len(refs) >= maxRefs {
 					markedPath = ref.Path
 					isTruncated = true
-					break
+					goto breakLoop
 				}
 			}
 			offsetPath = oResult.OffsetPath
 		}
 	}
+breakLoop:
 	if isTruncated {
-		marker = strings.TrimPrefix(markedPath, currentRemotePath+"/")
+		marker = strings.TrimPrefix(markedPath, remotePath+"/")
 	} else {
 		marker = ""
 	}
