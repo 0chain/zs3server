@@ -101,6 +101,8 @@ func listRegularRefs(alloc *sdk.Allocation, remotePath, marker, fileType string,
 				break
 			}
 
+			log.Println("getRegularRefs: ", currentRemotePath, offsetPath, len(oResult.Refs))
+
 			for i := 0; i < len(oResult.Refs); i++ {
 				ref := oResult.Refs[i]
 				trimmedPath := strings.TrimPrefix(ref.Path, currentRemotePath+"/")
