@@ -111,10 +111,6 @@ func listRegularRefs(alloc *sdk.Allocation, remotePath, marker, fileType string,
 	dirMap := make(map[string]bool)
 
 	remotePath = filepath.Clean(remotePath)
-	// if marker != "" {
-	// 	parent, _ := filepath.Split(marker)
-	// 	remotePath = filepath.Join(remotePath, parent)
-	// }
 	directories := make(listQueue, 0, 1)
 	heap.Init(&directories)
 	heap.Push(&directories, remotePath)
