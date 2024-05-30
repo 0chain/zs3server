@@ -1,6 +1,6 @@
 version: '3.8'
 services:
-  db:
+  postgres-db:
     image: postgres:13-alpine
     container_name: postgres-db
     restart: always
@@ -12,11 +12,13 @@ services:
       - '5432:5432'
     volumes:
       - db:/var/lib/postgresql/data
+    networks:
+      zs_network:
 
   logsearchapi:
     image: 0chaindev/blimp-logsearchapi:staging
     depends_on:
-      - db
+      - postgres-db
     ports:
       - 8080:8080
     environment:
@@ -25,7 +27,10 @@ services:
       MINIO_LOG_QUERY_AUTH_TOKEN: 1234
       LOGSEARCH_DISK_CAPACITY_GB: 5
     links:
-      - db
+      - postgres-db
+    networks:
+      zs_network:
+
   minioserver:
     image: 0chaindev/blimp-minioserver:staging
     container_name: minioserver
@@ -43,7 +48,10 @@ services:
       - logsearchapi:logsearchapi
     volumes:
       - ~/.zcn:/root/.zcn
-  minioclinet:
+    networks:
+      zs_network:
+
+  minioclient:
     image: 0chaindev/blimp-clientapi:staging
     container_name: minioclient
     depends_on:
@@ -51,7 +59,14 @@ services:
     ports:
       - 3001:3001
     environment:
-      MINIO_SERVER: "minioserver:9000"     
+      MINIO_SERVER: "minioserver:9000"
+    networks:
+      zs_network:
+  
 volumes:
   db:
     driver: local
+
+networks:
+  zs_network:
+    driver: bridge
