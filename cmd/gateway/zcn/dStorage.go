@@ -153,6 +153,7 @@ func listRegularRefs(alloc *sdk.Allocation, remotePath, marker, fileType string,
 						prefixes = append(prefixes, dirPrefix)
 						continue
 					} else {
+						log.Println("dirRef: ", ref.Path)
 						heap.Push(&directories, ref.Path)
 					}
 					dirMap[ref.Path] = true
@@ -187,7 +188,7 @@ func getRegularRefs(alloc *sdk.Allocation, remotePath, offsetPath, fileType stri
 	if offsetPath != "" {
 		offLevel := len(strings.Split(strings.TrimSuffix(offsetPath, "/"), "/"))
 		if offLevel > level {
-			level = offLevel
+			level = 0
 		}
 	}
 	remotePath = filepath.Clean(remotePath)
