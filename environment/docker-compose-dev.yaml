@@ -1,6 +1,6 @@
 version: '3.8'
 services:
-  db:
+  postgres-db:
     image: postgres:13-alpine
     container_name: postgres-db
     restart: always
@@ -8,16 +8,18 @@ services:
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
-    ports:
-      - '5432:5432'
+    # ports:
+    #   - '5432:5432'
     volumes:
       - db:/var/lib/postgresql/data
+    networks:
+      zs_network:
 
   logsearchapi:
     build: ../logsearchapi
     container_name: logsearchapi
     depends_on:
-      - db
+      - postgres-db
     ports:
       - 8080:8080
     environment:
@@ -26,12 +28,15 @@ services:
       MINIO_LOG_QUERY_AUTH_TOKEN: 1234
       LOGSEARCH_DISK_CAPACITY_GB: 5
     links:
-      - db
+      - postgres-db
+    networks:
+      zs_network:
+
   minioserver:
     build:
       context: ../
       dockerfile: Dockerfile
-    container_name: miniserver
+    container_name: minioserver
     ports:
       - 9000:9000
     command: ["minio", "gateway", "zcn"]
@@ -47,21 +52,26 @@ services:
       MINIO_NOTIFY_POSTGRES_CONNECTION_STRING_PRIMARY: "postgres://postgres:postgres@postgres-db/postgres?sslmode=disable"
       MINIO_NOTIFY_POSTGRES_TABLE_PRIMARY: "minioevents"
       MINIO_NOTIFY_POSTGRES_FORMAT_PRIMARY: "namespace"
-      
     links:
       - logsearchapi:logsearchapi
     volumes:
       - ~/.zcn:/root/.zcn
-  minioclinet:
+    networks:
+      zs_network:
+
+  minioclient:
     build: ../client-api
-    container_name: miniclient
+    container_name: minioclient
     depends_on:
       - minioserver
     ports:
       - 3001:3001
     environment:
-      MINIO_SERVER: "miniserver:9000"
-  Etcd:
+      MINIO_SERVER: "minioserver:9000"
+    networks:
+      zs_network:
+
+  etcd:
     image: 'bitnami/etcd:latest'
     container_name: etcd
     environment:
@@ -69,7 +79,14 @@ services:
       - ETCD_ADVERTISE_CLIENT_URLS=http://etcd:2379
     ports:
       - 2379:2379
-      - 2380:2380      
+      - 2380:2380
+    networks:
+      zs_network:
+
 volumes:
   db:
     driver: local
+
+networks:
+  zs_network:
+    driver: bridge
