@@ -1,6 +1,7 @@
 package zcn
 
 import (
+	"container/heap"
 	"context"
 	"errors"
 	"fmt"
@@ -43,6 +44,32 @@ const (
 	retryWaitTime    = 500 * time.Millisecond // milliseconds
 )
 
+type listQueue []string
+
+func (lq listQueue) Len() int {
+	return len(lq)
+}
+
+func (lq listQueue) Less(i, j int) bool {
+	return lq[i] < lq[j]
+}
+
+func (lq *listQueue) Push(path any) {
+	*lq = append(*lq, path.(string))
+}
+
+func (lq listQueue) Swap(i, j int) {
+	lq[i], lq[j] = lq[j], lq[i]
+}
+
+func (lq *listQueue) Pop() any {
+	old := *lq
+	n := len(old)
+	path := old[n-1]
+	*lq = old[0 : n-1]
+	return path
+}
+
 func init() {
 	var err error
 	tempdir, err = os.MkdirTemp("", "zcn*")
@@ -84,22 +111,24 @@ func listRegularRefs(alloc *sdk.Allocation, remotePath, marker, fileType string,
 	dirMap := make(map[string]bool)
 
 	remotePath = filepath.Clean(remotePath)
-	if marker != "" {
-		parent, _ := filepath.Split(marker)
-		remotePath = filepath.Join(remotePath, parent)
-	}
-	directories := []string{remotePath}
+	// if marker != "" {
+	// 	parent, _ := filepath.Split(marker)
+	// 	remotePath = filepath.Join(remotePath, parent)
+	// }
+	directories := make(listQueue, 0, 1)
+	heap.Init(&directories)
+	heap.Push(&directories, remotePath)
 	var currentRemotePath string
 	listPageLimit := pageLimit
 	for len(directories) > 0 && !isTruncated {
 		currentRemotePath = directories[0]
-		directories = directories[1:] // dequeue from the directories queue
+		heap.Pop(&directories)
 		commonPrefix := getCommonPrefix(currentRemotePath)
 		offsetPath := filepath.Join(currentRemotePath, marker)
-		if currentRemotePath == remotePath && marker != "" {
-			offsetPath = filepath.Join(currentRemotePath, filepath.Base(marker))
-		}
-
+		// if currentRemotePath == remotePath && marker != "" {
+		// 	offsetPath = filepath.Join(currentRemotePath, filepath.Base(marker))
+		// }
+		log.Println("listRegularRefs: ", currentRemotePath, offsetPath)
 		for {
 			if len(refs)+listPageLimit > maxRefs {
 				listPageLimit = maxRefs - len(refs)
@@ -124,7 +153,7 @@ func listRegularRefs(alloc *sdk.Allocation, remotePath, marker, fileType string,
 						prefixes = append(prefixes, dirPrefix)
 						continue
 					} else {
-						directories = append(directories, ref.Path)
+						heap.Push(&directories, ref.Path)
 					}
 					dirMap[ref.Path] = true
 				}
@@ -155,6 +184,12 @@ breakLoop:
 
 func getRegularRefs(alloc *sdk.Allocation, remotePath, offsetPath, fileType string, pageLimit int) (oResult *sdk.ObjectTreeResult, err error) {
 	level := len(strings.Split(strings.TrimSuffix(remotePath, "/"), "/")) + 1
+	if offsetPath != "" {
+		offLevel := len(strings.Split(strings.TrimSuffix(offsetPath, "/"), "/"))
+		if offLevel > level {
+			level = offLevel
+		}
+	}
 	remotePath = filepath.Clean(remotePath)
 	oResult, err = alloc.GetRefs(remotePath, offsetPath, "", "", fileType, "regular", level, pageLimit)
 	return
