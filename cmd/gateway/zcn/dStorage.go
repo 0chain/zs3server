@@ -124,11 +124,11 @@ func listRegularRefs(alloc *sdk.Allocation, remotePath, marker, fileType string,
 		currentRemotePath = directories[0]
 		heap.Pop(&directories)
 		commonPrefix := getCommonPrefix(currentRemotePath)
-		offsetPath := filepath.Join(currentRemotePath, marker)
-		// if currentRemotePath == remotePath && marker != "" {
-		// 	offsetPath = filepath.Join(currentRemotePath, filepath.Base(marker))
-		// }
-		log.Println("listRegularRefs: ", currentRemotePath, offsetPath)
+		offsetPath := currentRemotePath
+		if marker != "" {
+			offsetPath = filepath.Join(currentRemotePath, marker)
+			marker = ""
+		}
 		for {
 			if len(refs)+listPageLimit > maxRefs {
 				listPageLimit = maxRefs - len(refs)
@@ -153,7 +153,6 @@ func listRegularRefs(alloc *sdk.Allocation, remotePath, marker, fileType string,
 						prefixes = append(prefixes, dirPrefix)
 						continue
 					} else {
-						log.Println("dirRef: ", ref.Path)
 						heap.Push(&directories, ref.Path)
 					}
 					dirMap[ref.Path] = true
