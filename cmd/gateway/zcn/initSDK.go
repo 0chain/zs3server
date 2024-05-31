@@ -62,9 +62,9 @@ func initializeSDK(configDir, allocid string, nonce int64) error {
 		encrypt = serverConfig.Encrypt
 		compress = serverConfig.Compress
 		if serverConfig.MaxBatchSize == 0 {
-			serverConfig.MaxBatchSize = 25
+			serverConfig.MaxBatchSize = 40
 			serverConfig.BatchWorkers = 5
-			serverConfig.BatchWaitTime = 500
+			serverConfig.BatchWaitTime = 250
 		}
 	}
 

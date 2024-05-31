@@ -23,7 +23,6 @@ func IntiBatchUploadWorkers(ctx context.Context, alloc *sdk.Allocation, waitTime
 		go batchUploadWorker(ctx, alloc, workerChan)
 	}
 	opRequest := make([]sdk.OperationRequest, 0, 5)
-	opWaitTime := waitTime
 	iterations := 0
 	go func() {
 		for {
@@ -37,15 +36,14 @@ func IntiBatchUploadWorkers(ctx context.Context, alloc *sdk.Allocation, waitTime
 					log.Println("process batch for time condition")
 					workerChan <- opRequest
 					opRequest = make([]sdk.OperationRequest, 0, 5)
-					opWaitTime = waitTime
 					iterations = 0
 					continue
 				}
 				if len(batchUploadChan) == 0 {
 					// wait for more operations
-					log.Println("waiting for more operations: ", opWaitTime, len(opRequest))
+					log.Println("waiting for more operations: ", len(opRequest))
 					iterations++
-					time.Sleep(time.Duration(opWaitTime) * time.Millisecond)
+					time.Sleep(time.Duration(waitTime) * time.Millisecond)
 				} else {
 					// consume more operations
 					continue
@@ -55,7 +53,6 @@ func IntiBatchUploadWorkers(ctx context.Context, alloc *sdk.Allocation, waitTime
 					log.Println("process batch for no more ops condition")
 					workerChan <- opRequest
 					opRequest = make([]sdk.OperationRequest, 0, 5)
-					opWaitTime = waitTime
 					iterations = 0
 				}
 			}
@@ -72,6 +69,7 @@ func batchUploadWorker(ctx context.Context, alloc *sdk.Allocation, opsChan chan 
 		case ops := <-opsChan:
 			// process the batch upload or wait for more operations
 			log.Println("processing batch upload: ", len(ops))
+			now := time.Now()
 			err := alloc.DoMultiOperation(ops)
 			if err != nil {
 				if !isSameRootError(err) {
@@ -83,6 +81,7 @@ func batchUploadWorker(ctx context.Context, alloc *sdk.Allocation, opsChan chan 
 			for _, op := range ops {
 				op.CancelCauseFunc(err)
 			}
+			log.Println("batch upload processed in: ", time.Since(now).Milliseconds(), "ms", len(ops))
 		}
 	}
 }
