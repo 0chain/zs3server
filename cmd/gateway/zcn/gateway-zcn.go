@@ -152,6 +152,7 @@ func (z *ZCN) NewGatewayLayer(creds madmin.Credentials) (minio.ObjectLayer, erro
 	zob.ctxCancel = cancel
 	IntiBatchUploadWorkers(ctx, allocation, serverConfig.BatchWaitTime, serverConfig.MaxBatchSize, serverConfig.BatchWorkers)
 	sdk.BatchSize = serverConfig.MaxBatchSize
+	sdk.SetMultiOpBatchSize(serverConfig.MaxBatchSize)
 	return zob, nil
 }
 
@@ -198,15 +199,15 @@ func (zob *zcnObjects) DeleteBucket(ctx context.Context, bucketName string, opts
 		return fmt.Errorf("%v is object not bucket", bucketName)
 	}
 
-	if opts.Force {
-		return zob.alloc.DeleteFile(remotePath)
+	if opts.Force || ref.Size == 0 {
+		op := sdk.OperationRequest{
+			OperationType: constants.FileOperationDelete,
+			RemotePath:    remotePath,
+		}
+		return zob.alloc.DoMultiOperation([]sdk.OperationRequest{op})
 	}
 
-	if ref.Size > 0 {
-		return fmt.Errorf("%v bucket is not empty", bucketName)
-	}
-
-	return zob.alloc.DeleteFile(remotePath)
+	return fmt.Errorf("%v bucket is not empty", bucketName)
 }
 
 func (zob *zcnObjects) DeleteObject(ctx context.Context, bucket, object string, opts minio.ObjectOptions) (oInfo minio.ObjectInfo, err error) {

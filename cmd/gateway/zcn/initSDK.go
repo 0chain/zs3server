@@ -65,6 +65,10 @@ func initializeSDK(configDir, allocid string, nonce int64) error {
 			serverConfig.MaxBatchSize = 25
 			serverConfig.BatchWorkers = 5
 			serverConfig.BatchWaitTime = 500
+		} else if serverConfig.BatchWorkers == 0 {
+			serverConfig.BatchWorkers = 5
+		} else if serverConfig.BatchWaitTime == 0 {
+			serverConfig.BatchWaitTime = 500
 		}
 	}
 
