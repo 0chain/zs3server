@@ -1,6 +1,6 @@
 version: '3.8'
 services:
-  db2:
+  postgres-db2:
     image: postgres:13-alpine
     container_name: postgres-db2
     restart: always
@@ -12,12 +12,14 @@ services:
     #   - '5431:5432'
     volumes:
       - db2:/var/lib/postgresql/data
+    networks:
+      zs_network:
 
   logsearchapi2:
     build: ../logsearchapi
     container_name: logsearchapi2
     depends_on:
-      - db2
+      - postgres-db2
     # ports:
     #   - 8082:8080
     environment:
@@ -26,13 +28,15 @@ services:
       MINIO_LOG_QUERY_AUTH_TOKEN: 1234
       LOGSEARCH_DISK_CAPACITY_GB: 5
     links:
-      - db2
+      - postgres-db2
+    networks:
+      zs_network:
 
   minioserver2:
     build:
       context: ../
       dockerfile: Dockerfile
-    container_name: miniserver2
+    container_name: minioserver2
     depends_on:
       - logsearchapi2
       - etcd2
@@ -51,16 +55,20 @@ services:
       - logsearchapi2
     volumes:
       - ~/.zcn2:/root/.zcn
+    networks:
+      zs_network:
 
-  minioclinet2:
+  minioclient2:
     build: ../client-api
-    container_name: miniclient2
+    container_name: minioclient2
     depends_on:
       - minioserver2
     # ports:
     #   - 3002:3001
     environment:
-      MINIO_SERVER: "miniserver2:9000"
+      MINIO_SERVER: "minioserver2:9000"
+    networks:
+      zs_network:
 
   etcd2:
     image: 'bitnami/etcd:latest'
@@ -71,3 +79,13 @@ services:
     # ports:
     #   - 2372:2379
     #   - 2382:2380
+    networks:
+      zs_network:
+
+volumes:
+  db:
+    driver: local
+
+networks:
+  zs_network:
+    driver: bridge
