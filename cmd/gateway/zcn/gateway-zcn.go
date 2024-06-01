@@ -206,8 +206,7 @@ func (zob *zcnObjects) DeleteBucket(ctx context.Context, bucketName string, opts
 		}
 		return zob.alloc.DoMultiOperation([]sdk.OperationRequest{op})
 	}
-
-	return fmt.Errorf("%v bucket is not empty", bucketName)
+	return minio.BucketNotEmpty{Bucket: bucketName}
 }
 
 func (zob *zcnObjects) DeleteObject(ctx context.Context, bucket, object string, opts minio.ObjectOptions) (oInfo minio.ObjectInfo, err error) {
