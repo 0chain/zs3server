@@ -199,15 +199,14 @@ func (zob *zcnObjects) DeleteBucket(ctx context.Context, bucketName string, opts
 		return fmt.Errorf("%v is object not bucket", bucketName)
 	}
 
-	if opts.Force {
-		return zob.alloc.DeleteFile(remotePath)
+	if opts.Force || ref.Size == 0 {
+		op := sdk.OperationRequest{
+			OperationType: constants.FileOperationDelete,
+			RemotePath:    remotePath,
+		}
+		return zob.alloc.DoMultiOperation([]sdk.OperationRequest{op})
 	}
-
-	if ref.Size > 0 {
-		return fmt.Errorf("%v bucket is not empty", bucketName)
-	}
-
-	return zob.alloc.DeleteFile(remotePath)
+	return minio.BucketNotEmpty{Bucket: bucketName}
 }
 
 func (zob *zcnObjects) DeleteObject(ctx context.Context, bucket, object string, opts minio.ObjectOptions) (oInfo minio.ObjectInfo, err error) {
