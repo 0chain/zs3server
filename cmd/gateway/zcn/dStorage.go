@@ -242,7 +242,11 @@ func getFileReader(ctx context.Context,
 		if startBlock == 0 {
 			startBlock = 1
 		}
-		endBlock = int64(rangeEnd) / effectiveChunkSize
+		if rangeEnd < fileRangeSize {
+			endBlock = (fileRangeSize + effectiveChunkSize - 1) / effectiveChunkSize
+		} else {
+			endBlock = int64(rangeEnd+effectiveChunkSize-1) / effectiveChunkSize
+		}
 	} else {
 		startBlock = 1
 		endBlock = 0
@@ -256,6 +260,7 @@ func getFileReader(ctx context.Context,
 		}
 		fileRangeSize = objectInfo.Size - rangeStart
 	}
+
 	var r sys.File
 	if startBlock == 1 && endBlock == 0 {
 		log.Println("getFileReader: stream download ")
@@ -305,7 +310,7 @@ func getFileReader(ctx context.Context,
 		return nil, nil, nil, "", errors.New("exceeded timeout")
 	}
 
-	startOffset := rangeStart - startBlock*effectiveChunkSize
+	startOffset := rangeStart - (startBlock-1)*effectiveChunkSize
 	if startOffset < 0 {
 		startOffset = 0
 	}
