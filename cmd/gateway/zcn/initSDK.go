@@ -17,11 +17,13 @@ import (
 )
 
 type serverOptions struct {
-	Encrypt       bool `json:"encrypt"`
-	Compress      bool `json:"compress"`
-	MaxBatchSize  int  `json:"max_batch_size"`
-	BatchWaitTime int  `json:"batch_wait_time"`
-	BatchWorkers  int  `json:"batch_workers"`
+	Encrypt         bool `json:"encrypt"`
+	Compress        bool `json:"compress"`
+	MaxBatchSize    int  `json:"max_batch_size"`
+	BatchWaitTime   int  `json:"batch_wait_time"`
+	BatchWorkers    int  `json:"batch_workers"`
+	UploadWorkers   int  `json:"upload_workers"`
+	DownloadWorkers int  `json:"download_workers"`
 }
 
 func initializeSDK(configDir, allocid string, nonce int64) error {

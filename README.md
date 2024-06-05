@@ -272,5 +272,16 @@ The server will batch upload requests for objects which are uploaded using put a
 }
 ```
 
+## Upload and Download workers
+
+The server will upload and download objects concurrently based on the number of workers set in the configuration file. The number of workers can be set in the zs3server.json file under .zcn folder,by default upload workers are set to 4 and download workers to 6. For example:
+
+```
+{
+  "upload_workers": 4,
+  "download_workers": 6
+}
+```
+
 If you are using compression, we recommeng using our minio client
 [Minio Client](https://github.com/0chain/mc)
