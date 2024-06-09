@@ -1,6 +1,7 @@
 package zcn
 
 import (
+	"container/heap"
 	"context"
 	"errors"
 	"fmt"
@@ -43,6 +44,32 @@ const (
 	retryWaitTime    = 500 * time.Millisecond // milliseconds
 )
 
+type listQueue []string
+
+func (lq listQueue) Len() int {
+	return len(lq)
+}
+
+func (lq listQueue) Less(i, j int) bool {
+	return lq[i] < lq[j]
+}
+
+func (lq *listQueue) Push(path any) {
+	*lq = append(*lq, path.(string))
+}
+
+func (lq listQueue) Swap(i, j int) {
+	lq[i], lq[j] = lq[j], lq[i]
+}
+
+func (lq *listQueue) Pop() any {
+	old := *lq
+	n := len(old)
+	path := old[n-1]
+	*lq = old[0 : n-1]
+	return path
+}
+
 func init() {
 	var err error
 	tempdir, err = os.MkdirTemp("", "zcn*")
@@ -84,16 +111,25 @@ func listRegularRefs(alloc *sdk.Allocation, remotePath, marker, fileType string,
 	dirMap := make(map[string]bool)
 
 	remotePath = filepath.Clean(remotePath)
-
-	directories := []string{remotePath}
+	directories := make(listQueue, 0, 1)
+	heap.Init(&directories)
+	heap.Push(&directories, remotePath)
 	var currentRemotePath string
+	listPageLimit := pageLimit
 	for len(directories) > 0 && !isTruncated {
 		currentRemotePath = directories[0]
-		directories = directories[1:] // dequeue from the directories queue
+		heap.Pop(&directories)
 		commonPrefix := getCommonPrefix(currentRemotePath)
-		offsetPath := filepath.Join(currentRemotePath, marker)
+		offsetPath := currentRemotePath
+		if marker != "" {
+			offsetPath = filepath.Join(currentRemotePath, marker)
+			marker = ""
+		}
 		for {
-			oResult, err := getRegularRefs(alloc, currentRemotePath, offsetPath, fileType, pageLimit)
+			if len(refs)+listPageLimit > maxRefs {
+				listPageLimit = maxRefs - len(refs)
+			}
+			oResult, err := getRegularRefs(alloc, currentRemotePath, offsetPath, fileType, listPageLimit)
 			if err != nil {
 				return nil, true, "", nil, err
 			}
@@ -113,7 +149,7 @@ func listRegularRefs(alloc *sdk.Allocation, remotePath, marker, fileType string,
 						prefixes = append(prefixes, dirPrefix)
 						continue
 					} else {
-						directories = append(directories, ref.Path)
+						heap.Push(&directories, ref.Path)
 					}
 					dirMap[ref.Path] = true
 				}
@@ -124,23 +160,32 @@ func listRegularRefs(alloc *sdk.Allocation, remotePath, marker, fileType string,
 				if maxRefs != 0 && len(refs) >= maxRefs {
 					markedPath = ref.Path
 					isTruncated = true
-					break
+					goto breakLoop
 				}
 			}
 			offsetPath = oResult.OffsetPath
+			if len(oResult.Refs) < listPageLimit {
+				break
+			}
 		}
 	}
+breakLoop:
 	if isTruncated {
-		marker = strings.TrimPrefix(markedPath, currentRemotePath+"/")
+		marker = strings.TrimPrefix(markedPath, remotePath+"/")
 	} else {
 		marker = ""
 	}
-
 	return refs, isTruncated, marker, prefixes, nil
 }
 
 func getRegularRefs(alloc *sdk.Allocation, remotePath, offsetPath, fileType string, pageLimit int) (oResult *sdk.ObjectTreeResult, err error) {
 	level := len(strings.Split(strings.TrimSuffix(remotePath, "/"), "/")) + 1
+	if offsetPath != "" {
+		offLevel := len(strings.Split(strings.TrimSuffix(offsetPath, "/"), "/"))
+		if offLevel > level {
+			level = 0
+		}
+	}
 	remotePath = filepath.Clean(remotePath)
 	oResult, err = alloc.GetRefs(remotePath, offsetPath, "", "", fileType, "regular", level, pageLimit)
 	return
@@ -342,7 +387,11 @@ func putFile(ctx context.Context, alloc *sdk.Allocation, remotePath, contentType
 		RemoteName: fileName,
 	}
 
-	logger.Info("starting chunked upload")
+	isStreamUpload := size == -1
+	if isStreamUpload {
+		fileMeta.ActualSize = 0
+	}
+
 	opRequest := sdk.OperationRequest{
 		OperationType: constants.FileOperationInsert,
 		FileReader:    newMinioReader(r),
@@ -353,16 +402,28 @@ func putFile(ctx context.Context, alloc *sdk.Allocation, remotePath, contentType
 			sdk.WithChunkNumber(120),
 			sdk.WithEncrypt(encrypt),
 		},
+		StreamUpload: isStreamUpload,
 	}
 	if isUpdate {
 		opRequest.OperationType = constants.FileOperationUpdate
 	}
-	err = alloc.DoMultiOperation([]sdk.OperationRequest{opRequest})
-	if err != nil && !isSameRootError(err) {
-		logger.Error(err.Error())
-		return
+	if isStreamUpload {
+		err = alloc.DoMultiOperation([]sdk.OperationRequest{opRequest})
+		if err != nil && !isSameRootError(err) {
+			logger.Error(err.Error())
+			return
+		}
+		err = nil
+	} else {
+		opCtx, opCancelCause := context.WithCancelCause(ctx)
+		opRequest.CancelCauseFunc = opCancelCause
+		batchUploadChan <- opRequest
+
+		<-opCtx.Done()
+		if context.Cause(opCtx) != context.Canceled {
+			err = context.Cause(opCtx)
+		}
 	}
-	err = nil
 	return
 }
 

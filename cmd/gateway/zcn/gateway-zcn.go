@@ -38,6 +38,7 @@ var (
 	encrypt      bool
 	compress     bool
 	workDir      string
+	serverConfig serverOptions
 )
 
 var zFlags = []cli.Flag{
@@ -129,6 +130,12 @@ func (z *ZCN) NewGatewayLayer(creds madmin.Credentials) (minio.ObjectLayer, erro
 		return nil, err
 	}
 	log.Println("0chain gosdk initialized: ", allocationID, "compress: ", compress, "encrypt: ", encrypt)
+	if serverConfig.UploadWorkers > 0 {
+		sdk.SetHighModeWorkers(serverConfig.UploadWorkers)
+	}
+	if serverConfig.DownloadWorkers > 0 {
+		sdk.SetDownloadWorkerCount(serverConfig.DownloadWorkers)
+	}
 	allocation, err := sdk.GetAllocation(allocationID)
 	if err != nil {
 		return nil, err
@@ -147,18 +154,25 @@ func (z *ZCN) NewGatewayLayer(creds madmin.Credentials) (minio.ObjectLayer, erro
 		return nil, err
 	}
 	contentMap = make(map[string]*semaphore.Weighted)
+	ctx, cancel := context.WithCancel(context.Background())
+	zob.ctxCancel = cancel
+	IntiBatchUploadWorkers(ctx, allocation, serverConfig.BatchWaitTime, serverConfig.MaxBatchSize, serverConfig.BatchWorkers)
+	sdk.BatchSize = serverConfig.MaxBatchSize
+	sdk.SetMultiOpBatchSize(serverConfig.MaxBatchSize)
 	return zob, nil
 }
 
 type zcnObjects struct {
 	minio.GatewayUnsupported
-	alloc   *sdk.Allocation
-	metrics *minio.BackendMetrics
+	alloc     *sdk.Allocation
+	metrics   *minio.BackendMetrics
+	ctxCancel context.CancelFunc
 }
 
 // Shutdown Remove temporary directory
 func (zob *zcnObjects) Shutdown(ctx context.Context) error {
 	os.RemoveAll(tempdir)
+	zob.ctxCancel()
 	return nil
 }
 
@@ -191,15 +205,14 @@ func (zob *zcnObjects) DeleteBucket(ctx context.Context, bucketName string, opts
 		return fmt.Errorf("%v is object not bucket", bucketName)
 	}
 
-	if opts.Force {
-		return zob.alloc.DeleteFile(remotePath)
+	if opts.Force || ref.Size == 0 {
+		op := sdk.OperationRequest{
+			OperationType: constants.FileOperationDelete,
+			RemotePath:    remotePath,
+		}
+		return zob.alloc.DoMultiOperation([]sdk.OperationRequest{op})
 	}
-
-	if ref.Size > 0 {
-		return fmt.Errorf("%v bucket is not empty", bucketName)
-	}
-
-	return zob.alloc.DeleteFile(remotePath)
+	return minio.BucketNotEmpty{Bucket: bucketName}
 }
 
 func (zob *zcnObjects) DeleteObject(ctx context.Context, bucket, object string, opts minio.ObjectOptions) (oInfo minio.ObjectInfo, err error) {
@@ -225,7 +238,6 @@ func (zob *zcnObjects) DeleteObject(ctx context.Context, bucket, object string, 
 	if err != nil {
 		return
 	}
-	log.Println("Deleted object: ", remotePath)
 	return minio.ObjectInfo{
 		Bucket:  bucket,
 		Name:    ref.Name,

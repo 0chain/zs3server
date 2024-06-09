@@ -188,7 +188,6 @@ func mustReplicate(ctx context.Context, bucket, object string, mopts mustReplica
 	// }
 	cfg, err := getReplicationConfig(ctx, bucket)
 	if err != nil {
-		log.Println("getReplicationConfig: ", err)
 		return
 	}
 	opts := replication.ObjectOpts{

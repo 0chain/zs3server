@@ -255,8 +255,31 @@ To enable encryption and compression, you need to provide the encryption and com
 
 ```
 {
-"encrypt": true,
-"compress": true
+  "encrypt": true,
+  "compress": true,
+}
+```
+
+## Batch Upload settings
+
+The server will batch upload requests for objects which are uploaded using put api and has a defined content length. Max batch size refers to number of objects max objects to upload in one batch, this number should be similar to concurrency or thread set in client or expected number of requests per seconds, batch wait time will wait for this much amount of time before finalizing a batch and uploading it, number of batch workers will determine how many batches can we upload concurrently. For example:
+
+```
+{
+  "max_batch_size": 25, // set same as concurrency set via rclone or client
+  "batch_wait_time": 500, // batch wait time is set in milliseconds, its the time the processor will wait for more operations if the batch size is not reached
+  "batch_workers": 5 // number of workers, can be increased based on the number of requests, total operations which can be processed concurrently will be max_batch_size * batch_workers
+}
+```
+
+## Upload and Download workers
+
+The server will upload and download objects concurrently based on the number of workers set in the configuration file. The number of workers can be set in the zs3server.json file under .zcn folder,by default upload workers are set to 4 and download workers to 6. For example:
+
+```
+{
+  "upload_workers": 4,
+  "download_workers": 6
 }
 ```
 

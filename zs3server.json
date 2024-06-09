@@ -1,4 +1,9 @@
 {
   "encrypt": false,
-  "compress": false
+  "compress": false,
+  "max_batch_size": 25,
+  "batch_wait_time": 500,
+  "batch_workers": 5,
+  "upload_workers": 4,
+  "download_workers": 6
 }
