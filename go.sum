@@ -63,10 +63,6 @@ github.com/0chain/common v0.0.6-0.20230127095721-8df4d1d72565 h1:z+DtCR8mBsjPnEs
 github.com/0chain/common v0.0.6-0.20230127095721-8df4d1d72565/go.mod h1:UyDC8Qyl5z9lGkCnf9RHJPMektnFX8XtCJZHXCCVj8E=
 github.com/0chain/errors v1.0.3 h1:QQZPFxTfnMcRdt32DXbzRQIfGWmBsKoEdszKQDb0rRM=
 github.com/0chain/errors v1.0.3/go.mod h1:xymD6nVgrbgttWwkpSCfLLEJbFO6iHGQwk/yeSuYkIc=
-github.com/0chain/gosdk v1.15.1-0.20240601193644-4bd8289c7110 h1:a0LasmQvGZTxrD6mrkTn9OypwQerP5+1SIj2mWsYaJ0=
-github.com/0chain/gosdk v1.15.1-0.20240601193644-4bd8289c7110/go.mod h1:Hzl56JJ66ZmoyNS7CbTJue7wUugBYvNx8/qJzTRWmkI=
-github.com/0chain/gosdk v1.15.2-0.20240605144054-fa3524c9f43c h1:ex2qk92Iyq6FQtOxkf79MBJ266daaCNRuJPjEbtKPvo=
-github.com/0chain/gosdk v1.15.2-0.20240605144054-fa3524c9f43c/go.mod h1:Hzl56JJ66ZmoyNS7CbTJue7wUugBYvNx8/qJzTRWmkI=
 github.com/0chain/gosdk v1.15.2-0.20240607210546-75805d9696c2 h1:BeaFR5vcPUNgFl9sgWb9Ip2uIvTJ/EmSxRU6AZpDR0w=
 github.com/0chain/gosdk v1.15.2-0.20240607210546-75805d9696c2/go.mod h1:Hzl56JJ66ZmoyNS7CbTJue7wUugBYvNx8/qJzTRWmkI=
 github.com/Azure/azure-amqp-common-go/v2 v2.1.0/go.mod h1:R8rea+gJRuJR6QxTir/XuEd+YuKoUiazDC/N96FiDEU=
