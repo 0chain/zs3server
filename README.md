@@ -268,7 +268,8 @@ The server will batch upload requests for objects which are uploaded using put a
 {
   "max_batch_size": 25, // set same as concurrency set via rclone or client
   "batch_wait_time": 500, // batch wait time is set in milliseconds, its the time the processor will wait for more operations if the batch size is not reached
-  "batch_workers": 5 // number of workers, can be increased based on the number of requests, total operations which can be processed concurrently will be max_batch_size * batch_workers
+  "batch_workers": 5, // number of workers, can be increased based on the number of requests, total operations which can be processed concurrently will be max_batch_size * batch_workers
+  "max_concurrent_request": 100 // max concurrent requests initiated by the server to blobbers
 }
 ```
 

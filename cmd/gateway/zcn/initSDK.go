@@ -17,13 +17,14 @@ import (
 )
 
 type serverOptions struct {
-	Encrypt         bool `json:"encrypt"`
-	Compress        bool `json:"compress"`
-	MaxBatchSize    int  `json:"max_batch_size"`
-	BatchWaitTime   int  `json:"batch_wait_time"`
-	BatchWorkers    int  `json:"batch_workers"`
-	UploadWorkers   int  `json:"upload_workers"`
-	DownloadWorkers int  `json:"download_workers"`
+	Encrypt               bool `json:"encrypt"`
+	Compress              bool `json:"compress"`
+	MaxBatchSize          int  `json:"max_batch_size"`
+	BatchWaitTime         int  `json:"batch_wait_time"`
+	BatchWorkers          int  `json:"batch_workers"`
+	UploadWorkers         int  `json:"upload_workers"`
+	DownloadWorkers       int  `json:"download_workers"`
+	MaxConcurrentRequests int  `json:"max_concurrent_requests"`
 }
 
 func initializeSDK(configDir, allocid string, nonce int64) error {
@@ -71,6 +72,9 @@ func initializeSDK(configDir, allocid string, nonce int64) error {
 			serverConfig.BatchWorkers = 5
 		} else if serverConfig.BatchWaitTime == 0 {
 			serverConfig.BatchWaitTime = 500
+		}
+		if serverConfig.MaxConcurrentRequests == 0 {
+			serverConfig.MaxConcurrentRequests = serverConfig.MaxBatchSize
 		}
 	}
 

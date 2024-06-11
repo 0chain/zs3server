@@ -158,7 +158,7 @@ func (z *ZCN) NewGatewayLayer(creds madmin.Credentials) (minio.ObjectLayer, erro
 	zob.ctxCancel = cancel
 	IntiBatchUploadWorkers(ctx, allocation, serverConfig.BatchWaitTime, serverConfig.MaxBatchSize, serverConfig.BatchWorkers)
 	sdk.BatchSize = serverConfig.MaxBatchSize
-	sdk.SetMultiOpBatchSize(serverConfig.MaxBatchSize)
+	sdk.SetMultiOpBatchSize(serverConfig.MaxConcurrentRequests)
 	return zob, nil
 }
 
