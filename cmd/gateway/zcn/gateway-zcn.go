@@ -433,6 +433,7 @@ func (zob *zcnObjects) ListObjectsV2(ctx context.Context, bucket, prefix, contin
 func (zob *zcnObjects) ListObjects(ctx context.Context, bucket, prefix, marker, delimiter string, maxKeys int) (result minio.ListObjectsInfo, err error) {
 	// objFileType For root path list objects should only provide file and not dirs.
 	// Dirs under root path are presented as buckets as well
+	log.Println("ListObjects: ", bucket, marker, maxKeys)
 	var remotePath, objFileType string
 	if bucket == rootBucketName {
 		remotePath = filepath.Join(rootPath, prefix)
@@ -497,7 +498,7 @@ func (zob *zcnObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 		if ref.Type == dirType {
 			continue
 		}
-
+		log.Println("listRef: ", ref.Path)
 		objects = append(objects, minio.ObjectInfo{
 			Bucket:       bucket,
 			Name:         getRelativePathOfObj(ref.Path, bucket),

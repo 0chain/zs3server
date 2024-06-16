@@ -103,7 +103,7 @@ func listRegularRefs(alloc *sdk.Allocation, remotePath, marker, fileType string,
 	var isTruncated bool
 	var markedPath string
 	dirMap := make(map[string]bool)
-
+	log.Println("listRegularRefs: ", remotePath, marker)
 	remotePath = filepath.Clean(remotePath)
 	directories := make(listQueue, 0, 1)
 	heap.Init(&directories)
