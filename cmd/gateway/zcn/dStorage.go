@@ -80,23 +80,17 @@ func init() {
 
 func listRootDir(alloc *sdk.Allocation, fileType string) ([]sdk.ORef, error) {
 	var refs []sdk.ORef
-	page := 1
 	offsetPath := ""
 
 	for {
 		oResult, err := getRegularRefs(alloc, rootPath, offsetPath, fileType, pageLimit)
 		if err != nil {
-
 			return nil, err
 		}
-
-		refs = append(refs, oResult.Refs...)
-
-		if page >= int(oResult.TotalPages) {
+		if len(oResult.Refs) == 0 {
 			break
 		}
-
-		page++
+		refs = append(refs, oResult.Refs...)
 		offsetPath = oResult.OffsetPath
 	}
 
