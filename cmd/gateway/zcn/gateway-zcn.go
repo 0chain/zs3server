@@ -314,17 +314,20 @@ func (zob *zcnObjects) GetObjectInfo(ctx context.Context, bucket, object string,
 	} else {
 		remotePath = filepath.Join(rootPath, bucket, object)
 	}
+	log.Println("GetObjectInfo: ", remotePath)
 
 	var ref *sdk.ORef
 	ref, err = getSingleRegularRef(zob.alloc, filepath.Clean(remotePath))
 	if err != nil {
 		if isPathNoExistError(err) {
+			log.Println("object not found: ", remotePath)
 			return objInfo, minio.ObjectNotFound{Bucket: bucket, Object: object}
 		}
 		return
 	}
 
 	if ref.Type == dirType {
+		log.Println("object is dir: ", remotePath)
 		return minio.ObjectInfo{}, minio.ObjectNotFound{Bucket: bucket, Object: object}
 	}
 
