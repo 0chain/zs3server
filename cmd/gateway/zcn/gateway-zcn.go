@@ -314,20 +314,17 @@ func (zob *zcnObjects) GetObjectInfo(ctx context.Context, bucket, object string,
 	} else {
 		remotePath = filepath.Join(rootPath, bucket, object)
 	}
-	log.Println("GetObjectInfo: ", remotePath)
 
 	var ref *sdk.ORef
 	ref, err = getSingleRegularRef(zob.alloc, filepath.Clean(remotePath))
 	if err != nil {
 		if isPathNoExistError(err) {
-			log.Println("object not found: ", remotePath)
 			return objInfo, minio.ObjectNotFound{Bucket: bucket, Object: object}
 		}
 		return
 	}
 
 	if ref.Type == dirType {
-		log.Println("object is dir: ", remotePath)
 		return minio.ObjectInfo{}, minio.ObjectNotFound{Bucket: bucket, Object: object}
 	}
 
@@ -436,7 +433,6 @@ func (zob *zcnObjects) ListObjectsV2(ctx context.Context, bucket, prefix, contin
 func (zob *zcnObjects) ListObjects(ctx context.Context, bucket, prefix, marker, delimiter string, maxKeys int) (result minio.ListObjectsInfo, err error) {
 	// objFileType For root path list objects should only provide file and not dirs.
 	// Dirs under root path are presented as buckets as well
-	log.Println("ListObjects: ", bucket, marker, maxKeys)
 	var remotePath, objFileType string
 	if bucket == rootBucketName {
 		remotePath = filepath.Join(rootPath, prefix)
@@ -488,7 +484,7 @@ func (zob *zcnObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 	if delimiter != "" {
 		isDelimited = true
 	}
-
+	objFileType = fileType
 	refs, isTruncated, nextMarker, prefixes, err := listRegularRefs(zob.alloc, remotePath, marker, objFileType, maxKeys, isDelimited)
 	if err != nil {
 		if remotePath == rootPath && isPathNoExistError(err) {
@@ -501,7 +497,6 @@ func (zob *zcnObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 		if ref.Type == dirType {
 			continue
 		}
-		log.Println("listRef: ", ref.Path)
 		objects = append(objects, minio.ObjectInfo{
 			Bucket:       bucket,
 			Name:         getRelativePathOfObj(ref.Path, bucket),
