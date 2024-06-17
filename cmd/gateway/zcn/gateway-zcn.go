@@ -484,7 +484,7 @@ func (zob *zcnObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 	if delimiter != "" {
 		isDelimited = true
 	}
-
+	objFileType = fileType
 	refs, isTruncated, nextMarker, prefixes, err := listRegularRefs(zob.alloc, remotePath, marker, objFileType, maxKeys, isDelimited)
 	if err != nil {
 		if remotePath == rootPath && isPathNoExistError(err) {
@@ -497,7 +497,6 @@ func (zob *zcnObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 		if ref.Type == dirType {
 			continue
 		}
-
 		objects = append(objects, minio.ObjectInfo{
 			Bucket:       bucket,
 			Name:         getRelativePathOfObj(ref.Path, bucket),

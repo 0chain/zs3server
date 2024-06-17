@@ -3561,7 +3561,6 @@ func (api objectAPIHandlers) DeleteObjectHandler(w http.ResponseWriter, r *http.
 			return
 		}
 	}
-	log.Println("deletedObjectInfo: ", objInfo.Name)
 	if objInfo.Name == "" {
 		writeSuccessNoContent(w)
 		return
