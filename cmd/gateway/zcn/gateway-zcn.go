@@ -568,6 +568,7 @@ func (zob *zcnObjects) PutObject(ctx context.Context, bucket, object string, r *
 	}
 
 	if ref != nil {
+		logger.Info("updateFile: ", remotePath)
 		isUpdate = true
 		unlockPath(remotePath)
 	} else {
