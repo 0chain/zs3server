@@ -483,8 +483,9 @@ func (zob *zcnObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 	var isDelimited bool
 	if delimiter != "" {
 		isDelimited = true
+	} else {
+		objFileType = fileType
 	}
-	objFileType = fileType
 	refs, isTruncated, nextMarker, prefixes, err := listRegularRefs(zob.alloc, remotePath, marker, objFileType, maxKeys, isDelimited)
 	if err != nil {
 		if remotePath == rootPath && isPathNoExistError(err) {
