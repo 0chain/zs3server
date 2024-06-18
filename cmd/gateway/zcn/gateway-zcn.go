@@ -562,6 +562,7 @@ func (zob *zcnObjects) PutObject(ctx context.Context, bucket, object string, r *
 	ref, err = getSingleRegularRef(zob.alloc, remotePath)
 	if err != nil {
 		if !isPathNoExistError(err) {
+			unlockPath(remotePath)
 			return
 		}
 	}
