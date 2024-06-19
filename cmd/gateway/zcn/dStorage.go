@@ -171,7 +171,7 @@ breakLoop:
 	return refs, isTruncated, marker, prefixes, nil
 }
 
-func getRegularRefs(alloc *sdk.Allocation, remotePath, offsetPath, fileType string, pageLimit int) (oResult *sdk.ObjectTreeResult, err error) {
+func getRegularRefs(alloc *sdk.Allocation, remotePath, offsetPath, objFileType string, pageLimit int) (oResult *sdk.ObjectTreeResult, err error) {
 	level := len(strings.Split(strings.TrimSuffix(remotePath, "/"), "/")) + 1
 	if offsetPath != "" {
 		offLevel := len(strings.Split(strings.TrimSuffix(offsetPath, "/"), "/"))
@@ -179,8 +179,11 @@ func getRegularRefs(alloc *sdk.Allocation, remotePath, offsetPath, fileType stri
 			level = 0
 		}
 	}
+	if objFileType == fileType {
+		level = 0
+	}
 	remotePath = filepath.Clean(remotePath)
-	oResult, err = alloc.GetRefs(remotePath, offsetPath, "", "", fileType, "regular", level, pageLimit)
+	oResult, err = alloc.GetRefs(remotePath, offsetPath, "", "", objFileType, "regular", level, pageLimit)
 	return
 }
 
