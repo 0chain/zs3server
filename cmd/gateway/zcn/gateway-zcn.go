@@ -324,15 +324,19 @@ func (zob *zcnObjects) GetObjectInfo(ctx context.Context, bucket, object string,
 		return
 	}
 
-	if ref.Type == dirType {
+	if ref.Type == dirType && object != "" && object[len(object)-1] != '/' {
 		return minio.ObjectInfo{}, minio.ObjectNotFound{Bucket: bucket, Object: object}
+	}
+	if ref.Type == dirType {
+		ref.MimeType = "application/x-directory; charset=UTF-8"
+		ref.ActualFileHash = "d41d8cd98f00b204e9800998ecf8427e"
 	}
 
 	return minio.ObjectInfo{
 		Bucket:      bucket,
 		Name:        getRelativePathOfObj(ref.Path, bucket),
 		ModTime:     ref.UpdatedAt.ToTime(),
-		Size:        ref.ActualFileSize,
+		Size:        0,
 		IsDir:       ref.Type == dirType,
 		AccTime:     time.Now(),
 		ContentType: ref.MimeType,
@@ -479,7 +483,28 @@ func (zob *zcnObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 			nil
 	}
 
+	if len(prefix) > 0 && prefix[len(prefix)-1] != '/' {
+		return minio.ListObjectsInfo{
+				IsTruncated: false,
+				Objects:     []minio.ObjectInfo{},
+				Prefixes:    []string{prefix + "/"},
+			},
+			nil
+	}
+
 	var objects []minio.ObjectInfo
+	if prefix != "" {
+		objects = append(objects, minio.ObjectInfo{
+			Bucket:       bucket,
+			Name:         prefix,
+			ModTime:      ref.UpdatedAt.ToTime(),
+			Size:         0,
+			IsDir:        true,
+			ContentType:  "application/x-directory; charset=UTF-8",
+			ETag:         "d41d8cd98f00b204e9800998ecf8427e",
+			StorageClass: "STANDARD",
+		})
+	}
 	var isDelimited bool
 	if delimiter != "" {
 		isDelimited = true
