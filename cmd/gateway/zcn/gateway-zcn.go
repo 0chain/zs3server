@@ -581,19 +581,19 @@ func (zob *zcnObjects) PutObject(ctx context.Context, bucket, object string, r *
 		contentType = mimedb.TypeByExtension(path.Ext(object))
 	}
 
-	if r.Size() == 0 {
-		err = zob.MakeBucketWithLocation(ctx, remotePath, minio.BucketOptions{})
-		if err != nil {
-			return
-		} else {
-			return minio.ObjectInfo{
-				Bucket:  bucket,
-				Name:    object,
-				Size:    0,
-				ModTime: time.Now(),
-			}, nil
-		}
-	}
+	// if r.Size() == 0 {
+	// 	err = zob.MakeBucketWithLocation(ctx, remotePath, minio.BucketOptions{})
+	// 	if err != nil {
+	// 		return
+	// 	} else {
+	// 		return minio.ObjectInfo{
+	// 			Bucket:  bucket,
+	// 			Name:    object,
+	// 			Size:    0,
+	// 			ModTime: time.Now(),
+	// 		}, nil
+	// 	}
+	// }
 
 	err = putFile(ctx, zob.alloc, remotePath, contentType, r, r.Size(), isUpdate)
 	if err != nil {
