@@ -27,8 +27,10 @@ import (
 )
 
 const (
-	rootPath       = "/"
-	rootBucketName = "root"
+	rootPath               = "/"
+	rootBucketName         = "root"
+	s3DirectoryContentType = "application/x-directory; charset=UTF-8"
+	s3ContentHash          = "d41d8cd98f00b204e9800998ecf8427e"
 )
 
 var (
@@ -328,8 +330,8 @@ func (zob *zcnObjects) GetObjectInfo(ctx context.Context, bucket, object string,
 		return minio.ObjectInfo{}, minio.ObjectNotFound{Bucket: bucket, Object: object}
 	}
 	if ref.Type == dirType {
-		ref.MimeType = "application/x-directory; charset=UTF-8"
-		ref.ActualFileHash = "d41d8cd98f00b204e9800998ecf8427e"
+		ref.MimeType = s3DirectoryContentType
+		ref.ActualFileHash = s3ContentHash
 		ref.ActualFileSize = 0
 	}
 
@@ -502,8 +504,8 @@ func (zob *zcnObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 			ModTime:      ref.UpdatedAt.ToTime(),
 			Size:         0,
 			IsDir:        true,
-			ContentType:  "application/x-directory; charset=UTF-8",
-			ETag:         "d41d8cd98f00b204e9800998ecf8427e",
+			ContentType:  s3DirectoryContentType,
+			ETag:         s3ContentHash,
 			StorageClass: "STANDARD",
 		})
 	}
