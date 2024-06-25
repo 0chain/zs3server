@@ -284,5 +284,22 @@ The server will upload and download objects concurrently based on the number of 
 }
 ```
 
+## FUSE-based file system
+
+The server can be mounted as a file system using [s3fuse](https://github.com/s3fs-fuse/s3fs-fuse). The server can be mounted using the following commands:
+
+Use the following command to create a password file:
+
+```
+echo ACCESS_KEY_ID:SECRET_ACCESS_KEY > ${HOME}/.passwd-s3fs
+chmod 600 ${HOME}/.passwd-s3fs
+```
+
+Mount the server using the following command:
+
+```
+s3fs mybucket /path/to/mountpoint -o passwd_file=${HOME}/.passwd-s3fs -o url=https://url.to.s3/ -o use_path_request_style,allow_other,uid=0,gid=0,umask=000,complement_stat
+```
+
 If you are using compression, we recommeng using our minio client
 [Minio Client](https://github.com/0chain/mc)
