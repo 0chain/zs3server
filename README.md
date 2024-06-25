@@ -298,7 +298,7 @@ chmod 600 ${HOME}/.passwd-s3fs
 Mount the server using the following command:
 
 ```
-s3fs mybucket /path/to/mountpoint -o passwd_file=${HOME}/.passwd-s3fs -o url=https://url.to.s3/ -o use_path_request_style,allow_other,uid=0,gid=0,umask=000,complement_stat
+s3fs mybucket /path/to/mountpoint -o passwd_file=${HOME}/.passwd-s3fs -o url=https://url.to.s3/ -o use_path_request_style,allow_other,umask=000,complement_stat
 ```
 
 If you are using compression, we recommeng using our minio client
