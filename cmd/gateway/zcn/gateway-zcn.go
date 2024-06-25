@@ -330,16 +330,18 @@ func (zob *zcnObjects) GetObjectInfo(ctx context.Context, bucket, object string,
 	if ref.Type == dirType {
 		ref.MimeType = "application/x-directory; charset=UTF-8"
 		ref.ActualFileHash = "d41d8cd98f00b204e9800998ecf8427e"
+		ref.ActualFileSize = 0
 	}
 
 	return minio.ObjectInfo{
 		Bucket:      bucket,
 		Name:        getRelativePathOfObj(ref.Path, bucket),
 		ModTime:     ref.UpdatedAt.ToTime(),
-		Size:        0,
+		Size:        ref.ActualFileSize,
 		IsDir:       ref.Type == dirType,
 		AccTime:     time.Now(),
 		ContentType: ref.MimeType,
+		ETag:        ref.ActualFileHash,
 	}, nil
 }
 
