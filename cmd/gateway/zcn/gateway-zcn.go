@@ -743,6 +743,7 @@ func (zob *zcnObjects) CopyObject(ctx context.Context, srcBucket, srcObject, des
 	} else {
 		dstRemotePath = filepath.Join(rootPath, destBucket, destObject)
 	}
+	log.Println("copyObject: ", srcRemotePath, dstRemotePath)
 	copyOp := sdk.OperationRequest{
 		OperationType: constants.FileOperationCopy,
 		RemotePath:    srcRemotePath,
