@@ -67,6 +67,8 @@ github.com/0chain/gosdk v1.15.10-0.20240619061533-1bf8cfac5c96 h1:jq7lpB7WZwckk8
 github.com/0chain/gosdk v1.15.10-0.20240619061533-1bf8cfac5c96/go.mod h1:y7Ucdmv40VltqulZnncMNjNQ4piX5Dta5ujNmPmXnxg=
 github.com/0chain/gosdk v1.15.10-0.20240622125826-ba1069cd6621 h1:DnMdghfu1iLrdPXS8sTfO5jQrq/NKsC4Yb2b47v2BxA=
 github.com/0chain/gosdk v1.15.10-0.20240622125826-ba1069cd6621/go.mod h1:y7Ucdmv40VltqulZnncMNjNQ4piX5Dta5ujNmPmXnxg=
+github.com/0chain/gosdk v1.16.0-RC1.0.20240704113739-7283e811a34f h1:1Gca6Nd+x3//srVCoFmXTu+e2amAM8rWDn6oUoBmKgI=
+github.com/0chain/gosdk v1.16.0-RC1.0.20240704113739-7283e811a34f/go.mod h1:y7Ucdmv40VltqulZnncMNjNQ4piX5Dta5ujNmPmXnxg=
 github.com/Azure/azure-amqp-common-go/v2 v2.1.0/go.mod h1:R8rea+gJRuJR6QxTir/XuEd+YuKoUiazDC/N96FiDEU=
 github.com/Azure/azure-pipeline-go v0.2.1/go.mod h1:UGSo8XybXnIGZ3epmeBw7Jdz+HiUVpqIlpz/HKHylF4=
 github.com/Azure/azure-pipeline-go v0.2.2 h1:6oiIS9yaG6XCCzhgAgKFfIWyo4LLCiDhZot6ltoThhY=
