@@ -743,7 +743,19 @@ func (zob *zcnObjects) CopyObject(ctx context.Context, srcBucket, srcObject, des
 	} else {
 		dstRemotePath = filepath.Join(rootPath, destBucket, destObject)
 	}
-	log.Println("copyObject: ", srcRemotePath, dstRemotePath)
+	var ref *sdk.ORef
+	if srcRemotePath == dstRemotePath {
+		ref, err = getSingleRegularRef(zob.alloc, dstRemotePath)
+		if err != nil {
+			return
+		}
+		return minio.ObjectInfo{
+			Bucket:  destBucket,
+			Name:    destObject,
+			ModTime: ref.UpdatedAt.ToTime(),
+			Size:    ref.ActualFileSize,
+		}, nil
+	}
 	copyOp := sdk.OperationRequest{
 		OperationType: constants.FileOperationCopy,
 		RemotePath:    srcRemotePath,
@@ -756,7 +768,6 @@ func (zob *zcnObjects) CopyObject(ctx context.Context, srcBucket, srcObject, des
 		return
 	}
 
-	var ref *sdk.ORef
 	ref, err = getSingleRegularRef(zob.alloc, dstRemotePath)
 	if err != nil {
 		return
