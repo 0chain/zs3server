@@ -3,6 +3,7 @@ package zcn
 import (
 	"container/heap"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -377,14 +378,20 @@ func getFileReader(ctx context.Context,
 
 }
 
-func putFile(ctx context.Context, alloc *sdk.Allocation, remotePath, contentType string, r io.Reader, size int64, isUpdate bool) (err error) {
+func putFile(ctx context.Context, alloc *sdk.Allocation, remotePath, contentType string, r io.Reader, size int64, isUpdate bool, userDefined map[string]string) (err error) {
 	fileName := filepath.Base(remotePath)
+	var customMeta string
+	if len(userDefined) > 0 {
+		meta, _ := json.Marshal(userDefined)
+		customMeta = string(meta)
+	}
 	fileMeta := sdk.FileMeta{
 		Path:       "",
 		RemotePath: remotePath,
 		ActualSize: size,
 		MimeType:   contentType,
 		RemoteName: fileName,
+		CustomMeta: customMeta,
 	}
 
 	isStreamUpload := size == -1

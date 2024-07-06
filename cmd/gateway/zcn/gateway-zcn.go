@@ -2,6 +2,7 @@ package zcn
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -335,6 +336,11 @@ func (zob *zcnObjects) GetObjectInfo(ctx context.Context, bucket, object string,
 		ref.ActualFileSize = 0
 	}
 
+	var userDefined map[string]string
+	if ref.CustomMeta != "" {
+		_ = json.Unmarshal([]byte(ref.CustomMeta), &userDefined)
+	}
+
 	return minio.ObjectInfo{
 		Bucket:      bucket,
 		Name:        getRelativePathOfObj(ref.Path, bucket),
@@ -344,6 +350,7 @@ func (zob *zcnObjects) GetObjectInfo(ctx context.Context, bucket, object string,
 		AccTime:     time.Now(),
 		ContentType: ref.MimeType,
 		ETag:        ref.ActualFileHash,
+		UserDefined: userDefined,
 	}, nil
 }
 
@@ -498,6 +505,10 @@ func (zob *zcnObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 
 	var objects []minio.ObjectInfo
 	if prefix != "" {
+		userDefined := make(map[string]string)
+		if ref.CustomMeta != "" {
+			_ = json.Unmarshal([]byte(ref.CustomMeta), &userDefined)
+		}
 		objects = append(objects, minio.ObjectInfo{
 			Bucket:       bucket,
 			Name:         prefix,
@@ -507,6 +518,7 @@ func (zob *zcnObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 			ContentType:  s3DirectoryContentType,
 			ETag:         s3ContentHash,
 			StorageClass: "STANDARD",
+			UserDefined:  userDefined,
 		})
 	}
 	var isDelimited bool
@@ -527,6 +539,10 @@ func (zob *zcnObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 		if ref.Type == dirType {
 			continue
 		}
+		userDefined := make(map[string]string)
+		if ref.CustomMeta != "" {
+			_ = json.Unmarshal([]byte(ref.CustomMeta), &userDefined)
+		}
 		objects = append(objects, minio.ObjectInfo{
 			Bucket:       bucket,
 			Name:         getRelativePathOfObj(ref.Path, bucket),
@@ -536,6 +552,7 @@ func (zob *zcnObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 			ContentType:  ref.MimeType,
 			ETag:         ref.ActualFileHash,
 			StorageClass: "STANDARD",
+			UserDefined:  userDefined,
 		})
 	}
 
@@ -612,7 +629,16 @@ func (zob *zcnObjects) PutObject(ctx context.Context, bucket, object string, r *
 
 	if object[len(object)-1] == '/' {
 		log.Println("userDefined: ", opts.UserDefined)
-		err = zob.MakeBucketWithLocation(ctx, remotePath, minio.BucketOptions{})
+		remotePath := filepath.Join(rootPath, bucket)
+		createDirOp := sdk.OperationRequest{
+			OperationType: constants.FileOperationCreateDir,
+			RemotePath:    remotePath,
+		}
+		customMeta, _ := json.Marshal(opts.UserDefined)
+		createDirOp.FileMeta.CustomMeta = string(customMeta)
+		err = zob.alloc.DoMultiOperation([]sdk.OperationRequest{
+			createDirOp,
+		})
 		if err != nil {
 			return
 		} else {
@@ -624,20 +650,22 @@ func (zob *zcnObjects) PutObject(ctx context.Context, bucket, object string, r *
 				IsDir:       true,
 				ContentType: s3DirectoryContentType,
 				ETag:        s3ContentHash,
+				UserDefined: opts.UserDefined,
 			}, nil
 		}
 	}
 
-	err = putFile(ctx, zob.alloc, remotePath, contentType, r, r.Size(), isUpdate)
+	err = putFile(ctx, zob.alloc, remotePath, contentType, r, r.Size(), isUpdate, opts.UserDefined)
 	if err != nil {
 		return
 	}
 
 	objInfo = minio.ObjectInfo{
-		Bucket:  bucket,
-		Name:    object,
-		Size:    r.Size(),
-		ModTime: time.Now(),
+		Bucket:      bucket,
+		Name:        object,
+		Size:        r.Size(),
+		ModTime:     time.Now(),
+		UserDefined: opts.UserDefined,
 	}
 	return
 }
