@@ -33,7 +33,6 @@ require (
 	github.com/go-ldap/ldap/v3 v3.2.4
 	github.com/go-openapi/loads v0.20.2
 	github.com/go-sql-driver/mysql v1.5.0
-	github.com/goccy/go-json v0.7.9
 	github.com/golang-jwt/jwt/v4 v4.3.0
 	github.com/gomodule/redigo v1.8.8
 	github.com/google/uuid v1.6.0
@@ -147,6 +146,7 @@ require (
 	github.com/go-openapi/swag v0.19.14 // indirect
 	github.com/go-openapi/validate v0.20.2 // indirect
 	github.com/go-stack/stack v1.8.1 // indirect
+	github.com/goccy/go-json v0.7.9 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang-jwt/jwt v3.2.2+incompatible // indirect
 	github.com/golang/glog v1.0.0 // indirect

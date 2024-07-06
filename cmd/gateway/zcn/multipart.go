@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -16,7 +17,6 @@ import (
 
 	"github.com/0chain/gosdk/constants"
 	"github.com/0chain/gosdk/zboxcore/sdk"
-	"github.com/goccy/go-json"
 	"github.com/google/uuid"
 	"github.com/pierrec/lz4/v4"
 
