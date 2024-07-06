@@ -743,17 +743,24 @@ func (zob *zcnObjects) CopyObject(ctx context.Context, srcBucket, srcObject, des
 	} else {
 		dstRemotePath = filepath.Join(rootPath, destBucket, destObject)
 	}
+	log.Println("userDefined: ", dstOpts.UserDefined)
 	var ref *sdk.ORef
 	if srcRemotePath == dstRemotePath {
 		ref, err = getSingleRegularRef(zob.alloc, dstRemotePath)
 		if err != nil {
 			return
 		}
+		if ref.Type == dirType {
+			ref.MimeType = s3DirectoryContentType
+			ref.ActualFileSize = 0
+		}
 		return minio.ObjectInfo{
-			Bucket:  destBucket,
-			Name:    destObject,
-			ModTime: ref.UpdatedAt.ToTime(),
-			Size:    ref.ActualFileSize,
+			Bucket:      destBucket,
+			Name:        destObject,
+			ModTime:     ref.UpdatedAt.ToTime(),
+			Size:        ref.ActualFileSize,
+			ContentType: ref.MimeType,
+			IsDir:       ref.Type == dirType,
 		}, nil
 	}
 	copyOp := sdk.OperationRequest{
@@ -772,12 +779,18 @@ func (zob *zcnObjects) CopyObject(ctx context.Context, srcBucket, srcObject, des
 	if err != nil {
 		return
 	}
+	if ref.Type == dirType {
+		ref.MimeType = s3DirectoryContentType
+		ref.ActualFileSize = 0
+	}
 
 	return minio.ObjectInfo{
-		Bucket:  destBucket,
-		Name:    destObject,
-		ModTime: ref.UpdatedAt.ToTime(),
-		Size:    ref.ActualFileSize,
+		Bucket:      destBucket,
+		Name:        destObject,
+		ModTime:     ref.UpdatedAt.ToTime(),
+		Size:        ref.ActualFileSize,
+		IsDir:       ref.Type == dirType,
+		ContentType: ref.MimeType,
 	}, nil
 }
 
