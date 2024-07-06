@@ -753,6 +753,7 @@ func (zob *zcnObjects) CopyObject(ctx context.Context, srcBucket, srcObject, des
 		if ref.Type == dirType {
 			ref.MimeType = s3DirectoryContentType
 			ref.ActualFileSize = 0
+			ref.ActualFileHash = s3ContentHash
 		}
 		return minio.ObjectInfo{
 			Bucket:      destBucket,
@@ -761,6 +762,7 @@ func (zob *zcnObjects) CopyObject(ctx context.Context, srcBucket, srcObject, des
 			Size:        ref.ActualFileSize,
 			ContentType: ref.MimeType,
 			IsDir:       ref.Type == dirType,
+			ETag:        ref.ActualFileHash,
 		}, nil
 	}
 	copyOp := sdk.OperationRequest{
@@ -782,6 +784,7 @@ func (zob *zcnObjects) CopyObject(ctx context.Context, srcBucket, srcObject, des
 	if ref.Type == dirType {
 		ref.MimeType = s3DirectoryContentType
 		ref.ActualFileSize = 0
+		ref.ActualFileHash = s3ContentHash
 	}
 
 	return minio.ObjectInfo{
@@ -791,6 +794,7 @@ func (zob *zcnObjects) CopyObject(ctx context.Context, srcBucket, srcObject, des
 		Size:        ref.ActualFileSize,
 		IsDir:       ref.Type == dirType,
 		ContentType: ref.MimeType,
+		ETag:        ref.ActualFileHash,
 	}, nil
 }
 

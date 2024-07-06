@@ -1,6 +1,7 @@
 package zcn
 
 import (
+	"bytes"
 	"container/heap"
 	"context"
 	"errors"
@@ -231,7 +232,11 @@ func getObjectRef(alloc *sdk.Allocation, bucket, object, remotePath string) (*mi
 	if ref.EncryptedKey != "" {
 		isEncrypted = true
 	}
-
+	if ref.Type == dirType {
+		ref.ActualFileHash = s3ContentHash
+		ref.MimeType = s3DirectoryContentType
+		ref.ActualFileSize = 0
+	}
 	return &minio.ObjectInfo{
 		Bucket:      bucket,
 		Name:        ref.Name,
@@ -239,6 +244,7 @@ func getObjectRef(alloc *sdk.Allocation, bucket, object, remotePath string) (*mi
 		Size:        ref.ActualFileSize,
 		IsDir:       ref.Type == dirType,
 		ContentType: ref.MimeType,
+		ETag:        ref.ActualFileHash,
 	}, isEncrypted, nil
 }
 
@@ -257,6 +263,9 @@ func getFileReader(ctx context.Context,
 	objectInfo, isEncrypted, err := getObjectRef(alloc, bucket, object, remotePath)
 	if err != nil {
 		return nil, nil, nil, "", err
+	}
+	if objectInfo.IsDir {
+		return bytes.NewBuffer(nil), objectInfo, nil, "", nil
 	}
 	if rangeEnd < rangeStart {
 		fileRangeSize = objectInfo.Size
