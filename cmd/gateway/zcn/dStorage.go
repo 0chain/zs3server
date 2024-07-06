@@ -1,7 +1,6 @@
 package zcn
 
 import (
-	"bytes"
 	"container/heap"
 	"context"
 	"errors"
@@ -263,9 +262,6 @@ func getFileReader(ctx context.Context,
 	objectInfo, isEncrypted, err := getObjectRef(alloc, bucket, object, remotePath)
 	if err != nil {
 		return nil, nil, nil, "", err
-	}
-	if objectInfo.IsDir {
-		return bytes.NewBuffer(nil), objectInfo, nil, "", nil
 	}
 	if rangeEnd < rangeStart {
 		fileRangeSize = objectInfo.Size

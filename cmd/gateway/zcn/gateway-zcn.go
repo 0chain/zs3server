@@ -611,15 +611,19 @@ func (zob *zcnObjects) PutObject(ctx context.Context, bucket, object string, r *
 	}
 
 	if object[len(object)-1] == '/' {
+		log.Println("userDefined: ", opts.UserDefined)
 		err = zob.MakeBucketWithLocation(ctx, remotePath, minio.BucketOptions{})
 		if err != nil {
 			return
 		} else {
 			return minio.ObjectInfo{
-				Bucket:  bucket,
-				Name:    object,
-				Size:    0,
-				ModTime: time.Now(),
+				Bucket:      bucket,
+				Name:        object,
+				Size:        0,
+				ModTime:     time.Now(),
+				IsDir:       true,
+				ContentType: s3DirectoryContentType,
+				ETag:        s3ContentHash,
 			}, nil
 		}
 	}
