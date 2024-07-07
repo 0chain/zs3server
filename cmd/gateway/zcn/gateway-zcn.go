@@ -628,8 +628,6 @@ func (zob *zcnObjects) PutObject(ctx context.Context, bucket, object string, r *
 	}
 
 	if object[len(object)-1] == '/' {
-		log.Println("userDefined: ", opts.UserDefined)
-		remotePath := filepath.Join(rootPath, bucket)
 		createDirOp := sdk.OperationRequest{
 			OperationType: constants.FileOperationCreateDir,
 			RemotePath:    remotePath,
