@@ -17,8 +17,14 @@ import (
 )
 
 type serverOptions struct {
-	Encrypt  bool `json:"encrypt"`
-	Compress bool `json:"compress"`
+	Encrypt               bool `json:"encrypt"`
+	Compress              bool `json:"compress"`
+	MaxBatchSize          int  `json:"max_batch_size"`
+	BatchWaitTime         int  `json:"batch_wait_time"`
+	BatchWorkers          int  `json:"batch_workers"`
+	UploadWorkers         int  `json:"upload_workers"`
+	DownloadWorkers       int  `json:"download_workers"`
+	MaxConcurrentRequests int  `json:"max_concurrent_requests"`
 }
 
 func initializeSDK(configDir, allocid string, nonce int64) error {
@@ -52,13 +58,24 @@ func initializeSDK(configDir, allocid string, nonce int64) error {
 	optionFile := filepath.Join(configDir, "zs3server.json")
 	optionBytes, err := os.ReadFile(optionFile)
 	if err == nil {
-		var options serverOptions
-		err = json.Unmarshal(optionBytes, &options)
+		err = json.Unmarshal(optionBytes, &serverConfig)
 		if err != nil {
 			return err
 		}
-		encrypt = options.Encrypt
-		compress = options.Compress
+		encrypt = serverConfig.Encrypt
+		compress = serverConfig.Compress
+		if serverConfig.MaxBatchSize == 0 {
+			serverConfig.MaxBatchSize = 25
+			serverConfig.BatchWorkers = 5
+			serverConfig.BatchWaitTime = 500
+		} else if serverConfig.BatchWorkers == 0 {
+			serverConfig.BatchWorkers = 5
+		} else if serverConfig.BatchWaitTime == 0 {
+			serverConfig.BatchWaitTime = 500
+		}
+		if serverConfig.MaxConcurrentRequests == 0 {
+			serverConfig.MaxConcurrentRequests = serverConfig.MaxBatchSize
+		}
 	}
 
 	cfg, err := conf.LoadConfigFile(filepath.Join(configDir, "config.yaml"))
@@ -85,6 +102,8 @@ func initializeSDK(configDir, allocid string, nonce int64) error {
 	logger.SyncLoggers([]*logger.Logger{zcncore.GetLogger(), sdk.GetLogger()})
 	zcncore.SetLogFile("cmdlog.log", true)
 	sdk.SetLogFile("cmd.log", true)
+	zcncore.SetLogLevel(3)
+	sdk.SetLogLevel(3)
 
 	err = zcncore.InitZCNSDK(cfg.BlockWorker, cfg.SignatureScheme,
 		zcncore.WithChainID(cfg.ChainID),

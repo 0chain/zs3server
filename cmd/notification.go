@@ -24,7 +24,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"sort"
@@ -1402,6 +1401,9 @@ func (args eventArgs) ToEvent(escape bool) event.Event {
 
 func sendEvent(args eventArgs) {
 	args.Object.Size, _ = args.Object.GetActualSize()
+	if args.Object.Size == 0 {
+		return
+	}
 
 	// avoid generating a notification for REPLICA creation event.
 	if _, ok := args.ReqParams[xhttp.MinIOSourceReplicationRequest]; ok {
@@ -1415,7 +1417,7 @@ func sendEvent(args eventArgs) {
 	if globalNotificationSys == nil {
 		return
 	}
-	log.Println("sendEvent:", args.EventName, args.Object.Name)
+
 	if globalHTTPListen.NumSubscribers() > 0 {
 		globalHTTPListen.Publish(args.ToEvent(false))
 	}
