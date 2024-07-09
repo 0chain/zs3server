@@ -1,6 +1,7 @@
 package zcn
 
 import (
+	"container/heap"
 	"context"
 	"errors"
 	"fmt"
@@ -43,6 +44,32 @@ const (
 	retryWaitTime    = 500 * time.Millisecond // milliseconds
 )
 
+type listQueue []string
+
+func (lq listQueue) Len() int {
+	return len(lq)
+}
+
+func (lq listQueue) Less(i, j int) bool {
+	return lq[i] < lq[j]
+}
+
+func (lq *listQueue) Push(path any) {
+	*lq = append(*lq, path.(string))
+}
+
+func (lq listQueue) Swap(i, j int) {
+	lq[i], lq[j] = lq[j], lq[i]
+}
+
+func (lq *listQueue) Pop() any {
+	old := *lq
+	n := len(old)
+	path := old[n-1]
+	*lq = old[0 : n-1]
+	return path
+}
+
 func init() {
 	var err error
 	tempdir, err = os.MkdirTemp("", "zcn*")
@@ -53,23 +80,17 @@ func init() {
 
 func listRootDir(alloc *sdk.Allocation, fileType string) ([]sdk.ORef, error) {
 	var refs []sdk.ORef
-	page := 1
 	offsetPath := ""
 
 	for {
 		oResult, err := getRegularRefs(alloc, rootPath, offsetPath, fileType, pageLimit)
 		if err != nil {
-
 			return nil, err
 		}
-
-		refs = append(refs, oResult.Refs...)
-
-		if page >= int(oResult.TotalPages) {
+		if len(oResult.Refs) == 0 {
 			break
 		}
-
-		page++
+		refs = append(refs, oResult.Refs...)
 		offsetPath = oResult.OffsetPath
 	}
 
@@ -81,18 +102,27 @@ func listRegularRefs(alloc *sdk.Allocation, remotePath, marker, fileType string,
 	var prefixes []string
 	var isTruncated bool
 	var markedPath string
-
+	dirMap := make(map[string]bool)
 	remotePath = filepath.Clean(remotePath)
-
-	directories := []string{remotePath}
+	directories := make(listQueue, 0, 1)
+	heap.Init(&directories)
+	heap.Push(&directories, remotePath)
 	var currentRemotePath string
+	listPageLimit := pageLimit
 	for len(directories) > 0 && !isTruncated {
 		currentRemotePath = directories[0]
-		directories = directories[1:] // dequeue from the directories queue
+		heap.Pop(&directories)
 		commonPrefix := getCommonPrefix(currentRemotePath)
-		offsetPath := filepath.Join(currentRemotePath, marker)
+		offsetPath := currentRemotePath
+		if marker != "" {
+			offsetPath = filepath.Join(currentRemotePath, marker)
+			marker = ""
+		}
 		for {
-			oResult, err := getRegularRefs(alloc, currentRemotePath, offsetPath, fileType, pageLimit)
+			if len(refs)+listPageLimit > maxRefs {
+				listPageLimit = maxRefs - len(refs)
+			}
+			oResult, err := getRegularRefs(alloc, currentRemotePath, offsetPath, fileType, listPageLimit)
 			if err != nil {
 				return nil, true, "", nil, err
 			}
@@ -104,13 +134,17 @@ func listRegularRefs(alloc *sdk.Allocation, remotePath, marker, fileType string,
 				ref := oResult.Refs[i]
 				trimmedPath := strings.TrimPrefix(ref.Path, currentRemotePath+"/")
 				if ref.Type == dirType {
+					if _, ok := dirMap[ref.Path]; ok {
+						continue
+					}
 					if isDelimited {
 						dirPrefix := filepath.Join(commonPrefix, trimmedPath) + "/"
 						prefixes = append(prefixes, dirPrefix)
 						continue
 					} else {
-						directories = append(directories, ref.Path)
+						heap.Push(&directories, ref.Path)
 					}
+					dirMap[ref.Path] = true
 				}
 
 				ref.Name = filepath.Join(commonPrefix, trimmedPath)
@@ -119,25 +153,37 @@ func listRegularRefs(alloc *sdk.Allocation, remotePath, marker, fileType string,
 				if maxRefs != 0 && len(refs) >= maxRefs {
 					markedPath = ref.Path
 					isTruncated = true
-					break
+					goto breakLoop
 				}
 			}
 			offsetPath = oResult.OffsetPath
+			if len(oResult.Refs) < listPageLimit {
+				break
+			}
 		}
 	}
+breakLoop:
 	if isTruncated {
-		marker = strings.TrimPrefix(markedPath, currentRemotePath+"/")
+		marker = strings.TrimPrefix(markedPath, remotePath+"/")
 	} else {
 		marker = ""
 	}
-
 	return refs, isTruncated, marker, prefixes, nil
 }
 
-func getRegularRefs(alloc *sdk.Allocation, remotePath, offsetPath, fileType string, pageLimit int) (oResult *sdk.ObjectTreeResult, err error) {
+func getRegularRefs(alloc *sdk.Allocation, remotePath, offsetPath, objFileType string, pageLimit int) (oResult *sdk.ObjectTreeResult, err error) {
 	level := len(strings.Split(strings.TrimSuffix(remotePath, "/"), "/")) + 1
+	if offsetPath != "" {
+		offLevel := len(strings.Split(strings.TrimSuffix(offsetPath, "/"), "/"))
+		if offLevel > level {
+			level = 0
+		}
+	}
+	if objFileType == fileType {
+		level = 0
+	}
 	remotePath = filepath.Clean(remotePath)
-	oResult, err = alloc.GetRefs(remotePath, offsetPath, "", "", fileType, "regular", level, pageLimit)
+	oResult, err = alloc.GetRefs(remotePath, offsetPath, "", "", objFileType, "regular", level, pageLimit)
 	return
 }
 
@@ -147,7 +193,6 @@ func getSingleRegularRef(alloc *sdk.Allocation, remotePath string) (*sdk.ORef, e
 	oREsult, err := alloc.GetRefs(remotePath, "", "", "", "", "regular", level, 1)
 	if err != nil {
 		logger.Error("error with GetRefs", err.Error(), " this is the error")
-		fmt.Println("error with GetRefs", err)
 		if isConsensusFailedError(err) {
 			time.Sleep(retryWaitTime)
 			oREsult, err = alloc.GetRefs(remotePath, "", "", "", "", "regular", level, 1)
@@ -175,7 +220,6 @@ var (
 )
 
 func getObjectRef(alloc *sdk.Allocation, bucket, object, remotePath string) (*minio.ObjectInfo, bool, error) {
-	log.Printf("~~~~~~~~~~~~~~~~~~~~~~~~ get object info remotePath: %v\n", remotePath)
 	var isEncrypted bool
 	ref, err := getSingleRegularRef(alloc, remotePath)
 	if err != nil {
@@ -187,8 +231,6 @@ func getObjectRef(alloc *sdk.Allocation, bucket, object, remotePath string) (*mi
 	if ref.EncryptedKey != "" {
 		isEncrypted = true
 	}
-
-	log.Println("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~get object info, ref: ", ref)
 
 	return &minio.ObjectInfo{
 		Bucket:      bucket,
@@ -241,7 +283,11 @@ func getFileReader(ctx context.Context,
 		if startBlock == 0 {
 			startBlock = 1
 		}
-		endBlock = int64(rangeEnd) / effectiveChunkSize
+		if rangeEnd < fileRangeSize {
+			endBlock = (fileRangeSize + effectiveChunkSize - 1) / effectiveChunkSize
+		} else {
+			endBlock = int64(rangeEnd+effectiveChunkSize-1) / effectiveChunkSize
+		}
 	} else {
 		startBlock = 1
 		endBlock = 0
@@ -255,10 +301,10 @@ func getFileReader(ctx context.Context,
 		}
 		fileRangeSize = objectInfo.Size - rangeStart
 	}
-	log.Println("^^^^^^^^getFileReader: starting download: ", startBlock, endBlock, rangeStart, rangeEnd, fileRangeSize)
+
 	var r sys.File
 	if startBlock == 1 && endBlock == 0 {
-		log.Println("^^^^^^^^getFileReader: stream download ")
+		log.Println("getFileReader: stream download ")
 		pr, pw := io.Pipe()
 		r = &pipeFile{w: pw}
 		go func() {
@@ -305,7 +351,7 @@ func getFileReader(ctx context.Context,
 		return nil, nil, nil, "", errors.New("exceeded timeout")
 	}
 
-	startOffset := rangeStart - startBlock*effectiveChunkSize
+	startOffset := rangeStart - (startBlock-1)*effectiveChunkSize
 	if startOffset < 0 {
 		startOffset = 0
 	}
@@ -316,7 +362,6 @@ func getFileReader(ctx context.Context,
 
 	// create a new limited reader
 	f := io.LimitReader(r, fileRangeSize)
-	log.Println("^^^^^^^^getFileReader: finish download")
 	fCloser := func() {
 		r.Close() //nolint:errcheck
 		if localFilePath != "" {
@@ -327,8 +372,7 @@ func getFileReader(ctx context.Context,
 
 }
 
-func putFile(ctx context.Context, alloc *sdk.Allocation, remotePath, contentType string, r io.Reader, size int64, isUpdate, shouldEncrypt bool) (err error) {
-	logger.Info("started PutFile")
+func putFile(ctx context.Context, alloc *sdk.Allocation, remotePath, contentType string, r io.Reader, size int64, isUpdate bool) (err error) {
 	fileName := filepath.Base(remotePath)
 	fileMeta := sdk.FileMeta{
 		Path:       "",
@@ -338,7 +382,11 @@ func putFile(ctx context.Context, alloc *sdk.Allocation, remotePath, contentType
 		RemoteName: fileName,
 	}
 
-	logger.Info("starting chunked upload")
+	isStreamUpload := size == -1
+	if isStreamUpload {
+		fileMeta.ActualSize = 0
+	}
+
 	opRequest := sdk.OperationRequest{
 		OperationType: constants.FileOperationInsert,
 		FileReader:    newMinioReader(r),
@@ -349,16 +397,28 @@ func putFile(ctx context.Context, alloc *sdk.Allocation, remotePath, contentType
 			sdk.WithChunkNumber(120),
 			sdk.WithEncrypt(encrypt),
 		},
+		StreamUpload: isStreamUpload,
 	}
 	if isUpdate {
 		opRequest.OperationType = constants.FileOperationUpdate
 	}
-	err = alloc.DoMultiOperation([]sdk.OperationRequest{opRequest})
-	if err != nil && !isSameRootError(err) {
-		logger.Error(err.Error())
-		return
+	if isStreamUpload {
+		err = alloc.DoMultiOperation([]sdk.OperationRequest{opRequest})
+		if err != nil && !isSameRootError(err) {
+			logger.Error(err.Error())
+			return
+		}
+		err = nil
+	} else {
+		opCtx, opCancelCause := context.WithCancelCause(ctx)
+		opRequest.CancelCauseFunc = opCancelCause
+		batchUploadChan <- opRequest
+
+		<-opCtx.Done()
+		if context.Cause(opCtx) != context.Canceled {
+			err = context.Cause(opCtx)
+		}
 	}
-	err = nil
 	return
 }
 

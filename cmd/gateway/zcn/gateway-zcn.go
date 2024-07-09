@@ -9,6 +9,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -37,6 +38,7 @@ var (
 	encrypt      bool
 	compress     bool
 	workDir      string
+	serverConfig serverOptions
 )
 
 var zFlags = []cli.Flag{
@@ -128,6 +130,12 @@ func (z *ZCN) NewGatewayLayer(creds madmin.Credentials) (minio.ObjectLayer, erro
 		return nil, err
 	}
 	log.Println("0chain gosdk initialized: ", allocationID, "compress: ", compress, "encrypt: ", encrypt)
+	if serverConfig.UploadWorkers > 0 {
+		sdk.SetHighModeWorkers(serverConfig.UploadWorkers)
+	}
+	if serverConfig.DownloadWorkers > 0 {
+		sdk.SetDownloadWorkerCount(serverConfig.DownloadWorkers)
+	}
 	allocation, err := sdk.GetAllocation(allocationID)
 	if err != nil {
 		return nil, err
@@ -140,23 +148,31 @@ func (z *ZCN) NewGatewayLayer(creds madmin.Credentials) (minio.ObjectLayer, erro
 		alloc:   allocation,
 		metrics: minio.NewMetrics(),
 	}
+	debug.SetGCPercent(50)
 	workDir, err = homedir.Dir()
 	if err != nil {
 		return nil, err
 	}
 	contentMap = make(map[string]*semaphore.Weighted)
+	ctx, cancel := context.WithCancel(context.Background())
+	zob.ctxCancel = cancel
+	IntiBatchUploadWorkers(ctx, allocation, serverConfig.BatchWaitTime, serverConfig.MaxBatchSize, serverConfig.BatchWorkers)
+	sdk.BatchSize = serverConfig.MaxConcurrentRequests
+	sdk.SetMultiOpBatchSize(serverConfig.MaxBatchSize)
 	return zob, nil
 }
 
 type zcnObjects struct {
 	minio.GatewayUnsupported
-	alloc   *sdk.Allocation
-	metrics *minio.BackendMetrics
+	alloc     *sdk.Allocation
+	metrics   *minio.BackendMetrics
+	ctxCancel context.CancelFunc
 }
 
 // Shutdown Remove temporary directory
 func (zob *zcnObjects) Shutdown(ctx context.Context) error {
 	os.RemoveAll(tempdir)
+	zob.ctxCancel()
 	return nil
 }
 
@@ -189,15 +205,14 @@ func (zob *zcnObjects) DeleteBucket(ctx context.Context, bucketName string, opts
 		return fmt.Errorf("%v is object not bucket", bucketName)
 	}
 
-	if opts.Force {
-		return zob.alloc.DeleteFile(remotePath)
+	if opts.Force || ref.Size == 0 {
+		op := sdk.OperationRequest{
+			OperationType: constants.FileOperationDelete,
+			RemotePath:    remotePath,
+		}
+		return zob.alloc.DoMultiOperation([]sdk.OperationRequest{op})
 	}
-
-	if ref.Size > 0 {
-		return fmt.Errorf("%v bucket is not empty", bucketName)
-	}
-
-	return zob.alloc.DeleteFile(remotePath)
+	return minio.BucketNotEmpty{Bucket: bucketName}
 }
 
 func (zob *zcnObjects) DeleteObject(ctx context.Context, bucket, object string, opts minio.ObjectOptions) (oInfo minio.ObjectInfo, err error) {
@@ -214,11 +229,15 @@ func (zob *zcnObjects) DeleteObject(ctx context.Context, bucket, object string, 
 		return
 	}
 
-	err = zob.alloc.DeleteFile(remotePath)
+	op := sdk.OperationRequest{
+		OperationType: constants.FileOperationDelete,
+		RemotePath:    remotePath,
+	}
+
+	err = zob.alloc.DoMultiOperation([]sdk.OperationRequest{op})
 	if err != nil {
 		return
 	}
-	log.Println("Deleted object: ", remotePath)
 	return minio.ObjectInfo{
 		Bucket:  bucket,
 		Name:    ref.Name,
@@ -332,7 +351,6 @@ func (zob *zcnObjects) GetObjectNInfo(ctx context.Context, bucket, object string
 	var rangeStart int64 = 1
 	var rangeEnd int64 = 0
 	if rs != nil {
-		log.Println("rsSpec: ", rs.IsSuffixLength, rs.Start, rs.End)
 		if rs.IsSuffixLength {
 			rangeStart = -rs.Start
 			// take absolute value of difference between start and end
@@ -422,7 +440,7 @@ func (zob *zcnObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 	} else {
 		remotePath = filepath.Join(rootPath, bucket, prefix)
 	}
-	log.Println("ListObjects remotePath: ", remotePath, " objFileType: ", objFileType)
+
 	var ref *sdk.ORef
 	ref, err = getSingleRegularRef(zob.alloc, remotePath)
 	if err != nil {
@@ -465,8 +483,9 @@ func (zob *zcnObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 	var isDelimited bool
 	if delimiter != "" {
 		isDelimited = true
+	} else {
+		objFileType = fileType
 	}
-	log.Println("ListObjects listRegularRefs: ", remotePath, " objFileType: ", objFileType)
 	refs, isTruncated, nextMarker, prefixes, err := listRegularRefs(zob.alloc, remotePath, marker, objFileType, maxKeys, isDelimited)
 	if err != nil {
 		if remotePath == rootPath && isPathNoExistError(err) {
@@ -479,7 +498,6 @@ func (zob *zcnObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 		if ref.Type == dirType {
 			continue
 		}
-
 		objects = append(objects, minio.ObjectInfo{
 			Bucket:       bucket,
 			Name:         getRelativePathOfObj(ref.Path, bucket),
@@ -545,11 +563,13 @@ func (zob *zcnObjects) PutObject(ctx context.Context, bucket, object string, r *
 	ref, err = getSingleRegularRef(zob.alloc, remotePath)
 	if err != nil {
 		if !isPathNoExistError(err) {
+			unlockPath(remotePath)
 			return
 		}
 	}
 
 	if ref != nil {
+		logger.Info("updateFile: ", remotePath)
 		isUpdate = true
 		unlockPath(remotePath)
 	} else {
@@ -561,7 +581,21 @@ func (zob *zcnObjects) PutObject(ctx context.Context, bucket, object string, r *
 		contentType = mimedb.TypeByExtension(path.Ext(object))
 	}
 
-	err = putFile(ctx, zob.alloc, remotePath, contentType, r, r.Size(), isUpdate, false)
+	if r.Size() == 0 {
+		err = zob.MakeBucketWithLocation(ctx, remotePath, minio.BucketOptions{})
+		if err != nil {
+			return
+		} else {
+			return minio.ObjectInfo{
+				Bucket:  bucket,
+				Name:    object,
+				Size:    0,
+				ModTime: time.Now(),
+			}, nil
+		}
+	}
+
+	err = putFile(ctx, zob.alloc, remotePath, contentType, r, r.Size(), isUpdate)
 	if err != nil {
 		return
 	}

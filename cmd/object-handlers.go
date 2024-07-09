@@ -3550,7 +3550,7 @@ func (api objectAPIHandlers) DeleteObjectHandler(w http.ResponseWriter, r *http.
 	if api.CacheAPI() != nil {
 		deleteObject = api.CacheAPI().DeleteObject
 	}
-	log.Println("deleteSingleObjectCalled")
+
 	// http://docs.aws.amazon.com/AmazonS3/latest/API/RESTObjectDELETE.html
 	objInfo, err := deleteObject(ctx, bucket, object, opts)
 	if err != nil {
@@ -3561,7 +3561,6 @@ func (api objectAPIHandlers) DeleteObjectHandler(w http.ResponseWriter, r *http.
 			return
 		}
 	}
-	log.Println("deletedObjectInfo: ", objInfo.Name)
 	if objInfo.Name == "" {
 		writeSuccessNoContent(w)
 		return
