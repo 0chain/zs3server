@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -310,7 +309,6 @@ func getFileReader(ctx context.Context,
 
 	var r sys.File
 	if startBlock == 1 && endBlock == 0 {
-		log.Println("getFileReader: stream download ")
 		pr, pw := io.Pipe()
 		r = &pipeFile{w: pw}
 		go func() {

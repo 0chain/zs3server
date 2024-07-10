@@ -773,7 +773,7 @@ func (zob *zcnObjects) CopyObject(ctx context.Context, srcBucket, srcObject, des
 	} else {
 		dstRemotePath = filepath.Join(rootPath, destBucket, destObject)
 	}
-	log.Println("userDefined: ", dstOpts.UserDefined)
+
 	var ref *sdk.ORef
 	if srcRemotePath == dstRemotePath {
 		ref, err = getSingleRegularRef(zob.alloc, dstRemotePath)
