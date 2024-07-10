@@ -94,10 +94,6 @@ Default region name [None]: us-east-1
 Default output format [None]: ENTER
 ```
 
-Additionally enable AWS Signature Version ‘4’ for zs3server.
-
-`aws configure set default.s3.signature_version s3v4`
-
 ### Examples
 
 #### To list your buckets
