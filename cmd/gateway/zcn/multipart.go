@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -95,10 +96,10 @@ func (zob *zcnObjects) NewMultipartUpload(ctx context.Context, bucket string, ob
 		contentType = lz4MimeType
 	}
 
-	return zob.newMultiPartUpload(localStorageDir, bucket, object, contentType, toCompress)
+	return zob.newMultiPartUpload(localStorageDir, bucket, object, contentType, toCompress, opts.UserDefined)
 }
 
-func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object, contentType string, toCompress bool) (string, error) {
+func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object, contentType string, toCompress bool, userDefined map[string]string) (string, error) {
 	// Generate a unique upload ID
 	var isUpdate bool
 	var remotePath string
@@ -244,11 +245,17 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object, conte
 	}()
 
 	go func() {
+		var customMeta string
+		if len(userDefined) > 0 {
+			meta, _ := json.Marshal(userDefined)
+			customMeta = string(meta)
+		}
 		// Create fileMeta and sdk.OperationRequest
 		fileMeta := sdk.FileMeta{
 			RemoteName: filepath.Base(remotePath),
 			RemotePath: remotePath,
-			MimeType:   contentType, // can get from request
+			MimeType:   contentType,
+			CustomMeta: customMeta,
 		}
 		options := []sdk.ChunkedUploadOption{
 			sdk.WithChunkNumber(80),

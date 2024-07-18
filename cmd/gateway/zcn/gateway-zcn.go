@@ -2,6 +2,7 @@ package zcn
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -27,8 +28,10 @@ import (
 )
 
 const (
-	rootPath       = "/"
-	rootBucketName = "root"
+	rootPath               = "/"
+	rootBucketName         = "root"
+	s3DirectoryContentType = "application/x-directory; charset=UTF-8"
+	s3ContentHash          = "d41d8cd98f00b204e9800998ecf8427e"
 )
 
 var (
@@ -324,8 +327,18 @@ func (zob *zcnObjects) GetObjectInfo(ctx context.Context, bucket, object string,
 		return
 	}
 
-	if ref.Type == dirType {
+	if ref.Type == dirType && object != "" && object[len(object)-1] != '/' {
 		return minio.ObjectInfo{}, minio.ObjectNotFound{Bucket: bucket, Object: object}
+	}
+	if ref.Type == dirType {
+		ref.MimeType = s3DirectoryContentType
+		ref.ActualFileHash = s3ContentHash
+		ref.ActualFileSize = 0
+	}
+
+	var userDefined map[string]string
+	if ref.CustomMeta != "" {
+		_ = json.Unmarshal([]byte(ref.CustomMeta), &userDefined)
 	}
 
 	return minio.ObjectInfo{
@@ -336,6 +349,8 @@ func (zob *zcnObjects) GetObjectInfo(ctx context.Context, bucket, object string,
 		IsDir:       ref.Type == dirType,
 		AccTime:     time.Now(),
 		ContentType: ref.MimeType,
+		ETag:        ref.ActualFileHash,
+		UserDefined: userDefined,
 	}, nil
 }
 
@@ -479,7 +494,33 @@ func (zob *zcnObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 			nil
 	}
 
+	if len(prefix) > 0 && prefix[len(prefix)-1] != '/' {
+		return minio.ListObjectsInfo{
+				IsTruncated: false,
+				Objects:     []minio.ObjectInfo{},
+				Prefixes:    []string{prefix + "/"},
+			},
+			nil
+	}
+
 	var objects []minio.ObjectInfo
+	if prefix != "" {
+		userDefined := make(map[string]string)
+		if ref.CustomMeta != "" {
+			_ = json.Unmarshal([]byte(ref.CustomMeta), &userDefined)
+		}
+		objects = append(objects, minio.ObjectInfo{
+			Bucket:       bucket,
+			Name:         prefix,
+			ModTime:      ref.UpdatedAt.ToTime(),
+			Size:         0,
+			IsDir:        true,
+			ContentType:  s3DirectoryContentType,
+			ETag:         s3ContentHash,
+			StorageClass: "STANDARD",
+			UserDefined:  userDefined,
+		})
+	}
 	var isDelimited bool
 	if delimiter != "" {
 		isDelimited = true
@@ -498,6 +539,10 @@ func (zob *zcnObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 		if ref.Type == dirType {
 			continue
 		}
+		userDefined := make(map[string]string)
+		if ref.CustomMeta != "" {
+			_ = json.Unmarshal([]byte(ref.CustomMeta), &userDefined)
+		}
 		objects = append(objects, minio.ObjectInfo{
 			Bucket:       bucket,
 			Name:         getRelativePathOfObj(ref.Path, bucket),
@@ -507,6 +552,7 @@ func (zob *zcnObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 			ContentType:  ref.MimeType,
 			ETag:         ref.ActualFileHash,
 			StorageClass: "STANDARD",
+			UserDefined:  userDefined,
 		})
 	}
 
@@ -581,30 +627,43 @@ func (zob *zcnObjects) PutObject(ctx context.Context, bucket, object string, r *
 		contentType = mimedb.TypeByExtension(path.Ext(object))
 	}
 
-	if r.Size() == 0 {
-		err = zob.MakeBucketWithLocation(ctx, remotePath, minio.BucketOptions{})
+	if object[len(object)-1] == '/' {
+		createDirOp := sdk.OperationRequest{
+			OperationType: constants.FileOperationCreateDir,
+			RemotePath:    remotePath,
+		}
+		customMeta, _ := json.Marshal(opts.UserDefined)
+		createDirOp.FileMeta.CustomMeta = string(customMeta)
+		err = zob.alloc.DoMultiOperation([]sdk.OperationRequest{
+			createDirOp,
+		})
 		if err != nil {
 			return
 		} else {
 			return minio.ObjectInfo{
-				Bucket:  bucket,
-				Name:    object,
-				Size:    0,
-				ModTime: time.Now(),
+				Bucket:      bucket,
+				Name:        object,
+				Size:        0,
+				ModTime:     time.Now(),
+				IsDir:       true,
+				ContentType: s3DirectoryContentType,
+				ETag:        s3ContentHash,
+				UserDefined: opts.UserDefined,
 			}, nil
 		}
 	}
 
-	err = putFile(ctx, zob.alloc, remotePath, contentType, r, r.Size(), isUpdate)
+	err = putFile(ctx, zob.alloc, remotePath, contentType, r, r.Size(), isUpdate, opts.UserDefined)
 	if err != nil {
 		return
 	}
 
 	objInfo = minio.ObjectInfo{
-		Bucket:  bucket,
-		Name:    object,
-		Size:    r.Size(),
-		ModTime: time.Now(),
+		Bucket:      bucket,
+		Name:        object,
+		Size:        r.Size(),
+		ModTime:     time.Now(),
+		UserDefined: opts.UserDefined,
 	}
 	return
 }
@@ -714,6 +773,28 @@ func (zob *zcnObjects) CopyObject(ctx context.Context, srcBucket, srcObject, des
 	} else {
 		dstRemotePath = filepath.Join(rootPath, destBucket, destObject)
 	}
+
+	var ref *sdk.ORef
+	if srcRemotePath == dstRemotePath {
+		ref, err = getSingleRegularRef(zob.alloc, dstRemotePath)
+		if err != nil {
+			return
+		}
+		if ref.Type == dirType {
+			ref.MimeType = s3DirectoryContentType
+			ref.ActualFileSize = 0
+			ref.ActualFileHash = s3ContentHash
+		}
+		return minio.ObjectInfo{
+			Bucket:      destBucket,
+			Name:        destObject,
+			ModTime:     ref.UpdatedAt.ToTime(),
+			Size:        ref.ActualFileSize,
+			ContentType: ref.MimeType,
+			IsDir:       ref.Type == dirType,
+			ETag:        ref.ActualFileHash,
+		}, nil
+	}
 	copyOp := sdk.OperationRequest{
 		OperationType: constants.FileOperationCopy,
 		RemotePath:    srcRemotePath,
@@ -726,17 +807,24 @@ func (zob *zcnObjects) CopyObject(ctx context.Context, srcBucket, srcObject, des
 		return
 	}
 
-	var ref *sdk.ORef
 	ref, err = getSingleRegularRef(zob.alloc, dstRemotePath)
 	if err != nil {
 		return
 	}
+	if ref.Type == dirType {
+		ref.MimeType = s3DirectoryContentType
+		ref.ActualFileSize = 0
+		ref.ActualFileHash = s3ContentHash
+	}
 
 	return minio.ObjectInfo{
-		Bucket:  destBucket,
-		Name:    destObject,
-		ModTime: ref.UpdatedAt.ToTime(),
-		Size:    ref.ActualFileSize,
+		Bucket:      destBucket,
+		Name:        destObject,
+		ModTime:     ref.UpdatedAt.ToTime(),
+		Size:        ref.ActualFileSize,
+		IsDir:       ref.Type == dirType,
+		ContentType: ref.MimeType,
+		ETag:        ref.ActualFileHash,
 	}, nil
 }
 
