@@ -62,20 +62,20 @@ func initializeSDK(configDir, allocid string, nonce int64) error {
 		if err != nil {
 			return err
 		}
-		encrypt = serverConfig.Encrypt
-		compress = serverConfig.Compress
-		if serverConfig.MaxBatchSize == 0 {
-			serverConfig.MaxBatchSize = 25
-			serverConfig.BatchWorkers = 5
-			serverConfig.BatchWaitTime = 500
-		} else if serverConfig.BatchWorkers == 0 {
-			serverConfig.BatchWorkers = 5
-		} else if serverConfig.BatchWaitTime == 0 {
-			serverConfig.BatchWaitTime = 500
-		}
-		if serverConfig.MaxConcurrentRequests == 0 {
-			serverConfig.MaxConcurrentRequests = serverConfig.MaxBatchSize
-		}
+	}
+	encrypt = serverConfig.Encrypt
+	compress = serverConfig.Compress
+	if serverConfig.MaxBatchSize == 0 {
+		serverConfig.MaxBatchSize = 25
+		serverConfig.BatchWorkers = 5
+		serverConfig.BatchWaitTime = 500
+	} else if serverConfig.BatchWorkers == 0 {
+		serverConfig.BatchWorkers = 5
+	} else if serverConfig.BatchWaitTime == 0 {
+		serverConfig.BatchWaitTime = 500
+	}
+	if serverConfig.MaxConcurrentRequests == 0 {
+		serverConfig.MaxConcurrentRequests = serverConfig.MaxBatchSize
 	}
 
 	cfg, err := conf.LoadConfigFile(filepath.Join(configDir, "config.yaml"))
