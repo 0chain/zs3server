@@ -600,27 +600,27 @@ func (zob *zcnObjects) PutObject(ctx context.Context, bucket, object string, r *
 		remotePath = filepath.Join(rootPath, bucket, object)
 	}
 
-	var ref *sdk.ORef
-	var isUpdate bool
-	err = lockPath(ctx, remotePath)
-	if err != nil {
-		return
-	}
-	ref, err = getSingleRegularRef(zob.alloc, remotePath)
-	if err != nil {
-		if !isPathNoExistError(err) {
-			unlockPath(remotePath)
-			return
-		}
-	}
+	// var ref *sdk.ORef
+	// var isUpdate bool
+	// err = lockPath(ctx, remotePath)
+	// if err != nil {
+	// 	return
+	// }
+	// ref, err = getSingleRegularRef(zob.alloc, remotePath)
+	// if err != nil {
+	// 	if !isPathNoExistError(err) {
+	// 		unlockPath(remotePath)
+	// 		return
+	// 	}
+	// }
 
-	if ref != nil {
-		logger.Info("updateFile: ", remotePath)
-		isUpdate = true
-		unlockPath(remotePath)
-	} else {
-		defer unlockPath(remotePath)
-	}
+	// if ref != nil {
+	// 	logger.Info("updateFile: ", remotePath)
+	// 	isUpdate = true
+	// 	unlockPath(remotePath)
+	// } else {
+	// 	defer unlockPath(remotePath)
+	// }
 
 	contentType := opts.UserDefined["content-type"]
 	if contentType == "" {
@@ -653,7 +653,7 @@ func (zob *zcnObjects) PutObject(ctx context.Context, bucket, object string, r *
 		}
 	}
 
-	err = putFile(ctx, zob.alloc, remotePath, contentType, r, r.Size(), isUpdate, opts.UserDefined)
+	err = putFile(ctx, zob.alloc, remotePath, contentType, r, r.Size(), false, opts.UserDefined)
 	if err != nil {
 		return
 	}
