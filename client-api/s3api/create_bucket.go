@@ -21,30 +21,30 @@ func createBucket(bucketName string, location string, minioCredentials MinioCred
 		Creds:  credentials.NewStaticV4(minioCredentials.AccessKey, minioCredentials.SecretAccessKey, ""),
 		Secure: USESSL,
 	})
-	minioCacheClient, err := minio.New("miniocache:9000", &minio.Options{
-		Creds:  credentials.NewStaticV4(minioCredentials.AccessKey, minioCredentials.SecretAccessKey, ""),
-		Secure: USESSL,
-	})
-	if err != nil {
-		fmt.Println("Harsh minio client err", err)
-	}
 	createBucketResponse := CreateBucketResponse{}
 	if err != nil {
 		//log.Fatalln(err)
 		return createBucketResponse, err
 	}
 
-	err = minioCacheClient.MakeBucket(ctx, bucketName, minio.MakeBucketOptions{Region: location})
-	if err != nil {
-		fmt.Println("Harsh err creating bucket", err)
-		exists, errBucketExists := minioCacheClient.BucketExists(ctx, bucketName)
-		if errBucketExists == nil && exists {
-			fmt.Printf("Harsh Bucket %s already exists\n", bucketName)
+	minioCacheClient, err := minio.New("miniocache:9000", &minio.Options{
+		Creds:  credentials.NewStaticV4(minioCredentials.AccessKey, minioCredentials.SecretAccessKey, ""),
+		Secure: USESSL,
+	})
+	if err == nil {
+		fmt.Println("Harsh minio client no err")
+		err = minioCacheClient.MakeBucket(ctx, bucketName, minio.MakeBucketOptions{Region: location})
+		if err != nil {
+			fmt.Println("Harsh err creating bucket", err)
+			exists, errBucketExists := minioCacheClient.BucketExists(ctx, bucketName)
+			if errBucketExists == nil && exists {
+				fmt.Printf("Harsh Bucket %s already exists\n", bucketName)
+			} else {
+				fmt.Println("Harsh minio client bucket exists", err)
+			}
 		} else {
-			fmt.Println("Harsh minio client bucket exists", err)
+			fmt.Printf("Harsh Successfully created %s\n", bucketName)
 		}
-	} else {
-		fmt.Printf("Harsh Successfully created %s\n", bucketName)
 	}
 
 	err = minioClient.MakeBucket(ctx, bucketName, minio.MakeBucketOptions{Region: location})

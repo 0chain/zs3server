@@ -20,23 +20,27 @@ func getObject(bucketName string, objectName string, minioCredentials MinioCrede
 		Creds:  credentials.NewStaticV4(minioCredentials.AccessKey, minioCredentials.SecretAccessKey, ""),
 		Secure: USESSL,
 	})
-	minioCacheClient, err := minio.New("miniocache:9000", &minio.Options{
-		Creds:  credentials.NewStaticV4(minioCredentials.AccessKey, minioCredentials.SecretAccessKey, ""),
-		Secure: USESSL,
-	})
+
 	getObjectResponse := GetObjectResponse{}
 	if err != nil {
 		return getObjectResponse, err
 	}
-	err = minioCacheClient.FGetObject(ctx, bucketName, objectName, "/tmp/"+bucketName+"/"+objectName, minio.GetObjectOptions{})
-	if err != nil {
-		fmt.Println("Harsh file not find in cache")
-	} else {
-		getObjectResponse.Success = true
-		getObjectResponse.ObjectPath = "/tmp/" + bucketName + "/" + objectName
 
-		return getObjectResponse, nil
+	minioCacheClient, err := minio.New("miniocache:9000", &minio.Options{
+		Creds:  credentials.NewStaticV4(minioCredentials.AccessKey, minioCredentials.SecretAccessKey, ""),
+		Secure: USESSL,
+	})
+	if err == nil {
+		err = minioCacheClient.FGetObject(ctx, bucketName, objectName, "/tmp/"+bucketName+"/"+objectName, minio.GetObjectOptions{})
+		if err != nil {
+			fmt.Println("Harsh file not find in cache")
+		} else {
+			getObjectResponse.Success = true
+			getObjectResponse.ObjectPath = "/tmp/" + bucketName + "/" + objectName
+			return getObjectResponse, nil
+		}
 	}
+
 	//get and download the object from server
 	err = minioClient.FGetObject(ctx, bucketName, objectName, "/tmp/"+bucketName+"/"+objectName, minio.GetObjectOptions{})
 	if err != nil {
