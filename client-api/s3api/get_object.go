@@ -32,11 +32,10 @@ func getObject(bucketName string, objectName string, minioCredentials MinioCrede
 	})
 	if err == nil {
 		err = minioCacheClient.FGetObject(ctx, bucketName, objectName, "/tmp/"+bucketName+"/"+objectName, minio.GetObjectOptions{})
-		if err != nil {
-			fmt.Println("Harsh file not find in cache")
-		} else {
+		if err == nil {
 			getObjectResponse.Success = true
 			getObjectResponse.ObjectPath = "/tmp/" + bucketName + "/" + objectName
+			fmt.Println("Harsh get from cache")
 			return getObjectResponse, nil
 		}
 	}

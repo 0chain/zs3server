@@ -59,6 +59,7 @@ func listobjects(bucketName string, minioCredentials MinioCredentials) ([]ListOb
 
 		listObjectCacheResponse = append(listObjectCacheResponse, listObject)
 	}
+	fmt.Println("Harsh list cache obj", listObjectCacheResponse)
 	mergedListObj := mergeListObjects(listObjectsResponse, listObjectCacheResponse)
 	return mergedListObj, nil
 }
@@ -75,7 +76,7 @@ func mergeListObjects(l1, l2 []ListObjectResponse) []ListObjectResponse {
 	for _, obj := range l1 {
 		addOrUpdate(obj)
 	}
-	for _, obj := range l1 {
+	for _, obj := range l2 {
 		addOrUpdate(obj)
 	}
 

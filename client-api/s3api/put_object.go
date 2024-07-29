@@ -40,12 +40,12 @@ func putObject(bucketName string, objectName string, minioCredentials MinioCrede
 		fmt.Println(err)
 		return putObjectResponse, err
 	}
-
+	fmt.Println("Harsh file of put size", fileStat.Size())
 	minioCacheClient, err := minio.New("miniocache:9000", &minio.Options{
 		Creds:  credentials.NewStaticV4(minioCredentials.AccessKey, minioCredentials.SecretAccessKey, ""),
 		Secure: USESSL,
 	})
-	if err != nil {
+	if err == nil {
 		// put in cache if size is less than 2000 bytes
 		if fileStat.Size() < 2000 {
 			uploadInfoCache, err := minioCacheClient.PutObject(ctx, bucketName, objectName, file, fileStat.Size(), minio.PutObjectOptions{DisableMultipart: true, ContentType: "application/octet-stream"})
@@ -57,6 +57,7 @@ func putObject(bucketName string, objectName string, minioCredentials MinioCrede
 			putObjectResponse.bucket = uploadInfoCache.Bucket
 			putObjectResponse.Name = uploadInfoCache.Key
 			putObjectResponse.Size = uploadInfoCache.Size
+			fmt.Println("Harsh put in cache")
 			return putObjectResponse, nil
 		}
 	}

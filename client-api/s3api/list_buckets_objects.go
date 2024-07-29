@@ -80,7 +80,7 @@ func mergeBucketObjects(l1, l2 []BucketObjects) []BucketObjects {
 	for _, obj := range l1 {
 		addOrUpdate(obj)
 	}
-	for _, obj := range l1 {
+	for _, obj := range l2 {
 		addOrUpdate(obj)
 	}
 
