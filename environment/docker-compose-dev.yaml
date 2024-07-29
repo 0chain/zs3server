@@ -58,6 +58,22 @@ services:
       - ~/.zcn:/root/.zcn
     networks:
       zs_network:
+  
+  miniocache:
+    image: minio/minio
+    container_name: miniocache
+    environment:
+      MINIO_ROOT_USER: rootroot
+      MINIO_ROOT_PASSWORD: rootroot
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9001:9000"
+    command: server /data
+    # command: server /data --console-address ":9091"
+    networks:
+      zs_network:
+
 
   minioclient:
     build: ../client-api
@@ -84,6 +100,7 @@ services:
       zs_network:
 
 volumes:
+  minio_data:
   db:
     driver: local
 
