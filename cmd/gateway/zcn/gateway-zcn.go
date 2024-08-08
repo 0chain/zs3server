@@ -493,15 +493,15 @@ func (zob *zcnObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 			},
 			nil
 	}
-
-	if len(prefix) > 0 && prefix[len(prefix)-1] != '/' {
-		return minio.ListObjectsInfo{
-				IsTruncated: false,
-				Objects:     []minio.ObjectInfo{},
-				Prefixes:    []string{prefix + "/"},
-			},
-			nil
-	}
+	// warp does not send paths with trailing slash
+	// if len(prefix) > 0 && prefix[len(prefix)-1] != '/' {
+	// 	return minio.ListObjectsInfo{
+	// 			IsTruncated: false,
+	// 			Objects:     []minio.ObjectInfo{},
+	// 			Prefixes:    []string{prefix + "/"},
+	// 		},
+	// 		nil
+	// }
 
 	var objects []minio.ObjectInfo
 	if prefix != "" {
