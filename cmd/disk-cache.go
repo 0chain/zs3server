@@ -661,6 +661,7 @@ func (c *cacheObjects) PutObject(ctx context.Context, bucket, object string, r *
 	}
 
 	// fetch from backend if there is no space on cache drive
+	fmt.Println("size of file", size)
 	if !dcache.diskSpaceAvailable(size) {
 		return putObjectFn(ctx, bucket, object, r, opts)
 	}
@@ -689,7 +690,7 @@ func (c *cacheObjects) PutObject(ctx context.Context, bucket, object string, r *
 		if err != nil {
 			return ObjectInfo{}, err
 		}
-		go c.uploadObject(GlobalContext, oi)
+		//go c.uploadObject(GlobalContext, oi) // use schedule to upload in batch
 		return oi, nil
 	}
 	if !c.commitWritethrough {
@@ -765,6 +766,7 @@ func (c *cacheObjects) PutObject(ctx context.Context, bucket, object string, r *
 
 // upload cached object to backend in async commit mode.
 func (c *cacheObjects) uploadObject(ctx context.Context, oi ObjectInfo) {
+	fmt.Println("uploadObject in backend in async commit mode.")
 	dcache, err := c.getCacheToLoc(ctx, oi.Bucket, oi.Name)
 	if err != nil {
 		// disk cache could not be located.
@@ -819,13 +821,15 @@ func (c *cacheObjects) uploadObject(ctx context.Context, oi ObjectInfo) {
 }
 
 func (c *cacheObjects) queueWritebackRetry(oi ObjectInfo) {
-	select {
-	case <-GlobalContext.Done():
-		return
-	case c.wbRetryCh <- oi:
-		c.uploadObject(GlobalContext, oi)
-	default:
-	}
+	c.uploadObject(GlobalContext, oi)
+	// remove it as wbRetryCh has limited buffer and its not needed
+	// select {
+	// case <-GlobalContext.Done():
+	// 	return
+	// case c.wbRetryCh <- oi:
+	// 	c.uploadObject(GlobalContext, oi)
+	// default:
+	// }
 }
 
 // Returns cacheObjects for use by Server.
@@ -897,7 +901,7 @@ func newServerCacheObjects(ctx context.Context, config cache.Config) (CacheObjec
 	}
 	go c.gc(ctx)
 	if c.commitWriteback {
-		c.wbRetryCh = make(chan ObjectInfo, 10000)
+		c.wbRetryCh = make(chan ObjectInfo, 2)
 		go func() {
 			<-GlobalContext.Done()
 			close(c.wbRetryCh)
@@ -933,6 +937,7 @@ func (c *cacheObjects) gc(ctx context.Context) {
 
 // queues any pending or failed async commits when server restarts
 func (c *cacheObjects) queuePendingWriteback(ctx context.Context) {
+	fmt.Println("Harsh queuePendingWriteback")
 	for _, dcache := range c.cache {
 		if dcache != nil {
 			for {

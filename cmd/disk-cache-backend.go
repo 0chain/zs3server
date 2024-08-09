@@ -218,7 +218,22 @@ func newDiskCache(ctx context.Context, dir string, config cache.Config) (*diskCa
 	go cache.purgeWait(ctx)
 	go cache.cleanupStaleUploads(ctx)
 	if cache.commitWriteback {
-		go cache.scanCacheWritebackFailures(ctx)
+		go func() {
+			tickInterval := time.Duration(config.WriteBackInterval) * time.Second
+			fmt.Println("write back time interval", tickInterval)
+			ticker := time.NewTicker(tickInterval)
+			defer ticker.Stop()
+			defer close(cache.retryWritebackCh)
+			for {
+				select {
+				case <-ticker.C:
+					cache.scanCacheWritebackFailures(ctx)
+				case <-ctx.Done():
+					return
+				}
+			}
+		}()
+		//go cache.scanCacheWritebackFailures(ctx)
 	}
 	cache.diskSpaceAvailable(0) // update if cache usage is already high.
 	cache.NewNSLockFn = func(cachePath string) RWLocker {
@@ -1225,7 +1240,8 @@ func (c *diskCache) Exists(ctx context.Context, bucket, object string) bool {
 
 // queues writeback upload failures on server startup
 func (c *diskCache) scanCacheWritebackFailures(ctx context.Context) {
-	defer close(c.retryWritebackCh)
+	fmt.Println("scan cache write back failures")
+	//defer close(c.retryWritebackCh) // don't close the channel
 	filterFn := func(name string, typ os.FileMode) error {
 		if name == minioMetaBucket {
 			// Proceed to next file.
