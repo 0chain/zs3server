@@ -901,7 +901,7 @@ func newServerCacheObjects(ctx context.Context, config cache.Config) (CacheObjec
 	}
 	go c.gc(ctx)
 	if c.commitWriteback {
-		c.wbRetryCh = make(chan ObjectInfo, 2)
+		c.wbRetryCh = make(chan ObjectInfo, 10000)
 		go func() {
 			<-GlobalContext.Done()
 			close(c.wbRetryCh)
