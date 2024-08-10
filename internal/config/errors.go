@@ -121,6 +121,12 @@ var (
 		"MINIO_CACHE_AFTER cannot be used with MINIO_CACHE_COMMIT setting",
 	)
 
+	ErrInvalidWbInterval = newErrFn(
+		"Incompatible WbInterval setting",
+		"Please check the passed value",
+		"MINIO_WRITE_BACK_INTERVAL is in seconds, it should be a number",
+	)
+
 	ErrInvalidCredentialsBackendEncrypted = newErrFn(
 		"Invalid credentials",
 		"Please set correct credentials in the environment for decryption",
