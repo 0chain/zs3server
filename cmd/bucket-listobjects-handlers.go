@@ -19,6 +19,7 @@ package cmd
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -46,12 +47,36 @@ func concurrentDecryptETag(ctx context.Context, objects []ObjectInfo) {
 	g.Wait()
 }
 
+func mergeListObjects(l1, l2 []ObjectInfo) []ObjectInfo {
+	mergedMap := make(map[string]ObjectInfo)
+
+	// Helper function to add/update map entries
+	addOrUpdate := func(obj ObjectInfo) {
+		if existingObj, found := mergedMap[obj.Name]; !found || obj.ModTime.After(existingObj.ModTime) {
+			mergedMap[obj.Name] = obj
+		}
+	}
+	for _, obj := range l1 {
+		addOrUpdate(obj)
+	}
+	for _, obj := range l2 {
+		addOrUpdate(obj)
+	}
+
+	mergedList := make([]ObjectInfo, 0, len(mergedMap))
+	for _, obj := range mergedMap {
+		mergedList = append(mergedList, obj)
+	}
+
+	return mergedList
+}
+
 // Validate all the ListObjects query arguments, returns an APIErrorCode
 // if one of the args do not meet the required conditions.
 // Special conditions required by MinIO server are as below
-// - delimiter if set should be equal to '/', otherwise the request is rejected.
-// - marker if set should have a common prefix with 'prefix' param, otherwise
-//   the request is rejected.
+//   - delimiter if set should be equal to '/', otherwise the request is rejected.
+//   - marker if set should have a common prefix with 'prefix' param, otherwise
+//     the request is rejected.
 func validateListObjectsArgs(marker, delimiter, encodingType string, maxKeys int) APIErrorCode {
 	// Max keys cannot be negative.
 	if maxKeys < 0 {
@@ -200,6 +225,7 @@ func (api objectAPIHandlers) ListObjectsV2MHandler(w http.ResponseWriter, r *htt
 // NOTE: It is recommended that this API to be used for application development.
 // MinIO continues to support ListObjectsV1 for supporting legacy tools.
 func (api objectAPIHandlers) ListObjectsV2Handler(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("ListObjectsV2Handler")
 	ctx := newContext(r, w, "ListObjectsV2")
 
 	defer logger.AuditLog(ctx, w, r, mustGetClaimsFromToken(r))
@@ -235,9 +261,15 @@ func (api objectAPIHandlers) ListObjectsV2Handler(w http.ResponseWriter, r *http
 	}
 
 	var (
-		listObjectsV2Info ListObjectsV2Info
-		err               error
+		listObjectsV2Info      ListObjectsV2Info
+		listObjectsV2InfoCache ListObjectsV2Info
+		err                    error
+		errC                   error
 	)
+	listObjectsV2Cache := objectAPI.ListObjectsV2
+	if api.CacheAPI() != nil {
+		listObjectsV2Cache = api.CacheAPI().ListObjectsV2
+	}
 
 	if r.Header.Get(xMinIOExtract) == "true" && strings.Contains(prefix, archivePattern) {
 		// Inititate a list objects operation inside a zip file based in the input params
@@ -247,11 +279,15 @@ func (api objectAPIHandlers) ListObjectsV2Handler(w http.ResponseWriter, r *http
 		// On success would return back ListObjectsInfo object to be
 		// marshaled into S3 compatible XML header.
 		listObjectsV2Info, err = objectAPI.ListObjectsV2(ctx, bucket, prefix, token, delimiter, maxKeys, fetchOwner, startAfter)
+		fmt.Printf("Get listObjectsV2Info %+v\n", listObjectsV2Info)
+		listObjectsV2InfoCache, errC = listObjectsV2Cache(ctx, bucket, prefix, token, delimiter, maxKeys, fetchOwner, startAfter)
 	}
-	if err != nil {
+	if err != nil || errC != nil {
 		writeErrorResponse(ctx, w, toAPIError(ctx, err), r.URL)
 		return
 	}
+	mergeObjects := mergeListObjects(listObjectsV2Info.Objects, listObjectsV2InfoCache.Objects)
+	listObjectsV2Info.Objects = mergeObjects
 
 	concurrentDecryptETag(ctx, listObjectsV2Info.Objects)
 
@@ -306,8 +342,8 @@ func proxyRequestByNodeIndex(ctx context.Context, w http.ResponseWriter, r *http
 // This implementation of the GET operation returns some or all (up to 1000)
 // of the objects in a bucket. You can use the request parameters as selection
 // criteria to return a subset of the objects in a bucket.
-//
 func (api objectAPIHandlers) ListObjectsV1Handler(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("ListObjectsV1Handler")
 	ctx := newContext(r, w, "ListObjectsV1")
 
 	defer logger.AuditLog(ctx, w, r, mustGetClaimsFromToken(r))

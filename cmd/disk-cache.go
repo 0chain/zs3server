@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -87,6 +88,7 @@ type CacheObjectLayer interface {
 	DeleteObjects(ctx context.Context, bucket string, objects []ObjectToDelete, opts ObjectOptions) ([]DeletedObject, []error)
 	PutObject(ctx context.Context, bucket, object string, data *PutObjReader, opts ObjectOptions) (objInfo ObjectInfo, err error)
 	CopyObject(ctx context.Context, srcBucket, srcObject, destBucket, destObject string, srcInfo ObjectInfo, srcOpts, dstOpts ObjectOptions) (objInfo ObjectInfo, err error)
+	ListObjectsV2(ctx context.Context, bucket, prefix, continuationToken, delimiter string, maxKeys int, fetchOwner bool, startAfter string) (result ListObjectsV2Info, err error)
 	// Multipart operations.
 	NewMultipartUpload(ctx context.Context, bucket, object string, opts ObjectOptions) (uploadID string, err error)
 	PutObjectPart(ctx context.Context, bucket, object, uploadID string, partID int, data *PutObjReader, opts ObjectOptions) (info PartInfo, err error)
@@ -486,6 +488,43 @@ func (c *cacheObjects) CopyObject(ctx context.Context, srcBucket, srcObject, dst
 		}
 	}
 	return copyObjectFn(ctx, srcBucket, srcObject, dstBucket, dstObject, srcInfo, srcOpts, dstOpts)
+}
+
+// ListObjectsV2 from disk cache
+func (c *cacheObjects) ListObjectsV2(ctx context.Context, bucket, prefix, continuationToken, delimiter string, maxKeys int, fetchOwner bool, startAfter string) (result ListObjectsV2Info, err error) {
+	objInfos := []ObjectInfo{}
+	for _, cache := range c.cache {
+		dir := cache.dir
+		fmt.Println("cache dirss", dir)
+		filterFn := func(name string, typ os.FileMode) error {
+			if name == minioMetaBucket {
+				// Proceed to next file.
+				return nil
+			}
+			cacheDir := pathJoin(cache.dir, name)
+			fmt.Println("Harsh cachedirr", cacheDir)
+			meta, _, _, err := cache.statCachedMeta(ctx, cacheDir)
+			if err != nil {
+				return nil
+			}
+			objInfo := meta.ToObjectInfo()
+			if len(objInfos) < maxKeys && objInfo.Bucket == bucket {
+				objInfos = append(objInfos, objInfo)
+			}
+			fmt.Printf("Object info of cache %+v\n", objInfo)
+			return nil
+		}
+
+		if err := readDirFn(cache.dir, filterFn); err != nil {
+			logger.LogIf(ctx, err)
+			return ListObjectsV2Info{}, err
+		}
+	}
+	fmt.Println("Harsh ListObjectsV2Info len from cache", len(objInfos))
+	return ListObjectsV2Info{
+		Objects:           objInfos,
+		ContinuationToken: continuationToken,
+	}, nil
 }
 
 // StorageInfo - returns underlying storage statistics.
@@ -896,6 +935,7 @@ func newServerCacheObjects(ctx context.Context, config cache.Config) (CacheObjec
 		}
 		return cacheDiskStats
 	}
+	fmt.Println("Cache migrating", migrateSw)
 	if migrateSw {
 		go c.migrateCacheFromV1toV2(ctx)
 	}
