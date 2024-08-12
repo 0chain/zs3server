@@ -112,6 +112,7 @@ type cacheObjects struct {
 	// commit objects in async manner
 	commitWriteback    bool
 	commitWritethrough bool
+	maxCacheFileSize   int64
 
 	// if true migration is in progress from v1 to v2
 	migrating bool
@@ -699,8 +700,14 @@ func (c *cacheObjects) PutObject(ctx context.Context, bucket, object string, r *
 		return putObjectFn(ctx, bucket, object, r, opts)
 	}
 
-	// fetch from backend if there is no space on cache drive
 	fmt.Println("size of file", size)
+	fmt.Println("limit size of file", c.maxCacheFileSize)
+	// skip cache if file size is too large
+	if size > c.maxCacheFileSize {
+		return putObjectFn(ctx, bucket, object, r, opts)
+	}
+
+	// fetch from backend if there is no space on cache drive
 	if !dcache.diskSpaceAvailable(size) {
 		return putObjectFn(ctx, bucket, object, r, opts)
 	}
@@ -885,8 +892,8 @@ func newServerCacheObjects(ctx context.Context, config cache.Config) (CacheObjec
 		migrating:          migrateSw,
 		commitWriteback:    config.CacheCommitMode == CommitWriteBack,
 		commitWritethrough: config.CacheCommitMode == CommitWriteThrough,
-
-		cacheStats: newCacheStats(),
+		maxCacheFileSize:   config.MaxCacheFileSize,
+		cacheStats:         newCacheStats(),
 		InnerGetObjectInfoFn: func(ctx context.Context, bucket, object string, opts ObjectOptions) (ObjectInfo, error) {
 			return newObjectLayerFn().GetObjectInfo(ctx, bucket, object, opts)
 		},

@@ -51,6 +51,7 @@ services:
       MINIO_CACHE_WATERMARK_LOW: 90 # % of cache quota at which cache eviction stops
       MINIO_CACHE_WATERMARK_HIGH: 95 # % of cache quota at which cache eviction starts
       MINIO_WRITE_BACK_INTERVAL: 120 # interval in seconds
+      MINIO_MAX_CACHE_FILE_SIZE: 1000000000 # max file size in bytes
     links:
       - logsearchapi:logsearchapi
     volumes:

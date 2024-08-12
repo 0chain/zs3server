@@ -49,6 +49,7 @@ const (
 	EnvCacheRange         = "MINIO_CACHE_RANGE"
 	EnvCacheCommit        = "MINIO_CACHE_COMMIT"
 	EnvWriteBackInterval  = "MINIO_WRITE_BACK_INTERVAL"
+	EnvMaxCacheFileSize   = "MINIO_MAX_CACHE_FILE_SIZE"
 
 	EnvCacheEncryptionKey = "MINIO_CACHE_ENCRYPTION_SECRET_KEY"
 
@@ -236,5 +237,12 @@ func LookupConfig(kvs config.KVS) (Config, error) {
 		}
 	}
 
+	if maxCacheFileSize := env.Get(EnvMaxCacheFileSize, "100000000"); maxCacheFileSize != "" {
+		cfg.MaxCacheFileSize, err = strconv.ParseInt(maxCacheFileSize, 10, 64)
+		if err != nil {
+			err := errors.New("max cache file size shoud be a number")
+			return cfg, config.ErrInvalidMaxCacheFS(err)
+		}
+	}
 	return cfg, nil
 }
