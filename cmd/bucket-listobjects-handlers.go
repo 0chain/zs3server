@@ -279,7 +279,6 @@ func (api objectAPIHandlers) ListObjectsV2Handler(w http.ResponseWriter, r *http
 		// On success would return back ListObjectsInfo object to be
 		// marshaled into S3 compatible XML header.
 		listObjectsV2Info, err = objectAPI.ListObjectsV2(ctx, bucket, prefix, token, delimiter, maxKeys, fetchOwner, startAfter)
-		fmt.Printf("Get listObjectsV2Info %+v\n", listObjectsV2Info)
 		listObjectsV2InfoCache, errC = listObjectsV2Cache(ctx, bucket, prefix, token, delimiter, maxKeys, fetchOwner, startAfter)
 	}
 	if err != nil || errC != nil {
