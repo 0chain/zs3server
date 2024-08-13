@@ -168,23 +168,25 @@ func (c *cacheObjects) updateMetadataIfChanged(ctx context.Context, dcache *disk
 
 // DeleteObject clears cache entry if backend delete operation succeeds
 func (c *cacheObjects) DeleteObject(ctx context.Context, bucket, object string, opts ObjectOptions) (objInfo ObjectInfo, err error) {
-	if objInfo, err = c.InnerDeleteObjectFn(ctx, bucket, object, opts); err != nil {
-		return
-	}
+	fmt.Println("start DeleteObject for cache")
+	// delete from backend and then delete from cache always
+	objInfoB, errB := c.InnerDeleteObjectFn(ctx, bucket, object, opts)
+
 	if c.isCacheExclude(bucket, object) || c.skipCache() {
 		return
 	}
 
 	dcache, cerr := c.getCacheLoc(bucket, object)
 	if cerr != nil {
-		return objInfo, cerr
+		return objInfoB, cerr
 	}
 	dcache.Delete(ctx, bucket, object)
-	return
+	return objInfoB, errB
 }
 
 // DeleteObjects batch deletes objects in slice, and clears any cached entries
 func (c *cacheObjects) DeleteObjects(ctx context.Context, bucket string, objects []ObjectToDelete, opts ObjectOptions) ([]DeletedObject, []error) {
+	fmt.Println("Harsh DeleteObjects batch")
 	errs := make([]error, len(objects))
 	objInfos := make([]ObjectInfo, len(objects))
 	for idx, object := range objects {
@@ -512,7 +514,6 @@ func (c *cacheObjects) ListObjectsV2(ctx context.Context, bucket, prefix, contin
 			if len(objInfos) < maxKeys && objInfo.Bucket == bucket {
 				objInfos = append(objInfos, objInfo)
 			}
-			fmt.Printf("Object info of cache %+v\n", objInfo)
 			return nil
 		}
 
