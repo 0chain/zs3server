@@ -88,6 +88,7 @@ type CacheObjectLayer interface {
 	DeleteObjects(ctx context.Context, bucket string, objects []ObjectToDelete, opts ObjectOptions) ([]DeletedObject, []error)
 	PutObject(ctx context.Context, bucket, object string, data *PutObjReader, opts ObjectOptions) (objInfo ObjectInfo, err error)
 	CopyObject(ctx context.Context, srcBucket, srcObject, destBucket, destObject string, srcInfo ObjectInfo, srcOpts, dstOpts ObjectOptions) (objInfo ObjectInfo, err error)
+	ListObjects(ctx context.Context, bucket, prefix, marker, delimiter string, maxKeys int) (result ListObjectsInfo, err error)
 	ListObjectsV2(ctx context.Context, bucket, prefix, continuationToken, delimiter string, maxKeys int, fetchOwner bool, startAfter string) (result ListObjectsV2Info, err error)
 	// Multipart operations.
 	NewMultipartUpload(ctx context.Context, bucket, object string, opts ObjectOptions) (uploadID string, err error)
@@ -493,6 +494,57 @@ func (c *cacheObjects) CopyObject(ctx context.Context, srcBucket, srcObject, dst
 	return copyObjectFn(ctx, srcBucket, srcObject, dstBucket, dstObject, srcInfo, srcOpts, dstOpts)
 }
 
+// ListObjects from disk cache
+func (c *cacheObjects) ListObjects(ctx context.Context, bucket, prefix, marker, delimiter string, maxKeys int) (result ListObjectsInfo, err error) {
+	objInfos := []ObjectInfo{}
+	prefixes := []string{}
+	for _, cache := range c.cache {
+		dir := cache.dir
+		fmt.Println("cache dirss", dir)
+		filterFn := func(name string, typ os.FileMode) error {
+			if name == minioMetaBucket {
+				// Proceed to next file.
+				return nil
+			}
+			cacheDir := pathJoin(cache.dir, name)
+			fmt.Println("Harsh cachedirr", cacheDir)
+			meta, _, _, err := cache.statCachedMeta(ctx, cacheDir)
+			if err != nil {
+				return nil
+			}
+			objInfo := meta.ToObjectInfo()
+			if objInfo.Bucket == bucket {
+				if strings.HasPrefix(objInfo.Name, prefix) {
+					trimmed := strings.TrimPrefix(objInfo.Name, prefix)
+					parts := strings.Split(trimmed, delimiter)
+					if len(parts) > 0 && parts[0] != "" {
+						if (len(objInfos) + len(prefixes)) < maxKeys {
+							if len(parts) == 1 {
+								// If there's only one part, it's a file
+								objInfos = append(objInfos, objInfo)
+							} else {
+								// If there are more parts, it's a folder
+								prefixes = append(prefixes, prefix+parts[0]+delimiter)
+							}
+						}
+					}
+				}
+			}
+			return nil
+		}
+
+		if err := readDirFn(cache.dir, filterFn); err != nil {
+			logger.LogIf(ctx, err)
+			return ListObjectsInfo{}, err
+		}
+	}
+	fmt.Println("Harsh ListObjectsInfo len from cache", len(objInfos))
+	return ListObjectsInfo{
+		Objects:  objInfos,
+		Prefixes: unique(prefixes),
+	}, nil
+}
+
 // ListObjectsV2 from disk cache
 func (c *cacheObjects) ListObjectsV2(ctx context.Context, bucket, prefix, continuationToken, delimiter string, maxKeys int, fetchOwner bool, startAfter string) (result ListObjectsV2Info, err error) {
 	objInfos := []ObjectInfo{}
@@ -588,10 +640,10 @@ func (c *cacheObjects) skipCache() bool {
 
 // Returns true if object should be excluded from cache
 func (c *cacheObjects) isCacheExclude(bucket, object string) bool {
-	// exclude directories from cache
-	if strings.HasSuffix(object, SlashSeparator) {
-		return true
-	}
+	// uncomment this to exclude directories from cache
+	// if strings.HasSuffix(object, SlashSeparator) {
+	// 	return true
+	// }
 	for _, pattern := range c.exclude {
 		matchStr := fmt.Sprintf("%s/%s", bucket, object)
 		if ok := wildcard.MatchSimple(pattern, matchStr); ok {
@@ -718,6 +770,7 @@ func (c *cacheObjects) migrateCacheFromV1toV2(ctx context.Context) {
 
 // PutObject - caches the uploaded object for single Put operations
 func (c *cacheObjects) PutObject(ctx context.Context, bucket, object string, r *PutObjReader, opts ObjectOptions) (objInfo ObjectInfo, err error) {
+	fmt.Println("Object to be cached", object)
 	putObjectFn := c.InnerPutObjectFn
 	dcache, err := c.getCacheToLoc(ctx, bucket, object)
 	if err != nil {

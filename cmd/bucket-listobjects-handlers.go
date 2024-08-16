@@ -403,15 +403,24 @@ func (api objectAPIHandlers) ListObjectsV1Handler(w http.ResponseWriter, r *http
 	}
 
 	listObjects := objectAPI.ListObjects
-
+	listObjectsCache := objectAPI.ListObjects
+	if api.CacheAPI() != nil {
+		listObjectsCache = api.CacheAPI().ListObjects
+	}
 	// Inititate a list objects operation based on the input params.
 	// On success would return back ListObjectsInfo object to be
 	// marshaled into S3 compatible XML header.
 	listObjectsInfo, err := listObjects(ctx, bucket, prefix, marker, delimiter, maxKeys)
-	if err != nil {
+	listObjectsInfoCache, errC := listObjectsCache(ctx, bucket, prefix, marker, delimiter, maxKeys)
+	if err != nil || errC != nil {
 		writeErrorResponse(ctx, w, toAPIError(ctx, err), r.URL)
 		return
 	}
+	mergeObjects := mergeListObjects(listObjectsInfo.Objects, listObjectsInfoCache.Objects)
+	mergePrefixes := mergePrefixes(listObjectsInfo.Prefixes, listObjectsInfoCache.Prefixes)
+
+	listObjectsInfo.Objects = mergeObjects
+	listObjectsInfo.Prefixes = mergePrefixes
 
 	concurrentDecryptETag(ctx, listObjectsInfo.Objects)
 
