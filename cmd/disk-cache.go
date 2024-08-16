@@ -496,6 +496,7 @@ func (c *cacheObjects) CopyObject(ctx context.Context, srcBucket, srcObject, dst
 // ListObjectsV2 from disk cache
 func (c *cacheObjects) ListObjectsV2(ctx context.Context, bucket, prefix, continuationToken, delimiter string, maxKeys int, fetchOwner bool, startAfter string) (result ListObjectsV2Info, err error) {
 	objInfos := []ObjectInfo{}
+	prefixes := []string{}
 	for _, cache := range c.cache {
 		dir := cache.dir
 		fmt.Println("cache dirss", dir)
@@ -511,8 +512,22 @@ func (c *cacheObjects) ListObjectsV2(ctx context.Context, bucket, prefix, contin
 				return nil
 			}
 			objInfo := meta.ToObjectInfo()
-			if len(objInfos) < maxKeys && objInfo.Bucket == bucket {
-				objInfos = append(objInfos, objInfo)
+			if objInfo.Bucket == bucket {
+				if strings.HasPrefix(objInfo.Name, prefix) {
+					trimmed := strings.TrimPrefix(objInfo.Name, prefix)
+					parts := strings.Split(trimmed, delimiter)
+					if len(parts) > 0 && parts[0] != "" {
+						if (len(objInfos) + len(prefixes)) < maxKeys {
+							if len(parts) == 1 {
+								// If there's only one part, it's a file
+								objInfos = append(objInfos, objInfo)
+							} else {
+								// If there are more parts, it's a folder
+								prefixes = append(prefixes, prefix+parts[0]+delimiter)
+							}
+						}
+					}
+				}
 			}
 			return nil
 		}
@@ -526,7 +541,20 @@ func (c *cacheObjects) ListObjectsV2(ctx context.Context, bucket, prefix, contin
 	return ListObjectsV2Info{
 		Objects:           objInfos,
 		ContinuationToken: continuationToken,
+		Prefixes:          unique(prefixes),
 	}, nil
+}
+
+func unique(items []string) []string {
+	keys := make(map[string]bool)
+	var list []string
+	for _, entry := range items {
+		if _, value := keys[entry]; !value {
+			keys[entry] = true
+			list = append(list, entry)
+		}
+	}
+	return list
 }
 
 // StorageInfo - returns underlying storage statistics.
