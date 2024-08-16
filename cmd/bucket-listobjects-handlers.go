@@ -71,6 +71,30 @@ func mergeListObjects(l1, l2 []ObjectInfo) []ObjectInfo {
 	return mergedList
 }
 
+func mergePrefixes(l1, l2 []string) []string {
+	mergedMap := make(map[string]bool)
+
+	// Helper function to add/update map entries
+	addOrUpdate := func(pre string) {
+		if _, found := mergedMap[pre]; !found {
+			mergedMap[pre] = true
+		}
+	}
+	for _, pre := range l1 {
+		addOrUpdate(pre)
+	}
+	for _, pre := range l2 {
+		addOrUpdate(pre)
+	}
+
+	mergedList := make([]string, 0, len(mergedMap))
+	for pre, _ := range mergedMap {
+		mergedList = append(mergedList, pre)
+	}
+
+	return mergedList
+}
+
 // Validate all the ListObjects query arguments, returns an APIErrorCode
 // if one of the args do not meet the required conditions.
 // Special conditions required by MinIO server are as below
@@ -285,8 +309,12 @@ func (api objectAPIHandlers) ListObjectsV2Handler(w http.ResponseWriter, r *http
 		writeErrorResponse(ctx, w, toAPIError(ctx, err), r.URL)
 		return
 	}
+	// fmt.Printf("Harsh listObjectsV2Infooo %+v\n", listObjectsV2Info)
+	// fmt.Printf("Harsh listObjectsV2InfoCache %+v\n", listObjectsV2InfoCache)
 	mergeObjects := mergeListObjects(listObjectsV2Info.Objects, listObjectsV2InfoCache.Objects)
+	mergePrefixes := mergePrefixes(listObjectsV2Info.Prefixes, listObjectsV2InfoCache.Prefixes)
 	listObjectsV2Info.Objects = mergeObjects
+	listObjectsV2Info.Prefixes = mergePrefixes
 
 	concurrentDecryptETag(ctx, listObjectsV2Info.Objects)
 
