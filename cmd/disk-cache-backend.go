@@ -1083,6 +1083,7 @@ func (c *diskCache) bitrotReadFromCache(ctx context.Context, filePath string, of
 // Get returns ObjectInfo and reader for object from disk cache
 func (c *diskCache) Get(ctx context.Context, bucket, object string, rs *HTTPRangeSpec, h http.Header, opts ObjectOptions) (gr *GetObjectReader, numHits int, err error) {
 	cacheObjPath := getCacheSHADir(c.dir, bucket, object)
+	fmt.Println("cacheObjPath getCacheSHADir", cacheObjPath)
 	cLock := c.NewNSLockFn(cacheObjPath)
 	lkctx, err := cLock.GetRLock(ctx, globalOperationTimeout)
 	if err != nil {
@@ -1183,6 +1184,7 @@ func (c *diskCache) Get(ctx context.Context, bucket, object string, rs *HTTPRang
 		go func() {
 			if writebackInProgress(objInfo.UserDefined) {
 				cacheObjPath = getCacheWriteBackSHADir(c.dir, bucket, object)
+				fmt.Println("cacheObjPath getCacheSHADir", cacheObjPath)
 			}
 			filePath := pathJoin(cacheObjPath, cacheFile)
 			err := c.bitrotReadFromCache(ctx, filePath, startOffset, length, pw)
@@ -1248,6 +1250,7 @@ func (c *diskCache) scanCacheWritebackFailures(ctx context.Context) {
 			return nil
 		}
 		cacheDir := pathJoin(c.dir, name)
+		fmt.Println("cachedir to be uploaded in backend", cacheDir)
 		meta, _, _, err := c.statCachedMeta(ctx, cacheDir)
 		if err != nil {
 			return nil
@@ -1255,6 +1258,7 @@ func (c *diskCache) scanCacheWritebackFailures(ctx context.Context) {
 
 		objInfo := meta.ToObjectInfo()
 		status, ok := objInfo.UserDefined[writeBackStatusHeader]
+		fmt.Println("status of file", status)
 		if !ok || status == CommitComplete.String() {
 			return nil
 		}

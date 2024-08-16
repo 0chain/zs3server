@@ -710,10 +710,12 @@ func (c *cacheObjects) PutObject(ctx context.Context, bucket, object string, r *
 
 	// fetch from backend if there is no space on cache drive
 	if !dcache.diskSpaceAvailable(size) {
+		fmt.Println("upload backend if there is no space on cache drive")
 		return putObjectFn(ctx, bucket, object, r, opts)
 	}
 
 	if opts.ServerSideEncryption != nil {
+		fmt.Println("upload backend if ServerSideEncryption")
 		dcache.Delete(ctx, bucket, object)
 		return putObjectFn(ctx, bucket, object, r, opts)
 	}
@@ -723,6 +725,7 @@ func (c *cacheObjects) PutObject(ctx context.Context, bucket, object string, r *
 	legalHold := objectlock.GetObjectLegalHoldMeta(opts.UserDefined)
 	if objRetention.Mode.Valid() || legalHold.Status.Valid() {
 		dcache.Delete(ctx, bucket, object)
+		fmt.Println("upload backend if objects with locks")
 		return putObjectFn(ctx, bucket, object, r, opts)
 	}
 
@@ -730,9 +733,11 @@ func (c *cacheObjects) PutObject(ctx context.Context, bucket, object string, r *
 	// directive set to exclude
 	if c.isCacheExclude(bucket, object) {
 		dcache.Delete(ctx, bucket, object)
+		fmt.Println("upload backend if cache exclude")
 		return putObjectFn(ctx, bucket, object, r, opts)
 	}
 	if c.commitWriteback {
+		fmt.Println("uploading to cache writeback")
 		oi, err := dcache.Put(ctx, bucket, object, r, r.Size(), nil, opts, false, true)
 		if err != nil {
 			return ObjectInfo{}, err
