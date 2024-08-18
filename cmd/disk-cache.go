@@ -507,7 +507,6 @@ func (c *cacheObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 				return nil
 			}
 			cacheDir := pathJoin(cache.dir, name)
-			fmt.Println("Harsh cachedirr", cacheDir)
 			meta, _, _, err := cache.statCachedMeta(ctx, cacheDir)
 			if err != nil {
 				return nil
@@ -558,7 +557,6 @@ func (c *cacheObjects) ListObjectsV2(ctx context.Context, bucket, prefix, contin
 				return nil
 			}
 			cacheDir := pathJoin(cache.dir, name)
-			fmt.Println("Harsh cachedirr", cacheDir)
 			meta, _, _, err := cache.statCachedMeta(ctx, cacheDir)
 			if err != nil {
 				return nil
