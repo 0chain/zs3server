@@ -23,6 +23,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/minio/minio/internal/logger"
@@ -250,6 +251,11 @@ func (api objectAPIHandlers) ListObjectsV2MHandler(w http.ResponseWriter, r *htt
 // MinIO continues to support ListObjectsV1 for supporting legacy tools.
 func (api objectAPIHandlers) ListObjectsV2Handler(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("ListObjectsV2Handler")
+	st := time.Now()
+	defer func() {
+		elapsed := time.Since(st).Milliseconds()
+		fmt.Printf("ListObjectsV2Handler took %d ms\n", elapsed)
+	}()
 	ctx := newContext(r, w, "ListObjectsV2")
 
 	defer logger.AuditLog(ctx, w, r, mustGetClaimsFromToken(r))
@@ -371,6 +377,11 @@ func proxyRequestByNodeIndex(ctx context.Context, w http.ResponseWriter, r *http
 // criteria to return a subset of the objects in a bucket.
 func (api objectAPIHandlers) ListObjectsV1Handler(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("ListObjectsV1Handler")
+	st := time.Now()
+	defer func() {
+		elapsed := time.Since(st).Milliseconds()
+		fmt.Printf("ListObjectsV1Handler took %d ms\n", elapsed)
+	}()
 	ctx := newContext(r, w, "ListObjectsV1")
 
 	defer logger.AuditLog(ctx, w, r, mustGetClaimsFromToken(r))
