@@ -19,7 +19,6 @@ import (
 	"github.com/minio/minio/internal/logger"
 	"github.com/minio/pkg/mimedb"
 	"github.com/mitchellh/go-homedir"
-	"golang.org/x/sync/semaphore"
 
 	"github.com/0chain/gosdk/zboxcore/sdk"
 	"github.com/minio/cli"
@@ -121,11 +120,6 @@ func (z *ZCN) Name() string {
 	return minio.ZCNBAckendGateway
 }
 
-var (
-	contentMap  map[string]*semaphore.Weighted
-	contentLock sync.Mutex
-)
-
 // NewGatewayLayer initializes 0chain gosdk and return zcnObjects
 func (z *ZCN) NewGatewayLayer(creds madmin.Credentials) (minio.ObjectLayer, error) {
 	err := initializeSDK(configDir, allocationID, nonce)
@@ -156,7 +150,6 @@ func (z *ZCN) NewGatewayLayer(creds madmin.Credentials) (minio.ObjectLayer, erro
 	if err != nil {
 		return nil, err
 	}
-	contentMap = make(map[string]*semaphore.Weighted)
 	ctx, cancel := context.WithCancel(context.Background())
 	zob.ctxCancel = cancel
 	IntiBatchUploadWorkers(ctx, allocation, serverConfig.BatchWaitTime, serverConfig.MaxBatchSize, serverConfig.BatchWorkers)
@@ -832,24 +825,6 @@ func (zob *zcnObjects) StorageInfo(ctx context.Context) (si minio.StorageInfo, _
 	si.Backend.Type = madmin.Gateway
 	si.Backend.GatewayOnline = true
 	return
-}
-
-func lockPath(ctx context.Context, path string) error {
-	contentLock.Lock()
-	defer contentLock.Unlock()
-	if _, ok := contentMap[path]; !ok {
-		contentMap[path] = semaphore.NewWeighted(1)
-	}
-	return contentMap[path].Acquire(ctx, 1)
-}
-
-func unlockPath(path string) {
-	contentLock.Lock()
-	defer contentLock.Unlock()
-	if sem, ok := contentMap[path]; ok {
-		sem.Release(1)
-		delete(contentMap, path)
-	}
 }
 
 /*

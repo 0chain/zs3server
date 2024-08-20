@@ -20,6 +20,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -421,14 +422,18 @@ func (api objectAPIHandlers) ListObjectsV1Handler(w http.ResponseWriter, r *http
 	// Inititate a list objects operation based on the input params.
 	// On success would return back ListObjectsInfo object to be
 	// marshaled into S3 compatible XML header.
+	now := time.Now()
 	listObjectsInfo, err := listObjects(ctx, bucket, prefix, marker, delimiter, maxKeys)
+	elapsedBackendList := time.Since(now)
 	listObjectsInfoCache, errC := listObjectsCache(ctx, bucket, prefix, marker, delimiter, maxKeys)
 	if err != nil || errC != nil {
 		writeErrorResponse(ctx, w, toAPIError(ctx, err), r.URL)
 		return
 	}
+	elapsedCacheList := time.Since(now) - elapsedBackendList
 	mergeObjects := mergeListObjects(listObjectsInfo.Objects, listObjectsInfoCache.Objects)
 	mergePrefixes := mergePrefixes(listObjectsInfo.Prefixes, listObjectsInfoCache.Prefixes)
+	elapsedMerge := time.Since(now) - elapsedCacheList - elapsedBackendList
 
 	listObjectsInfo.Objects = mergeObjects
 	listObjectsInfo.Prefixes = mergePrefixes
@@ -436,7 +441,7 @@ func (api objectAPIHandlers) ListObjectsV1Handler(w http.ResponseWriter, r *http
 	concurrentDecryptETag(ctx, listObjectsInfo.Objects)
 
 	response := generateListObjectsV1Response(bucket, prefix, marker, delimiter, encodingType, maxKeys, listObjectsInfo)
-
+	log.Println("listObjectsV1 ", "elapsedBackendList", elapsedBackendList.Milliseconds(), " elapsedCacheList", elapsedCacheList.Milliseconds(), " elapsedMerge", elapsedMerge.Milliseconds())
 	// Write success response.
 	writeSuccessResponseXML(w, encodeResponse(response))
 }
