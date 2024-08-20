@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -87,6 +88,8 @@ type CacheObjectLayer interface {
 	DeleteObjects(ctx context.Context, bucket string, objects []ObjectToDelete, opts ObjectOptions) ([]DeletedObject, []error)
 	PutObject(ctx context.Context, bucket, object string, data *PutObjReader, opts ObjectOptions) (objInfo ObjectInfo, err error)
 	CopyObject(ctx context.Context, srcBucket, srcObject, destBucket, destObject string, srcInfo ObjectInfo, srcOpts, dstOpts ObjectOptions) (objInfo ObjectInfo, err error)
+	ListObjects(ctx context.Context, bucket, prefix, marker, delimiter string, maxKeys int) (result ListObjectsInfo, err error)
+	ListObjectsV2(ctx context.Context, bucket, prefix, continuationToken, delimiter string, maxKeys int, fetchOwner bool, startAfter string) (result ListObjectsV2Info, err error)
 	// Multipart operations.
 	NewMultipartUpload(ctx context.Context, bucket, object string, opts ObjectOptions) (uploadID string, err error)
 	PutObjectPart(ctx context.Context, bucket, object, uploadID string, partID int, data *PutObjReader, opts ObjectOptions) (info PartInfo, err error)
@@ -110,6 +113,7 @@ type cacheObjects struct {
 	// commit objects in async manner
 	commitWriteback    bool
 	commitWritethrough bool
+	maxCacheFileSize   int64
 
 	// if true migration is in progress from v1 to v2
 	migrating bool
@@ -165,23 +169,25 @@ func (c *cacheObjects) updateMetadataIfChanged(ctx context.Context, dcache *disk
 
 // DeleteObject clears cache entry if backend delete operation succeeds
 func (c *cacheObjects) DeleteObject(ctx context.Context, bucket, object string, opts ObjectOptions) (objInfo ObjectInfo, err error) {
-	if objInfo, err = c.InnerDeleteObjectFn(ctx, bucket, object, opts); err != nil {
-		return
-	}
+	fmt.Println("start DeleteObject for cache")
+	// delete from backend and then delete from cache always
+	objInfoB, errB := c.InnerDeleteObjectFn(ctx, bucket, object, opts)
+
 	if c.isCacheExclude(bucket, object) || c.skipCache() {
 		return
 	}
 
 	dcache, cerr := c.getCacheLoc(bucket, object)
 	if cerr != nil {
-		return objInfo, cerr
+		return objInfoB, cerr
 	}
 	dcache.Delete(ctx, bucket, object)
-	return
+	return objInfoB, errB
 }
 
 // DeleteObjects batch deletes objects in slice, and clears any cached entries
 func (c *cacheObjects) DeleteObjects(ctx context.Context, bucket string, objects []ObjectToDelete, opts ObjectOptions) ([]DeletedObject, []error) {
+	fmt.Println("Harsh DeleteObjects batch")
 	errs := make([]error, len(objects))
 	objInfos := make([]ObjectInfo, len(objects))
 	for idx, object := range objects {
@@ -488,6 +494,119 @@ func (c *cacheObjects) CopyObject(ctx context.Context, srcBucket, srcObject, dst
 	return copyObjectFn(ctx, srcBucket, srcObject, dstBucket, dstObject, srcInfo, srcOpts, dstOpts)
 }
 
+// ListObjects from disk cache
+func (c *cacheObjects) ListObjects(ctx context.Context, bucket, prefix, marker, delimiter string, maxKeys int) (result ListObjectsInfo, err error) {
+	objInfos := []ObjectInfo{}
+	prefixes := []string{}
+	for _, cache := range c.cache {
+		dir := cache.dir
+		fmt.Println("cache dirss", dir)
+		filterFn := func(name string, typ os.FileMode) error {
+			if name == minioMetaBucket {
+				// Proceed to next file.
+				return nil
+			}
+			cacheDir := pathJoin(cache.dir, name)
+			meta, _, _, err := cache.statCachedMeta(ctx, cacheDir)
+			if err != nil {
+				return nil
+			}
+			objInfo := meta.ToObjectInfo()
+			if objInfo.Bucket == bucket {
+				if strings.HasPrefix(objInfo.Name, prefix) {
+					trimmed := strings.TrimPrefix(objInfo.Name, prefix)
+					parts := strings.Split(trimmed, delimiter)
+					if len(parts) > 0 && parts[0] != "" {
+						if (len(objInfos) + len(prefixes)) < maxKeys {
+							if len(parts) == 1 {
+								// If there's only one part, it's a file
+								objInfos = append(objInfos, objInfo)
+							} else {
+								// If there are more parts, it's a folder
+								prefixes = append(prefixes, prefix+parts[0]+delimiter)
+							}
+						}
+					}
+				}
+			}
+			return nil
+		}
+
+		if err := readDirFn(cache.dir, filterFn); err != nil {
+			logger.LogIf(ctx, err)
+			return ListObjectsInfo{}, err
+		}
+	}
+	fmt.Println("Harsh ListObjectsInfo len from cache", len(objInfos))
+	return ListObjectsInfo{
+		Objects:  objInfos,
+		Prefixes: unique(prefixes),
+	}, nil
+}
+
+// ListObjectsV2 from disk cache
+func (c *cacheObjects) ListObjectsV2(ctx context.Context, bucket, prefix, continuationToken, delimiter string, maxKeys int, fetchOwner bool, startAfter string) (result ListObjectsV2Info, err error) {
+	objInfos := []ObjectInfo{}
+	prefixes := []string{}
+	for _, cache := range c.cache {
+		dir := cache.dir
+		fmt.Println("cache dirss", dir)
+		filterFn := func(name string, typ os.FileMode) error {
+			if name == minioMetaBucket {
+				// Proceed to next file.
+				return nil
+			}
+			cacheDir := pathJoin(cache.dir, name)
+			meta, _, _, err := cache.statCachedMeta(ctx, cacheDir)
+			if err != nil {
+				return nil
+			}
+			objInfo := meta.ToObjectInfo()
+			if objInfo.Bucket == bucket {
+				if strings.HasPrefix(objInfo.Name, prefix) {
+					trimmed := strings.TrimPrefix(objInfo.Name, prefix)
+					parts := strings.Split(trimmed, delimiter)
+					if len(parts) > 0 && parts[0] != "" {
+						if (len(objInfos) + len(prefixes)) < maxKeys {
+							if len(parts) == 1 {
+								// If there's only one part, it's a file
+								objInfos = append(objInfos, objInfo)
+							} else {
+								// If there are more parts, it's a folder
+								prefixes = append(prefixes, prefix+parts[0]+delimiter)
+							}
+						}
+					}
+				}
+			}
+			return nil
+		}
+
+		if err := readDirFn(cache.dir, filterFn); err != nil {
+			logger.LogIf(ctx, err)
+			return ListObjectsV2Info{}, err
+		}
+	}
+	fmt.Println("Harsh ListObjectsV2Info len from cache", len(objInfos))
+	return ListObjectsV2Info{
+		Objects:           objInfos,
+		ContinuationToken: continuationToken,
+		Prefixes:          unique(prefixes),
+	}, nil
+}
+
+func unique(items []string) []string {
+	keys := make(map[string]bool)
+	var list []string
+	for _, entry := range items {
+		if _, value := keys[entry]; !value {
+			keys[entry] = true
+			list = append(list, entry)
+		}
+	}
+	return list
+}
+
 // StorageInfo - returns underlying storage statistics.
 func (c *cacheObjects) StorageInfo(ctx context.Context) (cInfo CacheStorageInfo) {
 	var total, free uint64
@@ -519,10 +638,10 @@ func (c *cacheObjects) skipCache() bool {
 
 // Returns true if object should be excluded from cache
 func (c *cacheObjects) isCacheExclude(bucket, object string) bool {
-	// exclude directories from cache
-	if strings.HasSuffix(object, SlashSeparator) {
-		return true
-	}
+	// uncomment this to exclude directories from cache
+	// if strings.HasSuffix(object, SlashSeparator) {
+	// 	return true
+	// }
 	for _, pattern := range c.exclude {
 		matchStr := fmt.Sprintf("%s/%s", bucket, object)
 		if ok := wildcard.MatchSimple(pattern, matchStr); ok {
@@ -649,6 +768,7 @@ func (c *cacheObjects) migrateCacheFromV1toV2(ctx context.Context) {
 
 // PutObject - caches the uploaded object for single Put operations
 func (c *cacheObjects) PutObject(ctx context.Context, bucket, object string, r *PutObjReader, opts ObjectOptions) (objInfo ObjectInfo, err error) {
+	fmt.Println("Object to be cached", object)
 	putObjectFn := c.InnerPutObjectFn
 	dcache, err := c.getCacheToLoc(ctx, bucket, object)
 	if err != nil {
@@ -660,12 +780,21 @@ func (c *cacheObjects) PutObject(ctx context.Context, bucket, object string, r *
 		return putObjectFn(ctx, bucket, object, r, opts)
 	}
 
+	fmt.Println("size of file", size)
+	fmt.Println("limit size of file", c.maxCacheFileSize)
+	// skip cache if file size is too large
+	if size > c.maxCacheFileSize {
+		return putObjectFn(ctx, bucket, object, r, opts)
+	}
+
 	// fetch from backend if there is no space on cache drive
 	if !dcache.diskSpaceAvailable(size) {
+		fmt.Println("upload backend if there is no space on cache drive")
 		return putObjectFn(ctx, bucket, object, r, opts)
 	}
 
 	if opts.ServerSideEncryption != nil {
+		fmt.Println("upload backend if ServerSideEncryption")
 		dcache.Delete(ctx, bucket, object)
 		return putObjectFn(ctx, bucket, object, r, opts)
 	}
@@ -675,6 +804,7 @@ func (c *cacheObjects) PutObject(ctx context.Context, bucket, object string, r *
 	legalHold := objectlock.GetObjectLegalHoldMeta(opts.UserDefined)
 	if objRetention.Mode.Valid() || legalHold.Status.Valid() {
 		dcache.Delete(ctx, bucket, object)
+		fmt.Println("upload backend if objects with locks")
 		return putObjectFn(ctx, bucket, object, r, opts)
 	}
 
@@ -682,14 +812,16 @@ func (c *cacheObjects) PutObject(ctx context.Context, bucket, object string, r *
 	// directive set to exclude
 	if c.isCacheExclude(bucket, object) {
 		dcache.Delete(ctx, bucket, object)
+		fmt.Println("upload backend if cache exclude")
 		return putObjectFn(ctx, bucket, object, r, opts)
 	}
 	if c.commitWriteback {
+		fmt.Println("uploading to cache writeback")
 		oi, err := dcache.Put(ctx, bucket, object, r, r.Size(), nil, opts, false, true)
 		if err != nil {
 			return ObjectInfo{}, err
 		}
-		go c.uploadObject(GlobalContext, oi)
+		//go c.uploadObject(GlobalContext, oi) // use schedule to upload in batch
 		return oi, nil
 	}
 	if !c.commitWritethrough {
@@ -765,6 +897,7 @@ func (c *cacheObjects) PutObject(ctx context.Context, bucket, object string, r *
 
 // upload cached object to backend in async commit mode.
 func (c *cacheObjects) uploadObject(ctx context.Context, oi ObjectInfo) {
+	fmt.Println("uploadObject in backend in async commit mode.")
 	dcache, err := c.getCacheToLoc(ctx, oi.Bucket, oi.Name)
 	if err != nil {
 		// disk cache could not be located.
@@ -819,13 +952,15 @@ func (c *cacheObjects) uploadObject(ctx context.Context, oi ObjectInfo) {
 }
 
 func (c *cacheObjects) queueWritebackRetry(oi ObjectInfo) {
-	select {
-	case <-GlobalContext.Done():
-		return
-	case c.wbRetryCh <- oi:
-		c.uploadObject(GlobalContext, oi)
-	default:
-	}
+	c.uploadObject(GlobalContext, oi)
+	// remove it as wbRetryCh has limited buffer and its not needed
+	// select {
+	// case <-GlobalContext.Done():
+	// 	return
+	// case c.wbRetryCh <- oi:
+	// 	c.uploadObject(GlobalContext, oi)
+	// default:
+	// }
 }
 
 // Returns cacheObjects for use by Server.
@@ -842,8 +977,8 @@ func newServerCacheObjects(ctx context.Context, config cache.Config) (CacheObjec
 		migrating:          migrateSw,
 		commitWriteback:    config.CacheCommitMode == CommitWriteBack,
 		commitWritethrough: config.CacheCommitMode == CommitWriteThrough,
-
-		cacheStats: newCacheStats(),
+		maxCacheFileSize:   config.MaxCacheFileSize,
+		cacheStats:         newCacheStats(),
 		InnerGetObjectInfoFn: func(ctx context.Context, bucket, object string, opts ObjectOptions) (ObjectInfo, error) {
 			return newObjectLayerFn().GetObjectInfo(ctx, bucket, object, opts)
 		},
@@ -892,6 +1027,7 @@ func newServerCacheObjects(ctx context.Context, config cache.Config) (CacheObjec
 		}
 		return cacheDiskStats
 	}
+	fmt.Println("Cache migrating", migrateSw)
 	if migrateSw {
 		go c.migrateCacheFromV1toV2(ctx)
 	}
@@ -933,6 +1069,7 @@ func (c *cacheObjects) gc(ctx context.Context) {
 
 // queues any pending or failed async commits when server restarts
 func (c *cacheObjects) queuePendingWriteback(ctx context.Context) {
+	fmt.Println("Harsh queuePendingWriteback")
 	for _, dcache := range c.cache {
 		if dcache != nil {
 			for {

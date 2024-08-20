@@ -1,0 +1,13 @@
+version: '3.8'
+services:
+  minioserver:
+    environment:
+      MINIO_CACHE_DRIVES: "/mcache" # list of mounted cache drives or directories separated by ","
+      MINIO_CACHE_EXPIRY: 90 # expiry in days
+      MINIO_CACHE_COMMIT: "writeback" # to increase write throughput use writeback
+      MINIO_CACHE_QUOTA: 99 # maximum permitted usage of the cache in percentage 
+      MINIO_CACHE_WATERMARK_LOW: 90 # % of cache quota at which cache eviction stops
+      MINIO_CACHE_WATERMARK_HIGH: 95 # % of cache quota at which cache eviction starts
+      MINIO_WRITE_BACK_INTERVAL: 120 # interval in seconds
+    volumes:
+      - /mnt/mcache:/mcache
