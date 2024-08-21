@@ -205,7 +205,7 @@ func newDiskCache(ctx context.Context, dir string, config cache.Config) (*diskCa
 		commitWriteback:    config.CacheCommitMode == CommitWriteBack,
 		commitWritethrough: config.CacheCommitMode == CommitWriteThrough,
 
-		retryWritebackCh: make(chan ObjectInfo, 10000),
+		retryWritebackCh: make(chan ObjectInfo, 100000),
 		online:           1,
 		pool: sync.Pool{
 			New: func() interface{} {

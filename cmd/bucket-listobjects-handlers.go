@@ -23,6 +23,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -308,15 +309,25 @@ func (api objectAPIHandlers) ListObjectsV2Handler(w http.ResponseWriter, r *http
 		// Inititate a list objects operation based on the input params.
 		// On success would return back ListObjectsInfo object to be
 		// marshaled into S3 compatible XML header.
-		listObjectsV2Info, err = objectAPI.ListObjectsV2(ctx, bucket, prefix, token, delimiter, maxKeys, fetchOwner, startAfter)
-		listObjectsV2InfoCache, errC = listObjectsV2Cache(ctx, bucket, prefix, token, delimiter, maxKeys, fetchOwner, startAfter)
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			listObjectsV2Info, err = objectAPI.ListObjectsV2(ctx, bucket, prefix, token, delimiter, maxKeys, fetchOwner, startAfter)
+		}()
+		go func() {
+			defer wg.Done()
+			stc := time.Now()
+			listObjectsV2InfoCache, errC = listObjectsV2Cache(ctx, bucket, prefix, token, delimiter, maxKeys, fetchOwner, startAfter)
+			elap := time.Since(stc)
+			fmt.Println("List object cache time", elap)
+		}()
+		wg.Wait()
 	}
 	if err != nil || errC != nil {
 		writeErrorResponse(ctx, w, toAPIError(ctx, err), r.URL)
 		return
 	}
-	// fmt.Printf("Harsh listObjectsV2Infooo %+v\n", listObjectsV2Info)
-	// fmt.Printf("Harsh listObjectsV2InfoCache %+v\n", listObjectsV2InfoCache)
 	mergeObjects := mergeListObjects(listObjectsV2Info.Objects, listObjectsV2InfoCache.Objects)
 	mergePrefixes := mergePrefixes(listObjectsV2Info.Prefixes, listObjectsV2InfoCache.Prefixes)
 	listObjectsV2Info.Objects = mergeObjects
@@ -421,8 +432,27 @@ func (api objectAPIHandlers) ListObjectsV1Handler(w http.ResponseWriter, r *http
 	// Inititate a list objects operation based on the input params.
 	// On success would return back ListObjectsInfo object to be
 	// marshaled into S3 compatible XML header.
-	listObjectsInfo, err := listObjects(ctx, bucket, prefix, marker, delimiter, maxKeys)
-	listObjectsInfoCache, errC := listObjectsCache(ctx, bucket, prefix, marker, delimiter, maxKeys)
+	var (
+		listObjectsInfo      ListObjectsInfo
+		listObjectsInfoCache ListObjectsInfo
+		err                  error
+		errC                 error
+	)
+	var wg sync.WaitGroup
+	go func() {
+		defer wg.Done()
+		listObjectsInfo, err = listObjects(ctx, bucket, prefix, marker, delimiter, maxKeys)
+	}()
+	go func() {
+		defer wg.Done()
+		stc := time.Now()
+		listObjectsInfoCache, errC = listObjectsCache(ctx, bucket, prefix, marker, delimiter, maxKeys)
+		elap := time.Since(stc)
+		fmt.Println("ListV1 object cache time", elap)
+	}()
+
+	wg.Wait()
+
 	if err != nil || errC != nil {
 		writeErrorResponse(ctx, w, toAPIError(ctx, err), r.URL)
 		return

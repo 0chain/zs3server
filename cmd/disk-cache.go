@@ -24,6 +24,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -498,46 +499,26 @@ func (c *cacheObjects) CopyObject(ctx context.Context, srcBucket, srcObject, dst
 func (c *cacheObjects) ListObjects(ctx context.Context, bucket, prefix, marker, delimiter string, maxKeys int) (result ListObjectsInfo, err error) {
 	objInfos := []ObjectInfo{}
 	prefixes := []string{}
+	var objStats results
 	for _, cache := range c.cache {
 		dir := cache.dir
 		fmt.Println("cache dirss", dir)
-		filterFn := func(name string, typ os.FileMode) error {
-			if name == minioMetaBucket {
-				// Proceed to next file.
-				return nil
+		objStats = walkCacheDir(cache.dir, bucket, prefix, delimiter, cache.dir)
+		for _, obs := range objStats {
+			if len(objInfos)+len(prefixes) > maxKeys {
+				break
 			}
-			cacheDir := pathJoin(cache.dir, name)
-			meta, _, _, err := cache.statCachedMeta(ctx, cacheDir)
-			if err != nil {
-				return nil
+			if obs.objInfo.Name != "" {
+				objInfos = append(objInfos, obs.objInfo)
 			}
-			objInfo := meta.ToObjectInfo()
-			if objInfo.Bucket == bucket {
-				if strings.HasPrefix(objInfo.Name, prefix) {
-					trimmed := strings.TrimPrefix(objInfo.Name, prefix)
-					parts := strings.Split(trimmed, delimiter)
-					if len(parts) > 0 && parts[0] != "" {
-						if (len(objInfos) + len(prefixes)) < maxKeys {
-							if len(parts) == 1 {
-								// If there's only one part, it's a file
-								objInfos = append(objInfos, objInfo)
-							} else {
-								// If there are more parts, it's a folder
-								prefixes = append(prefixes, prefix+parts[0]+delimiter)
-							}
-						}
-					}
-				}
+			if obs.prefix != "" {
+				prefixes = append(prefixes, obs.prefix)
 			}
-			return nil
-		}
 
-		if err := readDirFn(cache.dir, filterFn); err != nil {
-			logger.LogIf(ctx, err)
-			return ListObjectsInfo{}, err
 		}
 	}
-	fmt.Println("Harsh ListObjectsInfo len from cache", len(objInfos))
+	fmt.Println("ListObjectsV1Info len of cache objects", len(objInfos))
+	fmt.Println("ListObjectsV1Info len of prefix", len(prefixes))
 	return ListObjectsInfo{
 		Objects:  objInfos,
 		Prefixes: unique(prefixes),
@@ -548,51 +529,150 @@ func (c *cacheObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 func (c *cacheObjects) ListObjectsV2(ctx context.Context, bucket, prefix, continuationToken, delimiter string, maxKeys int, fetchOwner bool, startAfter string) (result ListObjectsV2Info, err error) {
 	objInfos := []ObjectInfo{}
 	prefixes := []string{}
+	var objStats results
 	for _, cache := range c.cache {
 		dir := cache.dir
 		fmt.Println("cache dirss", dir)
-		filterFn := func(name string, typ os.FileMode) error {
-			if name == minioMetaBucket {
-				// Proceed to next file.
-				return nil
+		objStats = walkCacheDir(cache.dir, bucket, prefix, delimiter, cache.dir)
+		for _, obs := range objStats {
+			if len(objInfos)+len(prefixes) > maxKeys {
+				break
 			}
-			cacheDir := pathJoin(cache.dir, name)
-			meta, _, _, err := cache.statCachedMeta(ctx, cacheDir)
-			if err != nil {
-				return nil
+			if obs.objInfo.Name != "" {
+				objInfos = append(objInfos, obs.objInfo)
 			}
-			objInfo := meta.ToObjectInfo()
-			if objInfo.Bucket == bucket {
-				if strings.HasPrefix(objInfo.Name, prefix) {
-					trimmed := strings.TrimPrefix(objInfo.Name, prefix)
-					parts := strings.Split(trimmed, delimiter)
-					if len(parts) > 0 && parts[0] != "" {
-						if (len(objInfos) + len(prefixes)) < maxKeys {
-							if len(parts) == 1 {
-								// If there's only one part, it's a file
-								objInfos = append(objInfos, objInfo)
-							} else {
-								// If there are more parts, it's a folder
-								prefixes = append(prefixes, prefix+parts[0]+delimiter)
-							}
-						}
-					}
-				}
+			if obs.prefix != "" {
+				prefixes = append(prefixes, obs.prefix)
 			}
-			return nil
-		}
 
-		if err := readDirFn(cache.dir, filterFn); err != nil {
-			logger.LogIf(ctx, err)
-			return ListObjectsV2Info{}, err
 		}
 	}
-	fmt.Println("Harsh ListObjectsV2Info len from cache", len(objInfos))
+	fmt.Println("ListObjectsV2Info len of cache obj", len(objInfos))
+	fmt.Println("ListObjectsV2Info len of prefix", len(prefixes))
 	return ListObjectsV2Info{
 		Objects:           objInfos,
 		ContinuationToken: continuationToken,
 		Prefixes:          unique(prefixes),
 	}, nil
+}
+
+type objPair struct {
+	objInfo ObjectInfo
+	prefix  string
+}
+
+type results []objPair
+
+func getCacheStat(cacheObjPath string) (meta *cacheMeta, partial bool, numHits int, err error) {
+	// Stat the file to get file size.
+	metaPath := pathJoin(cacheObjPath, cacheMetaJSONFile)
+	f, err := os.Open(metaPath)
+	if err != nil {
+		return meta, partial, 0, err
+	}
+	defer f.Close()
+	meta = &cacheMeta{Version: cacheMetaVersion}
+	if err := jsonLoad(f, meta); err != nil {
+		return meta, partial, 0, err
+	}
+	// get metadata of part.1 if full file has been cached.
+	partial = true
+	if _, err := os.Stat(pathJoin(cacheObjPath, cacheDataFile)); err == nil {
+		partial = false
+	}
+	if writebackInProgress(meta.Meta) {
+		partial = false
+	}
+	return meta, partial, meta.Hits, nil
+}
+
+func filterFn(name string, bucket string, prefix string, delimiter string, rootdir string) objPair {
+	if name == minioMetaBucket {
+		// Proceed to next file.
+		return objPair{}
+	}
+	cacheDir := pathJoin(rootdir, name)
+	meta, _, _, err := getCacheStat(cacheDir)
+	if err != nil {
+		return objPair{}
+	}
+	objInfo := meta.ToObjectInfo()
+	if objInfo.Bucket == bucket {
+		if strings.HasPrefix(objInfo.Name, prefix) {
+			trimmed := strings.TrimPrefix(objInfo.Name, prefix)
+			parts := strings.Split(trimmed, delimiter)
+			if len(parts) > 0 && parts[0] != "" {
+
+				if len(parts) == 1 {
+					// If there's only one part, it's a file
+					return objPair{objInfo: objInfo}
+				} else {
+					// If there are more parts, it's a folder
+					return objPair{prefix: prefix + parts[0] + delimiter}
+				}
+
+			}
+		}
+	}
+	return objPair{}
+}
+
+func processFiles(paths <-chan string, pairs chan<- objPair, done chan<- bool, bucket string, prefix string, delimiter string, rootdir string) {
+	for path := range paths {
+		pairs <- filterFn(path, bucket, prefix, delimiter, rootdir)
+	}
+
+	done <- true
+}
+
+func collectObjects(pairs <-chan objPair, result chan<- results) {
+	objArr := []objPair{}
+
+	for p := range pairs {
+		objArr = append(objArr, p)
+	}
+
+	result <- objArr
+}
+
+func searchTree(dir string, paths chan<- string) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		fmt.Println("Error reading directory:", err)
+		return
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			paths <- entry.Name()
+		}
+	}
+}
+
+func walkCacheDir(dir string, bucket string, prefix string, delimiter string, rootdir string) results {
+	workers := 8 * runtime.GOMAXPROCS(0)
+	paths := make(chan string)
+	pairs := make(chan objPair, 100)
+	done := make(chan bool)
+	result := make(chan results)
+
+	for i := 0; i < workers; i++ {
+		go processFiles(paths, pairs, done, bucket, prefix, delimiter, rootdir)
+	}
+
+	go collectObjects(pairs, result)
+
+	searchTree(dir, paths)
+
+	close(paths)
+
+	for i := 0; i < workers; i++ {
+		<-done
+	}
+
+	close(pairs)
+
+	return <-result
 }
 
 func unique(items []string) []string {
