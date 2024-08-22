@@ -497,6 +497,7 @@ func (c *cacheObjects) CopyObject(ctx context.Context, srcBucket, srcObject, dst
 
 // ListObjects from disk cache
 func (c *cacheObjects) ListObjects(ctx context.Context, bucket, prefix, marker, delimiter string, maxKeys int) (result ListObjectsInfo, err error) {
+	fmt.Println("list cache maxkeys", maxKeys)
 	objInfos := []ObjectInfo{}
 	prefixes := []string{}
 	var objStats results
@@ -527,6 +528,7 @@ func (c *cacheObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 
 // ListObjectsV2 from disk cache
 func (c *cacheObjects) ListObjectsV2(ctx context.Context, bucket, prefix, continuationToken, delimiter string, maxKeys int, fetchOwner bool, startAfter string) (result ListObjectsV2Info, err error) {
+	fmt.Println("listv22 cache maxkeys", maxKeys)
 	objInfos := []ObjectInfo{}
 	prefixes := []string{}
 	var objStats results
