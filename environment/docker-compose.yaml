@@ -44,7 +44,7 @@ services:
       MINIO_ROOT_USER: rootroot
       MINIO_ROOT_PASSWORD: rootroot
       MINIO_BROWSER: "OFF"
-      MINIO_CACHE_DRIVES: "/mcache" # list of mounted cache drives or directories separated by ","
+      MINIO_CACHE_DRIVES: "/mcache,/mcache1,/mcache2,/mcache3,/mcache4" # list of mounted cache drives or directories separated by ","
       MINIO_CACHE_EXPIRY: 90 # expiry in days
       MINIO_CACHE_COMMIT: "writeback" # to increase write throughput use writeback
       MINIO_CACHE_QUOTA: 99 # maximum permitted usage of the cache in percentage 
@@ -57,6 +57,10 @@ services:
     volumes:
       - ~/.zcn:/root/.zcn
       - /mnt/mcache:/mcache
+      - /mnt/mcache1:/mcache1
+      - /mnt/mcache2:/mcache2
+      - /mnt/mcache3:/mcache3
+      - /mnt/mcache4:/mcache4
     networks:
       zs_network:
 
