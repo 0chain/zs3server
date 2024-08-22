@@ -439,6 +439,7 @@ func (api objectAPIHandlers) ListObjectsV1Handler(w http.ResponseWriter, r *http
 		errC                 error
 	)
 	var wg sync.WaitGroup
+	wg.Add(2)
 	go func() {
 		defer wg.Done()
 		listObjectsInfo, err = listObjects(ctx, bucket, prefix, marker, delimiter, maxKeys)
