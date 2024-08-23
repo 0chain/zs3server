@@ -443,6 +443,10 @@ func (zob *zcnObjects) ListObjectsV2(ctx context.Context, bucket, prefix, contin
 
 // ListObjects Lists files of directories as objects
 func (zob *zcnObjects) ListObjects(ctx context.Context, bucket, prefix, marker, delimiter string, maxKeys int) (result minio.ListObjectsInfo, err error) {
+	now := time.Now()
+	defer func() {
+		log.Println("ListObjectsTook: ", time.Since(now).Milliseconds())
+	}()
 	// objFileType For root path list objects should only provide file and not dirs.
 	// Dirs under root path are presented as buckets as well
 	var remotePath, objFileType string
