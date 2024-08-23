@@ -554,7 +554,6 @@ loop:
 // ListObjectsV2 from disk cache
 func (c *cacheObjects) ListObjectsV2(ctx context.Context, bucket, prefix, continuationToken, delimiter string, maxKeys int, fetchOwner bool, startAfter string) (result ListObjectsV2Info, err error) {
 	fmt.Printf("prefix %s continuationToken %s delim %s maxkey %d startAfter %s\n", prefix, continuationToken, delimiter, maxKeys, startAfter)
-	maxKeys = 10
 	objInfos := []ObjectInfo{}
 	prefixes := map[string]bool{}
 	var wg sync.WaitGroup
