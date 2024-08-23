@@ -497,64 +497,116 @@ func (c *cacheObjects) CopyObject(ctx context.Context, srcBucket, srcObject, dst
 
 // ListObjects from disk cache
 func (c *cacheObjects) ListObjects(ctx context.Context, bucket, prefix, marker, delimiter string, maxKeys int) (result ListObjectsInfo, err error) {
-	fmt.Println("list cache maxkeys", maxKeys)
+	fmt.Printf("prefix %s marker %s delim %s maxkey %d \n", prefix, marker, delimiter, maxKeys)
 	objInfos := []ObjectInfo{}
-	prefixes := []string{}
-	var objStats results
+	prefixes := map[string]bool{}
+	var wg sync.WaitGroup
+	objStatsChannel := make(chan results, len(c.cache))
+	done := make(chan struct{})
 	for _, cache := range c.cache {
-		dir := cache.dir
-		fmt.Println("cache dirss", dir)
-		objStats = walkCacheDir(cache.dir, bucket, prefix, delimiter, cache.dir)
+		wg.Add(1)
+		go func(cache *diskCache) {
+			defer wg.Done()
+			dir := cache.dir
+			fmt.Println("cache dirss", dir)
+			objStats := walkCacheDir(cache.dir, bucket, prefix, delimiter, cache.dir)
+			select {
+			case objStatsChannel <- objStats:
+			case <-done:
+				return
+			}
+		}(cache)
+	}
+
+	go func() {
+		wg.Wait()
+		close(objStatsChannel)
+	}()
+
+loop:
+	for objStats := range objStatsChannel {
 		for _, obs := range objStats {
-			if len(objInfos)+len(prefixes) > maxKeys {
-				break
+			if len(objInfos)+len(prefixes) >= maxKeys {
+				close(done)
+				break loop
 			}
 			if obs.objInfo.Name != "" {
 				objInfos = append(objInfos, obs.objInfo)
 			}
 			if obs.prefix != "" {
-				prefixes = append(prefixes, obs.prefix)
+				prefixes[obs.prefix] = true
 			}
-
 		}
 	}
-	fmt.Println("ListObjectsV1Info len of cache objects", len(objInfos))
+
+	fmt.Println("ListObjectsV1Info len of cache obj", len(objInfos))
 	fmt.Println("ListObjectsV1Info len of prefix", len(prefixes))
+	var uPrefixes []string
+	for key := range prefixes {
+		uPrefixes = append(uPrefixes, key)
+	}
 	return ListObjectsInfo{
 		Objects:  objInfos,
-		Prefixes: unique(prefixes),
+		Prefixes: unique(uPrefixes),
 	}, nil
 }
 
 // ListObjectsV2 from disk cache
 func (c *cacheObjects) ListObjectsV2(ctx context.Context, bucket, prefix, continuationToken, delimiter string, maxKeys int, fetchOwner bool, startAfter string) (result ListObjectsV2Info, err error) {
-	fmt.Println("listv22 cache maxkeys", maxKeys)
+	fmt.Printf("prefix %s continuationToken %s delim %s maxkey %d startAfter %s\n", prefix, continuationToken, delimiter, maxKeys, startAfter)
+	maxKeys = 10
 	objInfos := []ObjectInfo{}
-	prefixes := []string{}
-	var objStats results
+	prefixes := map[string]bool{}
+	var wg sync.WaitGroup
+	objStatsChannel := make(chan results, len(c.cache))
+	done := make(chan struct{})
 	for _, cache := range c.cache {
-		dir := cache.dir
-		fmt.Println("cache dirss", dir)
-		objStats = walkCacheDir(cache.dir, bucket, prefix, delimiter, cache.dir)
+		wg.Add(1)
+		go func(cache *diskCache) {
+			defer wg.Done()
+			dir := cache.dir
+			fmt.Println("cache dirss", dir)
+			objStats := walkCacheDir(cache.dir, bucket, prefix, delimiter, cache.dir)
+			select {
+			case objStatsChannel <- objStats:
+			case <-done:
+				return
+			}
+
+		}(cache)
+	}
+
+	go func() {
+		wg.Wait()
+		close(objStatsChannel)
+	}()
+
+loop:
+	for objStats := range objStatsChannel {
 		for _, obs := range objStats {
-			if len(objInfos)+len(prefixes) > maxKeys {
-				break
+			if len(objInfos)+len(prefixes) >= maxKeys {
+				close(done)
+				break loop
 			}
 			if obs.objInfo.Name != "" {
 				objInfos = append(objInfos, obs.objInfo)
 			}
 			if obs.prefix != "" {
-				prefixes = append(prefixes, obs.prefix)
+				prefixes[obs.prefix] = true
 			}
-
 		}
 	}
+
 	fmt.Println("ListObjectsV2Info len of cache obj", len(objInfos))
 	fmt.Println("ListObjectsV2Info len of prefix", len(prefixes))
+	var uPrefixes []string
+	for key := range prefixes {
+		uPrefixes = append(uPrefixes, key)
+	}
 	return ListObjectsV2Info{
 		Objects:           objInfos,
 		ContinuationToken: continuationToken,
-		Prefixes:          unique(prefixes),
+		Prefixes:          unique(uPrefixes),
 	}, nil
 }
 
@@ -1153,21 +1205,23 @@ func (c *cacheObjects) gc(ctx context.Context) {
 func (c *cacheObjects) queuePendingWriteback(ctx context.Context) {
 	fmt.Println("Harsh queuePendingWriteback")
 	for _, dcache := range c.cache {
+		fmt.Println("queuePendingWriteback cache", dcache.dir)
 		if dcache != nil {
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				case oi, ok := <-dcache.retryWritebackCh:
-					if !ok {
-						goto next
+			go func(d *diskCache) {
+				for {
+					select {
+					case <-ctx.Done():
+						return
+					case oi, ok := <-d.retryWritebackCh:
+						if !ok {
+							return
+						}
+						c.queueWritebackRetry(oi)
+					default:
+						time.Sleep(time.Second * 1)
 					}
-					c.queueWritebackRetry(oi)
-				default:
-					time.Sleep(time.Second * 1)
 				}
-			}
-		next:
+			}(dcache)
 		}
 	}
 }
