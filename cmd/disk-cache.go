@@ -524,9 +524,9 @@ func (c *cacheObjects) skipCache() bool {
 // Returns true if object should be excluded from cache
 func (c *cacheObjects) isCacheExclude(bucket, object string) bool {
 	// exclude directories from cache
-	if strings.HasSuffix(object, SlashSeparator) {
-		return true
-	}
+	// if strings.HasSuffix(object, SlashSeparator) {
+	// 	return true
+	// }
 	for _, pattern := range c.exclude {
 		matchStr := fmt.Sprintf("%s/%s", bucket, object)
 		if ok := wildcard.MatchSimple(pattern, matchStr); ok {
