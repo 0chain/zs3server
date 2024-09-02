@@ -50,6 +50,8 @@ const (
 	EnvCacheCommit        = "MINIO_CACHE_COMMIT"
 	EnvWriteBackInterval  = "MINIO_WRITE_BACK_INTERVAL"
 	EnvMaxCacheFileSize   = "MINIO_MAX_CACHE_FILE_SIZE"
+	EnvUploadWorkers      = "MINIO_WRITE_BACK_UPLOAD_WORKERS"
+	EnvUploadQueueTh      = "MINIO_UPLOAD_QUEUE_TH"
 
 	EnvCacheEncryptionKey = "MINIO_CACHE_ENCRYPTION_SECRET_KEY"
 
@@ -242,6 +244,20 @@ func LookupConfig(kvs config.KVS) (Config, error) {
 		if err != nil {
 			err := errors.New("max cache file size shoud be a number")
 			return cfg, config.ErrInvalidMaxCacheFS(err)
+		}
+	}
+	if uploadWorkers := env.Get(EnvUploadWorkers, "20"); uploadWorkers != "" {
+		cfg.UploadWorkers, err = strconv.Atoi(uploadWorkers)
+		if err != nil {
+			err := errors.New("upload workers shoud be a number")
+			return cfg, config.ErrInvalidUploadWorkers(err)
+		}
+	}
+	if uploadQueueTh := env.Get(EnvUploadQueueTh, "100"); uploadQueueTh != "" {
+		cfg.UploadQueueTh, err = strconv.Atoi(uploadQueueTh)
+		if err != nil {
+			err := errors.New("upload queue threshold shoud be a number")
+			return cfg, config.ErrInvalidUploadQueueTh(err)
 		}
 	}
 	return cfg, nil

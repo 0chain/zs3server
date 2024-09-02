@@ -133,6 +133,17 @@ var (
 		"MINIO_MAX_CACHE_FILE_SIZE is in bytes, it should be a number",
 	)
 
+	ErrInvalidUploadWorkers = newErrFn(
+		"Incompatible upload workers setting",
+		"Please check the passed value",
+		"MINIO_WRITE_BACK_UPLOAD_WORKERS should be a number",
+	)
+	ErrInvalidUploadQueueTh = newErrFn(
+		"Incompatible Queue threshold setting",
+		"Please check the passed value",
+		"MINIO_UPLOAD_QUEUE_TH should be a number",
+	)
+
 	ErrInvalidCredentialsBackendEncrypted = newErrFn(
 		"Invalid credentials",
 		"Please set correct credentials in the environment for decryption",

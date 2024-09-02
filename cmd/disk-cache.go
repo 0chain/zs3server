@@ -24,13 +24,13 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"runtime"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/arriqaaq/art"
 	objectlock "github.com/minio/minio/internal/bucket/object/lock"
 	"github.com/minio/minio/internal/color"
 	"github.com/minio/minio/internal/config/cache"
@@ -115,6 +115,8 @@ type cacheObjects struct {
 	commitWriteback    bool
 	commitWritethrough bool
 	maxCacheFileSize   int64
+	uploadWorkers      int
+	uploadQueueTh      int
 
 	// if true migration is in progress from v1 to v2
 	migrating bool
@@ -122,6 +124,9 @@ type cacheObjects struct {
 	wbRetryCh chan ObjectInfo
 	// Cache stats
 	cacheStats *CacheStats
+
+	listTree                *art.Tree
+	writeBackUploadBufferCh chan ObjectInfo
 
 	InnerGetObjectNInfoFn          func(ctx context.Context, bucket, object string, rs *HTTPRangeSpec, h http.Header, lockType LockType, opts ObjectOptions) (gr *GetObjectReader, err error)
 	InnerGetObjectInfoFn           func(ctx context.Context, bucket, object string, opts ObjectOptions) (objInfo ObjectInfo, err error)
@@ -170,7 +175,7 @@ func (c *cacheObjects) updateMetadataIfChanged(ctx context.Context, dcache *disk
 
 // DeleteObject clears cache entry if backend delete operation succeeds
 func (c *cacheObjects) DeleteObject(ctx context.Context, bucket, object string, opts ObjectOptions) (objInfo ObjectInfo, err error) {
-	fmt.Println("start DeleteObject for cache")
+	fmt.Println("start DeleteObject for cache", object)
 	// delete from backend and then delete from cache always
 	objInfoB, errB := c.InnerDeleteObjectFn(ctx, bucket, object, opts)
 
@@ -183,6 +188,7 @@ func (c *cacheObjects) DeleteObject(ctx context.Context, bucket, object string, 
 		return objInfoB, cerr
 	}
 	dcache.Delete(ctx, bucket, object)
+	c.listTree.Delete([]byte(bucket + "/" + object))
 	return objInfoB, errB
 }
 
@@ -500,47 +506,29 @@ func (c *cacheObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 	fmt.Printf("prefix %s marker %s delim %s maxkey %d \n", prefix, marker, delimiter, maxKeys)
 	objInfos := []ObjectInfo{}
 	prefixes := map[string]bool{}
-	var wg sync.WaitGroup
-	objStatsChannel := make(chan results, len(c.cache))
-	done := make(chan struct{})
-	for _, cache := range c.cache {
-		wg.Add(1)
-		go func(cache *diskCache) {
-			defer wg.Done()
-			dir := cache.dir
-			fmt.Println("cache dirss", dir)
-			objStats := walkCacheDir(cache.dir, bucket, prefix, delimiter, cache.dir)
-			select {
-			case objStatsChannel <- objStats:
-			case <-done:
-				return
-			}
-		}(cache)
-	}
-
-	go func() {
-		wg.Wait()
-		close(objStatsChannel)
-	}()
-
-loop:
-	for objStats := range objStatsChannel {
-		for _, obs := range objStats {
-			if len(objInfos)+len(prefixes) >= maxKeys {
-				close(done)
-				break loop
-			}
-			if obs.objInfo.Name != "" {
-				objInfos = append(objInfos, obs.objInfo)
-			}
-			if obs.prefix != "" {
-				prefixes[obs.prefix] = true
+	rootprefix := bucket + "/" + prefix
+	leafFilter := func(n *art.Node) {
+		if n.IsLeaf() {
+			fmt.Println("value=", string(n.Key()), n.Value())
+			if strings.HasPrefix(string(n.Key()), rootprefix) {
+				trimmed := strings.TrimPrefix(string(n.Key()), rootprefix)
+				parts := strings.Split(trimmed, delimiter)
+				if len(parts) > 0 && parts[0] != "" {
+					if (len(objInfos) + len(prefixes)) < maxKeys {
+						if len(parts) == 1 {
+							ob, ok := n.Value().(ObjectInfo)
+							if ok {
+								objInfos = append(objInfos, ob)
+							}
+						} else if delimiter != "" {
+							prefixes[prefix+parts[0]+delimiter] = true
+						}
+					}
+				}
 			}
 		}
 	}
-
-	fmt.Println("ListObjectsV1Info len of cache obj", len(objInfos))
-	fmt.Println("ListObjectsV1Info len of prefix", len(prefixes))
+	c.listTree.Scan([]byte(rootprefix), leafFilter)
 	var uPrefixes []string
 	for key := range prefixes {
 		uPrefixes = append(uPrefixes, key)
@@ -551,53 +539,32 @@ loop:
 	}, nil
 }
 
-// ListObjectsV2 from disk cache
 func (c *cacheObjects) ListObjectsV2(ctx context.Context, bucket, prefix, continuationToken, delimiter string, maxKeys int, fetchOwner bool, startAfter string) (result ListObjectsV2Info, err error) {
-	fmt.Printf("prefix %s continuationToken %s delim %s maxkey %d startAfter %s\n", prefix, continuationToken, delimiter, maxKeys, startAfter)
 	objInfos := []ObjectInfo{}
 	prefixes := map[string]bool{}
-	var wg sync.WaitGroup
-	objStatsChannel := make(chan results, len(c.cache))
-	done := make(chan struct{})
-	for _, cache := range c.cache {
-		wg.Add(1)
-		go func(cache *diskCache) {
-			defer wg.Done()
-			dir := cache.dir
-			fmt.Println("cache dirss", dir)
-			objStats := walkCacheDir(cache.dir, bucket, prefix, delimiter, cache.dir)
-			select {
-			case objStatsChannel <- objStats:
-			case <-done:
-				return
-			}
-
-		}(cache)
-	}
-
-	go func() {
-		wg.Wait()
-		close(objStatsChannel)
-	}()
-
-loop:
-	for objStats := range objStatsChannel {
-		for _, obs := range objStats {
-			if len(objInfos)+len(prefixes) >= maxKeys {
-				close(done)
-				break loop
-			}
-			if obs.objInfo.Name != "" {
-				objInfos = append(objInfos, obs.objInfo)
-			}
-			if obs.prefix != "" {
-				prefixes[obs.prefix] = true
+	rootprefix := bucket + "/" + prefix
+	leafFilter := func(n *art.Node) {
+		if n.IsLeaf() {
+			fmt.Println("value=", string(n.Key()), n.Value())
+			if strings.HasPrefix(string(n.Key()), rootprefix) {
+				trimmed := strings.TrimPrefix(string(n.Key()), rootprefix)
+				parts := strings.Split(trimmed, delimiter)
+				if len(parts) > 0 && parts[0] != "" {
+					if (len(objInfos) + len(prefixes)) < maxKeys {
+						if len(parts) == 1 {
+							ob, ok := n.Value().(ObjectInfo)
+							if ok {
+								objInfos = append(objInfos, ob)
+							}
+						} else if delimiter != "" {
+							prefixes[prefix+parts[0]+delimiter] = true
+						}
+					}
+				}
 			}
 		}
 	}
-
-	fmt.Println("ListObjectsV2Info len of cache obj", len(objInfos))
-	fmt.Println("ListObjectsV2Info len of prefix", len(prefixes))
+	c.listTree.Scan([]byte(rootprefix), leafFilter)
 	var uPrefixes []string
 	for key := range prefixes {
 		uPrefixes = append(uPrefixes, key)
@@ -608,13 +575,6 @@ loop:
 		Prefixes:          unique(uPrefixes),
 	}, nil
 }
-
-type objPair struct {
-	objInfo ObjectInfo
-	prefix  string
-}
-
-type results []objPair
 
 func getCacheStat(cacheObjPath string) (meta *cacheMeta, partial bool, numHits int, err error) {
 	// Stat the file to get file size.
@@ -637,95 +597,6 @@ func getCacheStat(cacheObjPath string) (meta *cacheMeta, partial bool, numHits i
 		partial = false
 	}
 	return meta, partial, meta.Hits, nil
-}
-
-func filterFn(name string, bucket string, prefix string, delimiter string, rootdir string) objPair {
-	if name == minioMetaBucket {
-		// Proceed to next file.
-		return objPair{}
-	}
-	cacheDir := pathJoin(rootdir, name)
-	meta, _, _, err := getCacheStat(cacheDir)
-	if err != nil {
-		return objPair{}
-	}
-	objInfo := meta.ToObjectInfo()
-	if objInfo.Bucket == bucket {
-		if strings.HasPrefix(objInfo.Name, prefix) {
-			trimmed := strings.TrimPrefix(objInfo.Name, prefix)
-			parts := strings.Split(trimmed, delimiter)
-			if len(parts) > 0 && parts[0] != "" {
-
-				if len(parts) == 1 {
-					// If there's only one part, it's a file
-					return objPair{objInfo: objInfo}
-				} else {
-					// If there are more parts, it's a folder
-					return objPair{prefix: prefix + parts[0] + delimiter}
-				}
-
-			}
-		}
-	}
-	return objPair{}
-}
-
-func processFiles(paths <-chan string, pairs chan<- objPair, done chan<- bool, bucket string, prefix string, delimiter string, rootdir string) {
-	for path := range paths {
-		pairs <- filterFn(path, bucket, prefix, delimiter, rootdir)
-	}
-
-	done <- true
-}
-
-func collectObjects(pairs <-chan objPair, result chan<- results) {
-	objArr := []objPair{}
-
-	for p := range pairs {
-		objArr = append(objArr, p)
-	}
-
-	result <- objArr
-}
-
-func searchTree(dir string, paths chan<- string) {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		fmt.Println("Error reading directory:", err)
-		return
-	}
-
-	for _, entry := range entries {
-		if entry.IsDir() {
-			paths <- entry.Name()
-		}
-	}
-}
-
-func walkCacheDir(dir string, bucket string, prefix string, delimiter string, rootdir string) results {
-	workers := 8 * runtime.GOMAXPROCS(0)
-	paths := make(chan string)
-	pairs := make(chan objPair, 100)
-	done := make(chan bool)
-	result := make(chan results)
-
-	for i := 0; i < workers; i++ {
-		go processFiles(paths, pairs, done, bucket, prefix, delimiter, rootdir)
-	}
-
-	go collectObjects(pairs, result)
-
-	searchTree(dir, paths)
-
-	close(paths)
-
-	for i := 0; i < workers; i++ {
-		<-done
-	}
-
-	close(pairs)
-
-	return <-result
 }
 
 func unique(items []string) []string {
@@ -954,7 +825,13 @@ func (c *cacheObjects) PutObject(ctx context.Context, bucket, object string, r *
 		if err != nil {
 			return ObjectInfo{}, err
 		}
+		objPath := oi.Bucket + "/" + oi.Name
+		c.listTree.Insert([]byte(objPath), oi)
 		//go c.uploadObject(GlobalContext, oi) // use schedule to upload in batch
+		select {
+		case c.writeBackUploadBufferCh <- oi:
+		default:
+		}
 		return oi, nil
 	}
 	if !c.commitWritethrough {
@@ -1058,12 +935,14 @@ func (c *cacheObjects) uploadObject(ctx context.Context, oi ObjectInfo) {
 	opts.UserDefined = make(map[string]string)
 	opts.UserDefined[xhttp.ContentMD5] = oi.UserDefined["content-md5"]
 	objInfo, err := c.InnerPutObjectFn(ctx, oi.Bucket, oi.Name, NewPutObjReader(hashReader), opts)
+	fmt.Println("Obj uploading to backend")
 	wbCommitStatus := CommitComplete
 	size := objInfo.Size
 	if err != nil {
+		fmt.Println("Obj uploading to backend err", err)
 		wbCommitStatus = CommitFailed
 	}
-
+	fmt.Println("Obj uploading to backend status", wbCommitStatus)
 	meta := cloneMSS(cReader.ObjInfo.UserDefined)
 	retryCnt := 0
 	if wbCommitStatus == CommitFailed {
@@ -1073,6 +952,8 @@ func (c *cacheObjects) uploadObject(ctx context.Context, oi ObjectInfo) {
 		size = cReader.ObjInfo.Size
 	} else {
 		delete(meta, writeBackRetryHeader)
+		ldeleted := c.listTree.Delete([]byte(oi.Bucket + "/" + oi.Name))
+		fmt.Printf("deleted %s status %v \n", oi.Bucket+"/"+oi.Name, ldeleted)
 	}
 	meta[writeBackStatusHeader] = wbCommitStatus.String()
 	meta["etag"] = oi.ETag
@@ -1104,14 +985,18 @@ func newServerCacheObjects(ctx context.Context, config cache.Config) (CacheObjec
 		return nil, err
 	}
 	c := &cacheObjects{
-		cache:              cache,
-		exclude:            config.Exclude,
-		after:              config.After,
-		migrating:          migrateSw,
-		commitWriteback:    config.CacheCommitMode == CommitWriteBack,
-		commitWritethrough: config.CacheCommitMode == CommitWriteThrough,
-		maxCacheFileSize:   config.MaxCacheFileSize,
-		cacheStats:         newCacheStats(),
+		cache:                   cache,
+		exclude:                 config.Exclude,
+		after:                   config.After,
+		migrating:               migrateSw,
+		commitWriteback:         config.CacheCommitMode == CommitWriteBack,
+		commitWritethrough:      config.CacheCommitMode == CommitWriteThrough,
+		maxCacheFileSize:        config.MaxCacheFileSize,
+		uploadWorkers:           config.UploadWorkers,
+		uploadQueueTh:           config.UploadQueueTh,
+		cacheStats:              newCacheStats(),
+		listTree:                art.NewTree(),
+		writeBackUploadBufferCh: make(chan ObjectInfo, 100000),
 		InnerGetObjectInfoFn: func(ctx context.Context, bucket, object string, opts ObjectOptions) (ObjectInfo, error) {
 			return newObjectLayerFn().GetObjectInfo(ctx, bucket, object, opts)
 		},
@@ -1170,8 +1055,13 @@ func newServerCacheObjects(ctx context.Context, config cache.Config) (CacheObjec
 		go func() {
 			<-GlobalContext.Done()
 			close(c.wbRetryCh)
+			close(c.writeBackUploadBufferCh)
 		}()
 		go c.queuePendingWriteback(ctx)
+		go c.recreateListTreeOnStartUp()
+		for i := 0; i < c.uploadWorkers; i++ {
+			go c.uploadToBackendFromCh()
+		}
 	}
 
 	return c, nil
@@ -1195,6 +1085,60 @@ func (c *cacheObjects) gc(ctx context.Context) {
 					// Will queue a GC scan if at high watermark.
 					dcache.diskSpaceAvailable(0)
 				}
+			}
+		}
+	}
+}
+
+func (c *cacheObjects) uploadToBackendFromCh() {
+	for {
+		if len(c.writeBackUploadBufferCh) >= c.uploadQueueTh {
+			select {
+			case obj, ok := <-c.writeBackUploadBufferCh:
+				if !ok {
+					return
+				}
+				c.uploadObject(GlobalContext, obj)
+			default:
+				time.Sleep(100 * time.Millisecond) // Prevent busy waiting
+			}
+		} else {
+			time.Sleep(1000 * time.Millisecond)
+		}
+	}
+}
+
+func (c *cacheObjects) recreateListTreeOnStartUp() {
+	for _, dcache := range c.cache {
+		if dcache != nil {
+			fmt.Println("recreateListTreeOnStartUp cache dir", dcache.dir)
+
+			filterFn := func(name string, typ os.FileMode) error {
+				if name == minioMetaBucket {
+					// Proceed to next file.
+					return nil
+				}
+				cacheDir := pathJoin(dcache.dir, name)
+				fmt.Println("cachedir to be uploaded in backend", cacheDir)
+				meta, _, _, err := getCacheStat(cacheDir)
+				if err != nil {
+					return nil
+				}
+
+				objInfo := meta.ToObjectInfo()
+				status, ok := objInfo.UserDefined[writeBackStatusHeader]
+				fmt.Println("status of file", status)
+				if !ok || status == CommitComplete.String() {
+					return nil
+				}
+				fmt.Println("Recreation, Object insterted in list tree", objInfo.Bucket+"/"+objInfo.Name)
+				c.listTree.Insert([]byte(objInfo.Bucket+"/"+objInfo.Name), objInfo)
+				return nil
+			}
+
+			if err := readDirFn(dcache.dir, filterFn); err != nil {
+				fmt.Printf("Error reading dir %s", dcache.dir)
+				return
 			}
 		}
 	}

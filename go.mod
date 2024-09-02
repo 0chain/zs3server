@@ -13,6 +13,7 @@ require (
 	github.com/Shopify/sarama v1.28.0
 	github.com/VividCortex/ewma v1.1.1
 	github.com/alecthomas/participle v0.2.1
+	github.com/arriqaaq/art v0.1.2
 	github.com/bcicen/jstream v1.0.1
 	github.com/beevik/ntp v0.3.0
 	github.com/bits-and-blooms/bloom/v3 v3.0.1

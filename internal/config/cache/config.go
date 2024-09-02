@@ -49,6 +49,8 @@ type Config struct {
 	CacheCommitMode   string   `json:"commit"`
 	WriteBackInterval int      `json:"wb_interval"`
 	MaxCacheFileSize  int64    `json:"max_cache_file_size"`
+	UploadWorkers     int      `json:"upload_workers"`
+	UploadQueueTh     int      `json:"upload_queue_th"`
 }
 
 // UnmarshalJSON - implements JSON unmarshal interface for unmarshalling
