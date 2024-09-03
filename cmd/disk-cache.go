@@ -30,7 +30,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/arriqaaq/art"
 	objectlock "github.com/minio/minio/internal/bucket/object/lock"
 	"github.com/minio/minio/internal/color"
 	"github.com/minio/minio/internal/config/cache"
@@ -39,6 +38,7 @@ import (
 	"github.com/minio/minio/internal/logger"
 	"github.com/minio/minio/internal/sync/errgroup"
 	"github.com/minio/pkg/wildcard"
+	art "github.com/plar/go-adaptive-radix-tree"
 )
 
 const (
@@ -125,7 +125,7 @@ type cacheObjects struct {
 	// Cache stats
 	cacheStats *CacheStats
 
-	listTree                *art.Tree
+	listTree                art.Tree
 	writeBackUploadBufferCh chan ObjectInfo
 
 	InnerGetObjectNInfoFn          func(ctx context.Context, bucket, object string, rs *HTTPRangeSpec, h http.Header, lockType LockType, opts ObjectOptions) (gr *GetObjectReader, err error)
@@ -188,7 +188,7 @@ func (c *cacheObjects) DeleteObject(ctx context.Context, bucket, object string, 
 		return objInfoB, cerr
 	}
 	dcache.Delete(ctx, bucket, object)
-	c.listTree.Delete([]byte(bucket + "/" + object))
+	c.deleteFromListTree(bucket + "/" + object)
 	return objInfoB, errB
 }
 
@@ -506,74 +506,83 @@ func (c *cacheObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 	fmt.Printf("prefix %s marker %s delim %s maxkey %d \n", prefix, marker, delimiter, maxKeys)
 	objInfos := []ObjectInfo{}
 	prefixes := map[string]bool{}
+
+	if marker != "" {
+		// Marker not common with prefix is not implemented. Send an empty response
+		if !HasPrefix(marker, prefix) {
+			return ListObjectsInfo{}, nil
+		}
+	}
+
+	if maxKeys == 0 {
+		return ListObjectsInfo{}, nil
+	}
+
+	if delimiter == SlashSeparator && prefix == SlashSeparator {
+		return ListObjectsInfo{}, nil
+	}
 	rootprefix := bucket + "/" + prefix
-	leafFilter := func(n *art.Node) {
-		if n.IsLeaf() {
+	rootMarker := bucket + "/" + marker
+	objectCount := 0
+	leafFilter := func(n art.Node) bool {
+		if n.Kind() == art.Leaf {
 			fmt.Println("value=", string(n.Key()), n.Value())
 			if strings.HasPrefix(string(n.Key()), rootprefix) {
-				trimmed := strings.TrimPrefix(string(n.Key()), rootprefix)
-				parts := strings.Split(trimmed, delimiter)
-				if len(parts) > 0 && parts[0] != "" {
-					if (len(objInfos) + len(prefixes)) < maxKeys {
-						if len(parts) == 1 {
-							ob, ok := n.Value().(ObjectInfo)
-							if ok {
-								objInfos = append(objInfos, ob)
+				if marker == "" || string(n.Key()) > rootMarker {
+					trimmed := strings.TrimPrefix(string(n.Key()), rootprefix)
+					parts := strings.Split(trimmed, delimiter)
+					if len(parts) > 0 && parts[0] != "" {
+						if (len(objInfos) + len(prefixes)) < maxKeys {
+							if len(parts) == 1 {
+								ob, ok := n.Value().(ObjectInfo)
+								if ok {
+									objInfos = append(objInfos, ob)
+								}
+							} else if delimiter != "" {
+								prefixes[prefix+parts[0]+delimiter] = true
 							}
-						} else if delimiter != "" {
-							prefixes[prefix+parts[0]+delimiter] = true
 						}
 					}
+					objectCount++
 				}
 			}
 		}
+		return true
 	}
-	c.listTree.Scan([]byte(rootprefix), leafFilter)
+	c.listTree.ForEachPrefix([]byte(rootprefix), leafFilter)
 	var uPrefixes []string
 	for key := range prefixes {
 		uPrefixes = append(uPrefixes, key)
 	}
+	isTruncated := false
+	if objectCount > maxKeys {
+		isTruncated = true
+	}
 	return ListObjectsInfo{
-		Objects:  objInfos,
-		Prefixes: unique(uPrefixes),
+		Objects:     objInfos,
+		Prefixes:    unique(uPrefixes),
+		IsTruncated: isTruncated,
 	}, nil
 }
 
 func (c *cacheObjects) ListObjectsV2(ctx context.Context, bucket, prefix, continuationToken, delimiter string, maxKeys int, fetchOwner bool, startAfter string) (result ListObjectsV2Info, err error) {
-	objInfos := []ObjectInfo{}
-	prefixes := map[string]bool{}
-	rootprefix := bucket + "/" + prefix
-	leafFilter := func(n *art.Node) {
-		if n.IsLeaf() {
-			fmt.Println("value=", string(n.Key()), n.Value())
-			if strings.HasPrefix(string(n.Key()), rootprefix) {
-				trimmed := strings.TrimPrefix(string(n.Key()), rootprefix)
-				parts := strings.Split(trimmed, delimiter)
-				if len(parts) > 0 && parts[0] != "" {
-					if (len(objInfos) + len(prefixes)) < maxKeys {
-						if len(parts) == 1 {
-							ob, ok := n.Value().(ObjectInfo)
-							if ok {
-								objInfos = append(objInfos, ob)
-							}
-						} else if delimiter != "" {
-							prefixes[prefix+parts[0]+delimiter] = true
-						}
-					}
-				}
-			}
-		}
+	marker := continuationToken
+	if marker == "" {
+		marker = startAfter
 	}
-	c.listTree.Scan([]byte(rootprefix), leafFilter)
-	var uPrefixes []string
-	for key := range prefixes {
-		uPrefixes = append(uPrefixes, key)
+	loi, err := c.ListObjects(ctx, bucket, prefix, marker, delimiter, maxKeys)
+	if err != nil {
+		return result, err
 	}
-	return ListObjectsV2Info{
-		Objects:           objInfos,
-		ContinuationToken: continuationToken,
-		Prefixes:          unique(uPrefixes),
-	}, nil
+
+	listObjectsV2Info := ListObjectsV2Info{
+		IsTruncated:           loi.IsTruncated,
+		ContinuationToken:     continuationToken,
+		NextContinuationToken: loi.NextMarker,
+		Objects:               loi.Objects,
+		Prefixes:              loi.Prefixes,
+	}
+	return listObjectsV2Info, err
 }
 
 func getCacheStat(cacheObjPath string) (meta *cacheMeta, partial bool, numHits int, err error) {
@@ -952,8 +961,7 @@ func (c *cacheObjects) uploadObject(ctx context.Context, oi ObjectInfo) {
 		size = cReader.ObjInfo.Size
 	} else {
 		delete(meta, writeBackRetryHeader)
-		ldeleted := c.listTree.Delete([]byte(oi.Bucket + "/" + oi.Name))
-		fmt.Printf("deleted %s status %v \n", oi.Bucket+"/"+oi.Name, ldeleted)
+		c.deleteFromListTree(oi.Bucket + "/" + oi.Name)
 	}
 	meta[writeBackStatusHeader] = wbCommitStatus.String()
 	meta["etag"] = oi.ETag
@@ -963,6 +971,16 @@ func (c *cacheObjects) uploadObject(ctx context.Context, oi ObjectInfo) {
 		time.Sleep(time.Second * time.Duration(retryCnt%10+1))
 		c.queueWritebackRetry(oi)
 	}
+}
+
+func (c *cacheObjects) deleteFromListTree(key string) {
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Printf("Recovered from panic from list tree delete: %v", r)
+		}
+	}()
+	_, ldeleted := c.listTree.Delete([]byte(key))
+	fmt.Printf("deleted %s status %v \n", key, ldeleted)
 }
 
 func (c *cacheObjects) queueWritebackRetry(oi ObjectInfo) {
@@ -995,7 +1013,7 @@ func newServerCacheObjects(ctx context.Context, config cache.Config) (CacheObjec
 		uploadWorkers:           config.UploadWorkers,
 		uploadQueueTh:           config.UploadQueueTh,
 		cacheStats:              newCacheStats(),
-		listTree:                art.NewTree(),
+		listTree:                art.New(),
 		writeBackUploadBufferCh: make(chan ObjectInfo, 100000),
 		InnerGetObjectInfoFn: func(ctx context.Context, bucket, object string, opts ObjectOptions) (ObjectInfo, error) {
 			return newObjectLayerFn().GetObjectInfo(ctx, bucket, object, opts)

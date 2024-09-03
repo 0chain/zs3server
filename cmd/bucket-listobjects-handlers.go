@@ -21,6 +21,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -95,6 +96,37 @@ func mergePrefixes(l1, l2 []string) []string {
 	}
 
 	return mergedList
+}
+
+func limitMergeObjects(mergeObjects []ObjectInfo, mergePrefixes []string, maxKeys int) ([]ObjectInfo, []string, string) {
+	objPrefixMap := map[string]ObjectInfo{}
+	for _, ob := range mergeObjects {
+		objPrefixMap[ob.Name] = ob
+	}
+	for _, pre := range mergePrefixes {
+		objPrefixMap[pre] = ObjectInfo{IsDir: true}
+	}
+
+	keys := make([]string, 0, len(objPrefixMap))
+	for key := range objPrefixMap {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	limitedObjs := []ObjectInfo{}
+	limitedPrefixes := []string{}
+	nextMarker := ""
+	for i, key := range keys {
+		if objPrefixMap[key].IsDir {
+			limitedPrefixes = append(limitedPrefixes, key)
+		} else {
+			limitedObjs = append(limitedObjs, objPrefixMap[key])
+		}
+		if i >= maxKeys {
+			nextMarker = key
+			break
+		}
+	}
+	return limitedObjs, limitedPrefixes, nextMarker
 }
 
 // Validate all the ListObjects query arguments, returns an APIErrorCode
@@ -328,11 +360,17 @@ func (api objectAPIHandlers) ListObjectsV2Handler(w http.ResponseWriter, r *http
 		writeErrorResponse(ctx, w, toAPIError(ctx, err), r.URL)
 		return
 	}
+	isTruncated := listObjectsV2Info.IsTruncated || listObjectsV2InfoCache.IsTruncated
 	mergeObjects := mergeListObjects(listObjectsV2Info.Objects, listObjectsV2InfoCache.Objects)
 	mergePrefixes := mergePrefixes(listObjectsV2Info.Prefixes, listObjectsV2InfoCache.Prefixes)
-	listObjectsV2Info.Objects = mergeObjects
-	listObjectsV2Info.Prefixes = mergePrefixes
+	limitedObjects, limitedPrefix, nextMarker := limitMergeObjects(mergeObjects, mergePrefixes, maxKeys)
+	listObjectsV2Info.Objects = limitedObjects
+	listObjectsV2Info.Prefixes = limitedPrefix
+	listObjectsV2Info.NextContinuationToken = nextMarker
+	listObjectsV2Info.IsTruncated = isTruncated
 
+	fmt.Printf("Final listObjectsV2InfoCache %+v\n", listObjectsV2InfoCache)
+	fmt.Printf("Final listObjectsV2Info %+v\n", listObjectsV2Info)
 	concurrentDecryptETag(ctx, listObjectsV2Info.Objects)
 
 	response := generateListObjectsV2Response(bucket, prefix, token, listObjectsV2Info.NextContinuationToken, startAfter,
@@ -458,12 +496,14 @@ func (api objectAPIHandlers) ListObjectsV1Handler(w http.ResponseWriter, r *http
 		writeErrorResponse(ctx, w, toAPIError(ctx, err), r.URL)
 		return
 	}
+	isTruncated := listObjectsInfo.IsTruncated || listObjectsInfoCache.IsTruncated
 	mergeObjects := mergeListObjects(listObjectsInfo.Objects, listObjectsInfoCache.Objects)
 	mergePrefixes := mergePrefixes(listObjectsInfo.Prefixes, listObjectsInfoCache.Prefixes)
-
-	listObjectsInfo.Objects = mergeObjects
-	listObjectsInfo.Prefixes = mergePrefixes
-
+	limitedObjects, limitedPrefix, nextMarker := limitMergeObjects(mergeObjects, mergePrefixes, maxKeys)
+	listObjectsInfo.Objects = limitedObjects
+	listObjectsInfo.Prefixes = limitedPrefix
+	listObjectsInfo.NextMarker = nextMarker
+	listObjectsInfo.IsTruncated = isTruncated
 	concurrentDecryptETag(ctx, listObjectsInfo.Objects)
 
 	response := generateListObjectsV1Response(bucket, prefix, marker, delimiter, encodingType, maxKeys, listObjectsInfo)
