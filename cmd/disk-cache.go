@@ -526,7 +526,6 @@ func (c *cacheObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 	objectCount := 0
 	leafFilter := func(n art.Node) bool {
 		if n.Kind() == art.Leaf {
-			fmt.Println("value=", string(n.Key()), n.Value())
 			if strings.HasPrefix(string(n.Key()), rootprefix) {
 				if marker == "" || string(n.Key()) > rootMarker {
 					trimmed := strings.TrimPrefix(string(n.Key()), rootprefix)
@@ -539,7 +538,10 @@ func (c *cacheObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 									objInfos = append(objInfos, ob)
 								}
 							} else if delimiter != "" {
-								prefixes[prefix+parts[0]+delimiter] = true
+								dir := prefix + parts[0] + delimiter
+								if marker == "" || dir > marker {
+									prefixes[dir] = true
+								}
 							}
 						}
 					}

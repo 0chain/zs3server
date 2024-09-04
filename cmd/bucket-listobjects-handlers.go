@@ -121,7 +121,7 @@ func limitMergeObjects(mergeObjects []ObjectInfo, mergePrefixes []string, maxKey
 		} else {
 			limitedObjs = append(limitedObjs, objPrefixMap[key])
 		}
-		if i >= maxKeys {
+		if i >= (maxKeys - 1) {
 			nextMarker = key
 			break
 		}
@@ -360,14 +360,16 @@ func (api objectAPIHandlers) ListObjectsV2Handler(w http.ResponseWriter, r *http
 		writeErrorResponse(ctx, w, toAPIError(ctx, err), r.URL)
 		return
 	}
-	isTruncated := listObjectsV2Info.IsTruncated || listObjectsV2InfoCache.IsTruncated
+
 	mergeObjects := mergeListObjects(listObjectsV2Info.Objects, listObjectsV2InfoCache.Objects)
 	mergePrefixes := mergePrefixes(listObjectsV2Info.Prefixes, listObjectsV2InfoCache.Prefixes)
 	limitedObjects, limitedPrefix, nextMarker := limitMergeObjects(mergeObjects, mergePrefixes, maxKeys)
 	listObjectsV2Info.Objects = limitedObjects
 	listObjectsV2Info.Prefixes = limitedPrefix
-	listObjectsV2Info.NextContinuationToken = nextMarker
-	listObjectsV2Info.IsTruncated = isTruncated
+	if nextMarker != "" {
+		listObjectsV2Info.NextContinuationToken = nextMarker
+		listObjectsV2Info.IsTruncated = true
+	}
 
 	fmt.Printf("Final listObjectsV2InfoCache %+v\n", listObjectsV2InfoCache)
 	fmt.Printf("Final listObjectsV2Info %+v\n", listObjectsV2Info)
@@ -496,14 +498,16 @@ func (api objectAPIHandlers) ListObjectsV1Handler(w http.ResponseWriter, r *http
 		writeErrorResponse(ctx, w, toAPIError(ctx, err), r.URL)
 		return
 	}
-	isTruncated := listObjectsInfo.IsTruncated || listObjectsInfoCache.IsTruncated
 	mergeObjects := mergeListObjects(listObjectsInfo.Objects, listObjectsInfoCache.Objects)
 	mergePrefixes := mergePrefixes(listObjectsInfo.Prefixes, listObjectsInfoCache.Prefixes)
 	limitedObjects, limitedPrefix, nextMarker := limitMergeObjects(mergeObjects, mergePrefixes, maxKeys)
 	listObjectsInfo.Objects = limitedObjects
 	listObjectsInfo.Prefixes = limitedPrefix
-	listObjectsInfo.NextMarker = nextMarker
-	listObjectsInfo.IsTruncated = isTruncated
+	if nextMarker != "" {
+		listObjectsInfo.NextMarker = nextMarker
+		listObjectsInfo.IsTruncated = true
+	}
+
 	concurrentDecryptETag(ctx, listObjectsInfo.Objects)
 
 	response := generateListObjectsV1Response(bucket, prefix, marker, delimiter, encodingType, maxKeys, listObjectsInfo)
