@@ -376,7 +376,7 @@ func getFileReader(ctx context.Context,
 
 }
 
-func putFile(ctx context.Context, alloc *sdk.Allocation, remotePath, contentType string, r io.Reader, size int64, isUpdate bool, userDefined map[string]string) (err error) {
+func putFile(ctx context.Context, alloc *sdk.Allocation, remotePath, contentType string, r io.Reader, size int64, _ bool, userDefined map[string]string) (err error) {
 	fileName := filepath.Base(remotePath)
 	var customMeta string
 	if len(userDefined) > 0 {
@@ -409,9 +409,7 @@ func putFile(ctx context.Context, alloc *sdk.Allocation, remotePath, contentType
 		},
 		StreamUpload: isStreamUpload,
 	}
-	if isUpdate {
-		opRequest.OperationType = constants.FileOperationUpdate
-	}
+
 	if isStreamUpload {
 		err = alloc.DoMultiOperation([]sdk.OperationRequest{opRequest})
 		if err != nil && !isSameRootError(err) {
