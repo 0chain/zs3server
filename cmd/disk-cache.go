@@ -551,7 +551,7 @@ func (c *cacheObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 		}
 		return true
 	}
-	c.listTree.ForEachPrefix([]byte(rootprefix), leafFilter)
+	c.prefixSearch(rootprefix, leafFilter)
 	var uPrefixes []string
 	for key := range prefixes {
 		uPrefixes = append(uPrefixes, key)
@@ -565,6 +565,15 @@ func (c *cacheObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 		Prefixes:    unique(uPrefixes),
 		IsTruncated: isTruncated,
 	}, nil
+}
+
+func (c *cacheObjects) prefixSearch(rootprefix string, leafFilter art.Callback) {
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Printf("Recovered from panic from list tree listobj: %v", r)
+		}
+	}()
+	c.listTree.ForEachPrefix([]byte(rootprefix), leafFilter)
 }
 
 func (c *cacheObjects) ListObjectsV2(ctx context.Context, bucket, prefix, continuationToken, delimiter string, maxKeys int, fetchOwner bool, startAfter string) (result ListObjectsV2Info, err error) {
