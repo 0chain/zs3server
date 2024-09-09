@@ -125,7 +125,8 @@ type cacheObjects struct {
 	// Cache stats
 	cacheStats *CacheStats
 
-	listTree                art.Tree
+	//listTree                art.Tree
+	listTree                *ThreadSafeListTree
 	writeBackUploadBufferCh chan ObjectInfo
 
 	InnerGetObjectNInfoFn          func(ctx context.Context, bucket, object string, rs *HTTPRangeSpec, h http.Header, lockType LockType, opts ObjectOptions) (gr *GetObjectReader, err error)
@@ -426,6 +427,7 @@ func (c *cacheObjects) GetObjectInfo(ctx context.Context, bucket, object string,
 	// fetch diskCache if object is currently cached or nearest available cache drive
 	dcache, err := c.getCacheToLoc(ctx, bucket, object)
 	if err != nil {
+		fmt.Println("err dcache not avialable", err)
 		return getObjectInfoFn(ctx, bucket, object, opts)
 	}
 	var cc *cacheControl
@@ -1024,7 +1026,7 @@ func newServerCacheObjects(ctx context.Context, config cache.Config) (CacheObjec
 		uploadWorkers:           config.UploadWorkers,
 		uploadQueueTh:           config.UploadQueueTh,
 		cacheStats:              newCacheStats(),
-		listTree:                art.New(),
+		listTree:                newThreadSafeListTree(),
 		writeBackUploadBufferCh: make(chan ObjectInfo, 100000),
 		InnerGetObjectInfoFn: func(ctx context.Context, bucket, object string, opts ObjectOptions) (ObjectInfo, error) {
 			return newObjectLayerFn().GetObjectInfo(ctx, bucket, object, opts)
