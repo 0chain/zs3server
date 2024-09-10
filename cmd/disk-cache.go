@@ -458,9 +458,10 @@ func (c *cacheObjects) GetObjectInfo(ctx context.Context, bucket, object string,
 			return cachedObjInfo, nil
 		}
 		// serve cache metadata without ETag verification if writeback commit is not yet complete
-		if writebackInProgress(cachedObjInfo.UserDefined) {
-			return cachedObjInfo, nil
-		}
+		fmt.Println("writebackInProgress stat", writebackInProgress(cachedObjInfo.UserDefined))
+
+		return cachedObjInfo, nil
+
 	}
 
 	objInfo, err := getObjectInfoFn(ctx, bucket, object, opts)
