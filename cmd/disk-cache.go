@@ -247,6 +247,7 @@ func (c *cacheObjects) incCacheStats(size int64) {
 }
 
 func (c *cacheObjects) GetObjectNInfo(ctx context.Context, bucket, object string, rs *HTTPRangeSpec, h http.Header, lockType LockType, opts ObjectOptions) (gr *GetObjectReader, err error) {
+	fmt.Println("disk cache GetObjectNInfo")
 	if c.isCacheExclude(bucket, object) || c.skipCache() {
 		return c.InnerGetObjectNInfoFn(ctx, bucket, object, rs, h, lockType, opts)
 	}
@@ -418,6 +419,7 @@ func (c *cacheObjects) GetObjectNInfo(ctx context.Context, bucket, object string
 
 // Returns ObjectInfo from cache if available.
 func (c *cacheObjects) GetObjectInfo(ctx context.Context, bucket, object string, opts ObjectOptions) (ObjectInfo, error) {
+	fmt.Println("disk cache ObjectInfo")
 	getObjectInfoFn := c.InnerGetObjectInfoFn
 
 	if c.isCacheExclude(bucket, object) || c.skipCache() {
