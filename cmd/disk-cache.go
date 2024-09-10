@@ -249,6 +249,7 @@ func (c *cacheObjects) incCacheStats(size int64) {
 func (c *cacheObjects) GetObjectNInfo(ctx context.Context, bucket, object string, rs *HTTPRangeSpec, h http.Header, lockType LockType, opts ObjectOptions) (gr *GetObjectReader, err error) {
 	fmt.Println("disk cache GetObjectNInfo")
 	if c.isCacheExclude(bucket, object) || c.skipCache() {
+		fmt.Println("disk cache isCacheExclude")
 		return c.InnerGetObjectNInfoFn(ctx, bucket, object, rs, h, lockType, opts)
 	}
 	var cc *cacheControl
@@ -256,10 +257,12 @@ func (c *cacheObjects) GetObjectNInfo(ctx context.Context, bucket, object string
 	// fetch diskCache if object is currently cached or nearest available cache drive
 	dcache, err := c.getCacheToLoc(ctx, bucket, object)
 	if err != nil {
+		fmt.Println("disk cache GetObjectNInfo err1 ", err)
 		return c.InnerGetObjectNInfoFn(ctx, bucket, object, rs, h, lockType, opts)
 	}
 
 	cacheReader, numCacheHits, cacheErr := dcache.Get(ctx, bucket, object, rs, h, opts)
+	fmt.Println("disk cache GetObjectNInfo cache err", cacheErr)
 	if cacheErr == nil {
 		cacheObjSize = cacheReader.ObjInfo.Size
 		if rs != nil {
@@ -280,27 +283,35 @@ func (c *cacheObjects) GetObjectNInfo(ctx context.Context, bucket, object string
 			c.cacheStats.incHit()
 			c.cacheStats.incBytesServed(bytesServed)
 			c.incHitsToMeta(ctx, dcache, bucket, object, cacheReader.ObjInfo.Size, cacheReader.ObjInfo.ETag, rs)
+			fmt.Println("disk cache return cacheReader")
 			return cacheReader, nil
 		}
 		if cc != nil && cc.noStore {
 			cacheReader.Close()
 			c.cacheStats.incMiss()
+			fmt.Println("disk cache ObjectNInfo cc.noStore")
 			bReader, err := c.InnerGetObjectNInfoFn(ctx, bucket, object, rs, h, lockType, opts)
 			bReader.ObjInfo.CacheLookupStatus = CacheHit
 			bReader.ObjInfo.CacheStatus = CacheMiss
+			fmt.Println("disk cache return bReader")
 			return bReader, err
 		}
 		// serve cached content without ETag verification if writeback commit is not yet complete
-		if writebackInProgress(cacheReader.ObjInfo.UserDefined) {
-			return cacheReader, nil
-		}
+		fmt.Println("writebackInProgress", writebackInProgress(cacheReader.ObjInfo.UserDefined))
+
+		fmt.Println("disk cache return cacheReader2")
+		return cacheReader, nil
 	}
+
+	fmt.Println("disk cache GetObjectNInfo after cache", cacheErr)
 
 	objInfo, err := c.InnerGetObjectInfoFn(ctx, bucket, object, opts)
 	if backendDownError(err) && cacheErr == nil {
 		c.incCacheStats(cacheObjSize)
+		fmt.Println("disk cache return cacheReader3")
 		return cacheReader, nil
 	} else if err != nil {
+		fmt.Println("disk cache return bReader err", err)
 		if cacheErr == nil {
 			cacheReader.Close()
 		}
@@ -320,6 +331,7 @@ func (c *cacheObjects) GetObjectNInfo(ctx context.Context, bucket, object string
 			cacheReader.Close()
 		}
 		c.cacheStats.incMiss()
+		fmt.Println("disk cache ObjectNInfo !objInfo.IsCacheable")
 		return c.InnerGetObjectNInfoFn(ctx, bucket, object, rs, h, lockType, opts)
 	}
 	// skip cache for objects with locks
@@ -330,6 +342,7 @@ func (c *cacheObjects) GetObjectNInfo(ctx context.Context, bucket, object string
 			cacheReader.Close()
 		}
 		c.cacheStats.incMiss()
+		fmt.Println("disk cache ObjectNInfo cache lock")
 		return c.InnerGetObjectNInfoFn(ctx, bucket, object, rs, h, lockType, opts)
 	}
 	if cacheErr == nil {
@@ -338,6 +351,7 @@ func (c *cacheObjects) GetObjectNInfo(ctx context.Context, bucket, object string
 			// Update metadata in case server-side copy might have changed object metadata
 			c.updateMetadataIfChanged(ctx, dcache, bucket, object, objInfo, cacheReader.ObjInfo, rs)
 			c.incCacheStats(cacheObjSize)
+			fmt.Println("disk cache cacheReader4")
 			return cacheReader, nil
 		}
 		cacheReader.Close()
@@ -346,6 +360,7 @@ func (c *cacheObjects) GetObjectNInfo(ctx context.Context, bucket, object string
 	}
 
 	// Reaching here implies cache miss
+	fmt.Println("disk cache GetObjectNInfo cache misss")
 	c.cacheStats.incMiss()
 
 	bkReader, bkErr := c.InnerGetObjectNInfoFn(ctx, bucket, object, rs, h, lockType, opts)
