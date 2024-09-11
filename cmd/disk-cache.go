@@ -537,9 +537,18 @@ func (c *cacheObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 	if maxKeys == 0 {
 		return ListObjectsInfo{}, nil
 	}
-
+	if delimiter == "" {
+		fmt.Println("delimiter is empty")
+		delimiter = SlashSeparator
+	}
 	if delimiter == SlashSeparator && prefix == SlashSeparator {
 		return ListObjectsInfo{}, nil
+	}
+	// for prefix add trailing slash
+	if prefix != "" {
+		if !strings.HasSuffix(prefix, "/") {
+			prefix = prefix + "/"
+		}
 	}
 	rootprefix := bucket + "/" + prefix
 	rootMarker := bucket + "/" + marker
