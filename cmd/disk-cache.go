@@ -1258,7 +1258,7 @@ func (c *cacheObjects) NewMultipartUpload(ctx context.Context, bucket, object st
 		dcache.Delete(ctx, bucket, object)
 		return newMultipartUploadFn(ctx, bucket, object, opts)
 	}
-	if !c.commitWritethrough && !c.commitWriteback {
+	if !c.commitWritethrough {
 		return newMultipartUploadFn(ctx, bucket, object, opts)
 	}
 
@@ -1277,7 +1277,7 @@ func (c *cacheObjects) PutObjectPart(ctx context.Context, bucket, object, upload
 		return putObjectPartFn(ctx, bucket, object, uploadID, partID, data, opts)
 	}
 
-	if !c.commitWritethrough && !c.commitWriteback {
+	if !c.commitWritethrough {
 		return putObjectPartFn(ctx, bucket, object, uploadID, partID, data, opts)
 	}
 	if c.skipCache() {
@@ -1375,7 +1375,7 @@ func (c *cacheObjects) CopyObjectPart(ctx context.Context, srcBucket, srcObject,
 		return copyObjectPartFn(ctx, srcBucket, srcObject, dstBucket, dstObject, uploadID, partID, startOffset, length, srcInfo, srcOpts, dstOpts)
 	}
 
-	if !c.commitWritethrough && !c.commitWriteback {
+	if !c.commitWritethrough {
 		return copyObjectPartFn(ctx, srcBucket, srcObject, dstBucket, dstObject, uploadID, partID, startOffset, length, srcInfo, srcOpts, dstOpts)
 	}
 	if err := dcache.uploadIDExists(dstBucket, dstObject, uploadID); err != nil {
@@ -1413,7 +1413,7 @@ func (c *cacheObjects) CopyObjectPart(ctx context.Context, srcBucket, srcObject,
 // finalizes the upload saved in cache multipart dir.
 func (c *cacheObjects) CompleteMultipartUpload(ctx context.Context, bucket, object, uploadID string, uploadedParts []CompletePart, opts ObjectOptions) (oi ObjectInfo, err error) {
 	completeMultipartUploadFn := c.InnerCompleteMultipartUploadFn
-	if !c.commitWritethrough && !c.commitWriteback {
+	if !c.commitWritethrough {
 		return completeMultipartUploadFn(ctx, bucket, object, uploadID, uploadedParts, opts)
 	}
 	dcache, err := c.getCacheToLoc(ctx, bucket, object)
@@ -1449,7 +1449,7 @@ func (c *cacheObjects) CompleteMultipartUpload(ctx context.Context, bucket, obje
 // AbortMultipartUpload - aborts multipart upload on backend and cache.
 func (c *cacheObjects) AbortMultipartUpload(ctx context.Context, bucket, object, uploadID string, opts ObjectOptions) error {
 	abortMultipartUploadFn := c.InnerAbortMultipartUploadFn
-	if !c.commitWritethrough && !c.commitWriteback {
+	if !c.commitWritethrough {
 		return abortMultipartUploadFn(ctx, bucket, object, uploadID, opts)
 	}
 	dcache, err := c.getCacheToLoc(ctx, bucket, object)
