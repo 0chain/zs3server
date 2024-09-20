@@ -354,7 +354,6 @@ func (api objectAPIHandlers) getObjectHandler(ctx context.Context, objectAPI Obj
 			}) {
 				getObjectInfo := objectAPI.GetObjectInfo
 				if api.CacheAPI() != nil {
-					fmt.Println("Get ObjectInfo from cache")
 					getObjectInfo = api.CacheAPI().GetObjectInfo
 				}
 
@@ -370,7 +369,6 @@ func (api objectAPIHandlers) getObjectHandler(ctx context.Context, objectAPI Obj
 
 	getObjectNInfo := objectAPI.GetObjectNInfo
 	if api.CacheAPI() != nil {
-		fmt.Println("Get ObjectNNNInfo from cache")
 		getObjectNInfo = api.CacheAPI().GetObjectNInfo
 	}
 
@@ -554,11 +552,10 @@ func (api objectAPIHandlers) getObjectHandler(ctx context.Context, objectAPI Obj
 // This implementation of the GET operation retrieves object. To use GET,
 // you must have READ access to the object.
 func (api objectAPIHandlers) GetObjectHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("GetObjectHandler")
 	st := time.Now()
 	defer func() {
 		elapsed := time.Since(st).Milliseconds()
-		fmt.Printf("GetObjectHandler took %d ms\n", elapsed)
+		log.Printf("GetObjectHandler took %d ms\n", elapsed)
 	}()
 	ctx := newContext(r, w, "GetObject")
 
@@ -1531,11 +1528,10 @@ func (api objectAPIHandlers) CopyObjectHandler(w http.ResponseWriter, r *http.Re
 //   - X-Amz-Server-Side-Encryption-Customer-Key
 //   - X-Amz-Copy-Source-Server-Side-Encryption-Customer-Key
 func (api objectAPIHandlers) PutObjectHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("PutObjectHandler....")
 	st := time.Now()
 	defer func() {
 		elapsed := time.Since(st).Milliseconds()
-		fmt.Printf("PutObjectHandler took %d ms\n", elapsed)
+		log.Printf("PutObjectHandler took %d ms\n", elapsed)
 	}()
 	ctx := newContext(r, w, "PutObject")
 	defer logger.AuditLog(ctx, w, r, mustGetClaimsFromToken(r))
@@ -1734,7 +1730,6 @@ func (api objectAPIHandlers) PutObjectHandler(w http.ResponseWriter, r *http.Req
 	}
 
 	if api.CacheAPI() != nil {
-		fmt.Println("Put Object cache")
 		putObject = api.CacheAPI().PutObject
 	}
 
@@ -1883,7 +1878,6 @@ func (api objectAPIHandlers) PutObjectHandler(w http.ResponseWriter, r *http.Req
 // This implementation of the PUT operation adds multiple objects to a bucket.
 
 func (api objectAPIHandlers) PutMultipleObjectsHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("Harsh PutMultipleObjects")
 	ctx := newContext(r, w, "PutMultipleObjects")
 	defer logger.AuditLog(ctx, w, r, mustGetClaimsFromToken(r))
 
@@ -2138,7 +2132,6 @@ func (api objectAPIHandlers) PutObjectExtractHandler(w http.ResponseWriter, r *h
 	holdPerms := isPutActionAllowed(ctx, getRequestAuthType(r), bucket, object, r, iampolicy.PutObjectLegalHoldAction)
 
 	if api.CacheAPI() != nil {
-		fmt.Println("Put Object cache 22")
 		putObject = api.CacheAPI().PutObject
 	}
 
@@ -3457,7 +3450,6 @@ func (api objectAPIHandlers) CompleteMultipartUploadHandler(w http.ResponseWrite
 
 // DeleteObjectHandler - delete an object
 func (api objectAPIHandlers) DeleteObjectHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("DeleteObjectHandler")
 	ctx := newContext(r, w, "DeleteObject")
 
 	defer logger.AuditLog(ctx, w, r, mustGetClaimsFromToken(r))
@@ -3572,7 +3564,6 @@ func (api objectAPIHandlers) DeleteObjectHandler(w http.ResponseWriter, r *http.
 	// http://docs.aws.amazon.com/AmazonS3/latest/API/RESTObjectDELETE.html
 	objInfo, err := deleteObject(ctx, bucket, object, opts)
 	if err != nil {
-		fmt.Println("DeleteObjectHandler err", err)
 		switch err.(type) {
 		case BucketNotFound:
 			// When bucket doesn't exist specially handle it.

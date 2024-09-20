@@ -27,6 +27,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"os"
 	"path"
@@ -220,7 +221,7 @@ func newDiskCache(ctx context.Context, dir string, config cache.Config) (*diskCa
 	if cache.commitWriteback {
 		go func() {
 			tickInterval := time.Duration(config.WriteBackInterval) * time.Second
-			fmt.Println("write back time interval", tickInterval)
+			log.Println("write back time interval", tickInterval)
 			ticker := time.NewTicker(tickInterval)
 			defer ticker.Stop()
 			defer close(cache.retryWritebackCh)
@@ -1083,7 +1084,6 @@ func (c *diskCache) bitrotReadFromCache(ctx context.Context, filePath string, of
 // Get returns ObjectInfo and reader for object from disk cache
 func (c *diskCache) Get(ctx context.Context, bucket, object string, rs *HTTPRangeSpec, h http.Header, opts ObjectOptions) (gr *GetObjectReader, numHits int, err error) {
 	cacheObjPath := getCacheSHADir(c.dir, bucket, object)
-	fmt.Println("cacheObjPath getCacheSHADir", cacheObjPath)
 	cLock := c.NewNSLockFn(cacheObjPath)
 	lkctx, err := cLock.GetRLock(ctx, globalOperationTimeout)
 	if err != nil {
@@ -1184,7 +1184,6 @@ func (c *diskCache) Get(ctx context.Context, bucket, object string, rs *HTTPRang
 		go func() {
 			if writebackInProgress(objInfo.UserDefined) {
 				cacheObjPath = getCacheWriteBackSHADir(c.dir, bucket, object)
-				fmt.Println("cacheObjPath getCacheSHADir", cacheObjPath)
 			}
 			filePath := pathJoin(cacheObjPath, cacheFile)
 			err := c.bitrotReadFromCache(ctx, filePath, startOffset, length, pw)
@@ -1242,7 +1241,7 @@ func (c *diskCache) Exists(ctx context.Context, bucket, object string) bool {
 
 // queues writeback upload failures on server startup
 func (c *diskCache) scanCacheWritebackFailures(ctx context.Context) {
-	fmt.Println("scan cache write back failures")
+	log.Println("scan cache write back failures")
 	//defer close(c.retryWritebackCh) // don't close the channel
 	filterFn := func(name string, typ os.FileMode) error {
 		if name == minioMetaBucket {
@@ -1250,7 +1249,6 @@ func (c *diskCache) scanCacheWritebackFailures(ctx context.Context) {
 			return nil
 		}
 		cacheDir := pathJoin(c.dir, name)
-		fmt.Println("cachedir to be uploaded in backend", cacheDir)
 		meta, _, _, err := c.statCachedMeta(ctx, cacheDir)
 		if err != nil {
 			return nil
@@ -1258,7 +1256,6 @@ func (c *diskCache) scanCacheWritebackFailures(ctx context.Context) {
 
 		objInfo := meta.ToObjectInfo()
 		status, ok := objInfo.UserDefined[writeBackStatusHeader]
-		fmt.Println("status of file", status)
 		if !ok || status == CommitComplete.String() {
 			return nil
 		}

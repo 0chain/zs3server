@@ -19,7 +19,7 @@ package cmd
 
 import (
 	"context"
-	"fmt"
+	"log"
 	"net/http"
 	"sort"
 	"strconv"
@@ -283,11 +283,10 @@ func (api objectAPIHandlers) ListObjectsV2MHandler(w http.ResponseWriter, r *htt
 // NOTE: It is recommended that this API to be used for application development.
 // MinIO continues to support ListObjectsV1 for supporting legacy tools.
 func (api objectAPIHandlers) ListObjectsV2Handler(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("ListObjectsV2Handler")
 	st := time.Now()
 	defer func() {
 		elapsed := time.Since(st).Milliseconds()
-		fmt.Printf("ListObjectsV2Handler took %d ms\n", elapsed)
+		log.Printf("ListObjectsV2Handler took %d ms\n", elapsed)
 	}()
 	ctx := newContext(r, w, "ListObjectsV2")
 
@@ -352,7 +351,7 @@ func (api objectAPIHandlers) ListObjectsV2Handler(w http.ResponseWriter, r *http
 			stc := time.Now()
 			listObjectsV2InfoCache, errC = listObjectsV2Cache(ctx, bucket, prefix, token, delimiter, maxKeys, fetchOwner, startAfter)
 			elap := time.Since(stc)
-			fmt.Println("List object cache time", elap)
+			log.Println("List object cache time", elap)
 		}()
 		wg.Wait()
 	}
@@ -371,8 +370,6 @@ func (api objectAPIHandlers) ListObjectsV2Handler(w http.ResponseWriter, r *http
 		listObjectsV2Info.IsTruncated = true
 	}
 
-	fmt.Printf("Final listObjectsV2InfoCache %+v\n", listObjectsV2InfoCache)
-	fmt.Printf("Final listObjectsV2Info %+v\n", listObjectsV2Info)
 	concurrentDecryptETag(ctx, listObjectsV2Info.Objects)
 
 	response := generateListObjectsV2Response(bucket, prefix, token, listObjectsV2Info.NextContinuationToken, startAfter,
@@ -427,11 +424,10 @@ func proxyRequestByNodeIndex(ctx context.Context, w http.ResponseWriter, r *http
 // of the objects in a bucket. You can use the request parameters as selection
 // criteria to return a subset of the objects in a bucket.
 func (api objectAPIHandlers) ListObjectsV1Handler(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("ListObjectsV1Handler")
 	st := time.Now()
 	defer func() {
 		elapsed := time.Since(st).Milliseconds()
-		fmt.Printf("ListObjectsV1Handler took %d ms\n", elapsed)
+		log.Printf("ListObjectsV1Handler took %d ms\n", elapsed)
 	}()
 	ctx := newContext(r, w, "ListObjectsV1")
 
@@ -489,7 +485,7 @@ func (api objectAPIHandlers) ListObjectsV1Handler(w http.ResponseWriter, r *http
 		stc := time.Now()
 		listObjectsInfoCache, errC = listObjectsCache(ctx, bucket, prefix, marker, delimiter, maxKeys)
 		elap := time.Since(stc)
-		fmt.Println("ListV1 object cache time", elap)
+		log.Println("ListV1 object cache time", elap)
 	}()
 
 	wg.Wait()

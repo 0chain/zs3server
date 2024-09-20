@@ -311,7 +311,6 @@ func (zob *zcnObjects) GetBucketInfo(ctx context.Context, bucket string) (bi min
 
 // GetObjectInfo Get file meta data and respond it as minio.ObjectInfo
 func (zob *zcnObjects) GetObjectInfo(ctx context.Context, bucket, object string, opts minio.ObjectOptions) (objInfo minio.ObjectInfo, err error) {
-	fmt.Println("GetObjectInfo from blobber")
 	var remotePath string
 	if bucket == rootBucketName {
 		remotePath = filepath.Join(rootPath, object)
@@ -357,7 +356,6 @@ func (zob *zcnObjects) GetObjectInfo(ctx context.Context, bucket, object string,
 
 // GetObjectNInfo Provides reader with read cursor placed at offset upto some length
 func (zob *zcnObjects) GetObjectNInfo(ctx context.Context, bucket, object string, rs *minio.HTTPRangeSpec, h http.Header, lockType minio.LockType, opts minio.ObjectOptions) (gr *minio.GetObjectReader, err error) {
-	fmt.Println("GetObjectNInfo from blobber")
 	var remotePath string
 	if bucket == rootBucketName {
 		remotePath = filepath.Join(rootPath, object)
