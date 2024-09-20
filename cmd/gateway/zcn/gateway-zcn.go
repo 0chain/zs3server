@@ -143,10 +143,15 @@ func (z *ZCN) NewGatewayLayer(creds madmin.Credentials) (minio.ObjectLayer, erro
 	if err != nil {
 		return nil, err
 	}
+	status, _, _ := allocation.CheckAllocStatus()
+	if status == sdk.Broken {
+		return nil, errors.New("allocation_broken")
+	}
 	sdk.CurrentMode = sdk.UploadModeHigh
 	sdk.SetSingleClietnMode(true)
 	sdk.SetShouldVerifyHash(false)
 	sdk.SetSaveProgress(false)
+	allocation.SetCheckStatus(true)
 	zob := &zcnObjects{
 		alloc:   allocation,
 		metrics: minio.NewMetrics(),
