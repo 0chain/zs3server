@@ -129,6 +129,7 @@ type cacheObjects struct {
 	//listTree                art.Tree
 	listTree                *ThreadSafeListTree
 	writeBackUploadBufferCh chan ObjectInfo
+	writeBackInputCh        chan ObjectInfo
 
 	InnerGetObjectNInfoFn          func(ctx context.Context, bucket, object string, rs *HTTPRangeSpec, h http.Header, lockType LockType, opts ObjectOptions) (gr *GetObjectReader, err error)
 	InnerGetObjectInfoFn           func(ctx context.Context, bucket, object string, opts ObjectOptions) (objInfo ObjectInfo, err error)
@@ -853,7 +854,7 @@ func (c *cacheObjects) PutObject(ctx context.Context, bucket, object string, r *
 		c.listTree.Insert([]byte(objPath), oi)
 		//go c.uploadObject(GlobalContext, oi) // use schedule to upload in batch
 		select {
-		case c.writeBackUploadBufferCh <- oi:
+		case c.writeBackInputCh <- oi:
 		default:
 		}
 		return oi, nil
@@ -1026,6 +1027,7 @@ func newServerCacheObjects(ctx context.Context, config cache.Config) (CacheObjec
 		cacheStats:              newCacheStats(),
 		listTree:                newThreadSafeListTree(),
 		writeBackUploadBufferCh: make(chan ObjectInfo, 100000),
+		writeBackInputCh:        make(chan ObjectInfo, 100000),
 		InnerGetObjectInfoFn: func(ctx context.Context, bucket, object string, opts ObjectOptions) (ObjectInfo, error) {
 			return newObjectLayerFn().GetObjectInfo(ctx, bucket, object, opts)
 		},
@@ -1084,12 +1086,14 @@ func newServerCacheObjects(ctx context.Context, config cache.Config) (CacheObjec
 			<-GlobalContext.Done()
 			close(c.wbRetryCh)
 			close(c.writeBackUploadBufferCh)
+			close(c.writeBackInputCh)
 		}()
 		go c.queuePendingWriteback(ctx)
 		go c.recreateListTreeOnStartUp()
 		for i := 0; i < c.uploadWorkers; i++ {
 			go c.uploadToBackendFromCh()
 		}
+		go c.batcher()
 	}
 
 	return c, nil
@@ -1118,20 +1122,44 @@ func (c *cacheObjects) gc(ctx context.Context) {
 	}
 }
 
+func (c *cacheObjects) batcher() {
+	var batch []ObjectInfo
+
+	for {
+		select {
+		case obj, ok := <-c.writeBackInputCh:
+			if !ok {
+				// Input channel closed, process any remaining batch
+				if len(batch) > 0 {
+					for _, batchItem := range batch {
+						c.writeBackUploadBufferCh <- batchItem
+					}
+				}
+				return
+			}
+			batch = append(batch, obj)
+			if len(batch) >= c.uploadQueueTh {
+				for _, batchItem := range batch {
+					c.writeBackUploadBufferCh <- batchItem
+				}
+				batch = nil // Reset batch
+			}
+		default:
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+}
+
 func (c *cacheObjects) uploadToBackendFromCh() {
 	for {
-		if len(c.writeBackUploadBufferCh) >= c.uploadQueueTh {
-			select {
-			case obj, ok := <-c.writeBackUploadBufferCh:
-				if !ok {
-					return
-				}
-				c.uploadObject(GlobalContext, obj)
-			default:
-				time.Sleep(100 * time.Millisecond) // Prevent busy waiting
+		select {
+		case obj, ok := <-c.writeBackUploadBufferCh:
+			if !ok {
+				return
 			}
-		} else {
-			time.Sleep(1000 * time.Millisecond)
+			c.uploadObject(GlobalContext, obj)
+		default:
+			time.Sleep(100 * time.Millisecond) // Prevent busy waiting
 		}
 	}
 }
