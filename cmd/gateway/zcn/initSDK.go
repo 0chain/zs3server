@@ -127,7 +127,7 @@ func initializeSDK(configDir, allocid string, nonce int64) error {
 		sdk.SetNetwork(network.Miners, network.Sharders)
 	}
 
-	sdk.SetNumBlockDownloads(10)
+	sdk.SetNumBlockDownloads(100)
 	return nil
 }
 

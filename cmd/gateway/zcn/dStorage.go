@@ -25,7 +25,7 @@ import (
 var tempdir string
 
 const (
-	pageLimit = 100
+	pageLimit = 1000
 	numBlocks = 100
 	dirType   = "d"
 	fileType  = "f"
