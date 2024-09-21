@@ -329,7 +329,9 @@ func (api objectAPIHandlers) ListObjectsV2Handler(w http.ResponseWriter, r *http
 		errC                   error
 	)
 	listObjectsV2Cache := objectAPI.ListObjectsV2
+	cacheEnabled := false
 	if api.CacheAPI() != nil {
+		cacheEnabled = true
 		listObjectsV2Cache = api.CacheAPI().ListObjectsV2
 	}
 
@@ -348,10 +350,12 @@ func (api objectAPIHandlers) ListObjectsV2Handler(w http.ResponseWriter, r *http
 		}()
 		go func() {
 			defer wg.Done()
-			stc := time.Now()
-			listObjectsV2InfoCache, errC = listObjectsV2Cache(ctx, bucket, prefix, token, delimiter, maxKeys, fetchOwner, startAfter)
-			elap := time.Since(stc)
-			log.Println("List object cache time", elap)
+			if cacheEnabled {
+				stc := time.Now()
+				listObjectsV2InfoCache, errC = listObjectsV2Cache(ctx, bucket, prefix, token, delimiter, maxKeys, fetchOwner, startAfter)
+				elap := time.Since(stc)
+				log.Println("ListV2 object cache time", elap)
+			}
 		}()
 		wg.Wait()
 	}
@@ -462,7 +466,9 @@ func (api objectAPIHandlers) ListObjectsV1Handler(w http.ResponseWriter, r *http
 
 	listObjects := objectAPI.ListObjects
 	listObjectsCache := objectAPI.ListObjects
+	cacheEnabled := false
 	if api.CacheAPI() != nil {
+		cacheEnabled = true
 		listObjectsCache = api.CacheAPI().ListObjects
 	}
 	// Inititate a list objects operation based on the input params.
@@ -482,10 +488,12 @@ func (api objectAPIHandlers) ListObjectsV1Handler(w http.ResponseWriter, r *http
 	}()
 	go func() {
 		defer wg.Done()
-		stc := time.Now()
-		listObjectsInfoCache, errC = listObjectsCache(ctx, bucket, prefix, marker, delimiter, maxKeys)
-		elap := time.Since(stc)
-		log.Println("ListV1 object cache time", elap)
+		if cacheEnabled {
+			stc := time.Now()
+			listObjectsInfoCache, errC = listObjectsCache(ctx, bucket, prefix, marker, delimiter, maxKeys)
+			elap := time.Since(stc)
+			log.Println("ListV1 object cache time", elap)
+		}
 	}()
 
 	wg.Wait()
