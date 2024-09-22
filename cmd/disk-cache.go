@@ -1085,7 +1085,6 @@ func newServerCacheObjects(ctx context.Context, config cache.Config) (CacheObjec
 		go func() {
 			<-GlobalContext.Done()
 			close(c.wbRetryCh)
-			close(c.writeBackUploadBufferCh)
 			close(c.writeBackInputCh)
 		}()
 		go c.queuePendingWriteback(ctx)
@@ -1124,43 +1123,28 @@ func (c *cacheObjects) gc(ctx context.Context) {
 
 func (c *cacheObjects) batcher() {
 	var batch []ObjectInfo
-
-	for {
-		select {
-		case obj, ok := <-c.writeBackInputCh:
-			if !ok {
-				// Input channel closed, process any remaining batch
-				if len(batch) > 0 {
-					for _, batchItem := range batch {
-						c.writeBackUploadBufferCh <- batchItem
-					}
-				}
-				return
+	for obj := range c.writeBackInputCh {
+		batch = append(batch, obj)
+		if len(batch) >= c.uploadQueueTh {
+			for _, batchItem := range batch {
+				c.writeBackUploadBufferCh <- batchItem
 			}
-			batch = append(batch, obj)
-			if len(batch) >= c.uploadQueueTh {
-				for _, batchItem := range batch {
-					c.writeBackUploadBufferCh <- batchItem
-				}
-				batch = nil // Reset batch
-			}
-		default:
-			time.Sleep(100 * time.Millisecond)
+			batch = nil // Reset batch
 		}
 	}
+
+	if len(batch) > 0 {
+		for _, batchItem := range batch {
+			c.writeBackUploadBufferCh <- batchItem
+		}
+	}
+
+	close(c.writeBackUploadBufferCh)
 }
 
 func (c *cacheObjects) uploadToBackendFromCh() {
-	for {
-		select {
-		case obj, ok := <-c.writeBackUploadBufferCh:
-			if !ok {
-				return
-			}
-			c.uploadObject(GlobalContext, obj)
-		default:
-			time.Sleep(100 * time.Millisecond) // Prevent busy waiting
-		}
+	for obj := range c.writeBackUploadBufferCh {
+		c.uploadObject(GlobalContext, obj)
 	}
 }
 
