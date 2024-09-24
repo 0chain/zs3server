@@ -731,6 +731,7 @@ github.com/hashicorp/vault/sdk v0.1.13 h1:mOEPeOhT7jl0J4AMl1E705+BcmeRs1VmKNb9F0
 github.com/hashicorp/yamux v0.0.0-20181012175058-2f1d1f20f75d h1:kJCB4vdITiW1eC1vq2e6IsrXKrZit1bv/TDYFGMp4BQ=
 github.com/herumi/bls-go-binary v1.30.4 h1:djGiorPb4lFVRF/lsyB+EHVGVlcE7CYRmJKu72Vdpnk=
 github.com/hitenjain14/fasthttp v0.0.0-20240223160417-7458814cf3d0 h1:XCrNCir8+zDo+Ku7B+AXhzFnsJvSelx1YbQQTNpxtqI=
+github.com/hitenjain14/fasthttp v0.0.0-20240916135632-f9303a91736c h1:lDSIbcLu5TdT+uwb4wPzZgo1pQvKjP/tArL5QKjDJdI=
 github.com/holiman/uint256 v1.2.0/go.mod h1:y4ga/t+u+Xwd7CpDgZESaRcWy0I7XMlTMA25ApIH5Jw=
 github.com/hpcloud/tail v1.0.0 h1:nfCOvKYfkgYP8hkirhJocXT2+zOD8yUNjXaWfTlyFKI=
 github.com/hudl/fargo v1.3.0 h1:0U6+BtN6LhaYuTnIJq4Wyq5cpn6O2kWrxAtcqBmYY6w=
