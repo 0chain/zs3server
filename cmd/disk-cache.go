@@ -22,7 +22,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
@@ -37,6 +39,7 @@ import (
 	"github.com/minio/minio/internal/logger"
 	"github.com/minio/minio/internal/sync/errgroup"
 	"github.com/minio/pkg/wildcard"
+	"github.com/panjf2000/ants/v2"
 )
 
 const (
@@ -116,7 +119,8 @@ type cacheObjects struct {
 	// retry queue for writeback cache mode to reattempt upload to backend
 	wbRetryCh chan ObjectInfo
 	// Cache stats
-	cacheStats *CacheStats
+	cacheStats   *CacheStats
+	uploadGoPool *ants.MultiPool
 
 	InnerGetObjectNInfoFn          func(ctx context.Context, bucket, object string, rs *HTTPRangeSpec, h http.Header, lockType LockType, opts ObjectOptions) (gr *GetObjectReader, err error)
 	InnerGetObjectInfoFn           func(ctx context.Context, bucket, object string, opts ObjectOptions) (objInfo ObjectInfo, err error)
@@ -241,9 +245,9 @@ func (c *cacheObjects) GetObjectNInfo(ctx context.Context, bucket, object string
 	// fetch diskCache if object is currently cached or nearest available cache drive
 	dcache, err := c.getCacheToLoc(ctx, bucket, object)
 	if err != nil {
+		log.Println("errorGettingLoc: ", err)
 		return c.InnerGetObjectNInfoFn(ctx, bucket, object, rs, h, lockType, opts)
 	}
-
 	cacheReader, numCacheHits, cacheErr := dcache.Get(ctx, bucket, object, rs, h, opts)
 	if cacheErr == nil {
 		cacheObjSize = cacheReader.ObjInfo.Size
@@ -520,9 +524,9 @@ func (c *cacheObjects) skipCache() bool {
 // Returns true if object should be excluded from cache
 func (c *cacheObjects) isCacheExclude(bucket, object string) bool {
 	// exclude directories from cache
-	if strings.HasSuffix(object, SlashSeparator) {
-		return true
-	}
+	// if strings.HasSuffix(object, SlashSeparator) {
+	// 	return true
+	// }
 	for _, pattern := range c.exclude {
 		matchStr := fmt.Sprintf("%s/%s", bucket, object)
 		if ok := wildcard.MatchSimple(pattern, matchStr); ok {
@@ -662,6 +666,7 @@ func (c *cacheObjects) PutObject(ctx context.Context, bucket, object string, r *
 
 	// fetch from backend if there is no space on cache drive
 	if !dcache.diskSpaceAvailable(size) {
+		log.Println("diskSpaceNotAvailable")
 		return putObjectFn(ctx, bucket, object, r, opts)
 	}
 
@@ -689,7 +694,19 @@ func (c *cacheObjects) PutObject(ctx context.Context, bucket, object string, r *
 		if err != nil {
 			return ObjectInfo{}, err
 		}
-		go c.uploadObject(GlobalContext, oi)
+		coi := oi.Clone()
+		err = c.uploadGoPool.Submit(func() {
+			defer func() {
+				if r := recover(); r != nil {
+					fmt.Println("[recover]", r, debug.Stack())
+				}
+			}()
+			c.uploadObject(GlobalContext, coi)
+		})
+		if err != nil {
+			dcache.delete(bucket, object)
+			return ObjectInfo{}, err
+		}
 		return oi, nil
 	}
 	if !c.commitWritethrough {
@@ -773,6 +790,7 @@ func (c *cacheObjects) uploadObject(ctx context.Context, oi ObjectInfo) {
 	}
 	cReader, _, bErr := dcache.Get(ctx, oi.Bucket, oi.Name, nil, http.Header{}, ObjectOptions{})
 	if bErr != nil {
+		log.Println("errorGettingReader: ", bErr)
 		return
 	}
 	defer cReader.Close()
@@ -835,6 +853,11 @@ func newServerCacheObjects(ctx context.Context, config cache.Config) (CacheObjec
 	if err != nil {
 		return nil, err
 	}
+	uploadGoPool, err := ants.NewMultiPool(10, 40, ants.RoundRobin)
+	if err != nil {
+		return nil, err
+	}
+
 	c := &cacheObjects{
 		cache:              cache,
 		exclude:            config.Exclude,
@@ -843,7 +866,8 @@ func newServerCacheObjects(ctx context.Context, config cache.Config) (CacheObjec
 		commitWriteback:    config.CacheCommitMode == CommitWriteBack,
 		commitWritethrough: config.CacheCommitMode == CommitWriteThrough,
 
-		cacheStats: newCacheStats(),
+		cacheStats:   newCacheStats(),
+		uploadGoPool: uploadGoPool,
 		InnerGetObjectInfoFn: func(ctx context.Context, bucket, object string, opts ObjectOptions) (ObjectInfo, error) {
 			return newObjectLayerFn().GetObjectInfo(ctx, bucket, object, opts)
 		},
@@ -901,6 +925,7 @@ func newServerCacheObjects(ctx context.Context, config cache.Config) (CacheObjec
 		go func() {
 			<-GlobalContext.Done()
 			close(c.wbRetryCh)
+			uploadGoPool.ReleaseTimeout(5 * time.Second)
 		}()
 		go c.queuePendingWriteback(ctx)
 	}

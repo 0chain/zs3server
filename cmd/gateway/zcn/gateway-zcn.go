@@ -19,7 +19,6 @@ import (
 	"github.com/minio/minio/internal/logger"
 	"github.com/minio/pkg/mimedb"
 	"github.com/mitchellh/go-homedir"
-	"golang.org/x/sync/semaphore"
 
 	"github.com/0chain/gosdk/zboxcore/sdk"
 	"github.com/minio/cli"
@@ -122,7 +121,6 @@ func (z *ZCN) Name() string {
 }
 
 var (
-	contentMap  map[string]*semaphore.Weighted
 	contentLock sync.Mutex
 )
 
@@ -156,7 +154,6 @@ func (z *ZCN) NewGatewayLayer(creds madmin.Credentials) (minio.ObjectLayer, erro
 	if err != nil {
 		return nil, err
 	}
-	contentMap = make(map[string]*semaphore.Weighted)
 	ctx, cancel := context.WithCancel(context.Background())
 	zob.ctxCancel = cancel
 	IntiBatchUploadWorkers(ctx, allocation, serverConfig.BatchWaitTime, serverConfig.MaxBatchSize, serverConfig.BatchWorkers)
@@ -446,6 +443,10 @@ func (zob *zcnObjects) ListObjectsV2(ctx context.Context, bucket, prefix, contin
 
 // ListObjects Lists files of directories as objects
 func (zob *zcnObjects) ListObjects(ctx context.Context, bucket, prefix, marker, delimiter string, maxKeys int) (result minio.ListObjectsInfo, err error) {
+	now := time.Now()
+	defer func() {
+		log.Println("ListObjectsTook: ", time.Since(now).Milliseconds())
+	}()
 	// objFileType For root path list objects should only provide file and not dirs.
 	// Dirs under root path are presented as buckets as well
 	var remotePath, objFileType string
@@ -832,24 +833,6 @@ func (zob *zcnObjects) StorageInfo(ctx context.Context) (si minio.StorageInfo, _
 	si.Backend.Type = madmin.Gateway
 	si.Backend.GatewayOnline = true
 	return
-}
-
-func lockPath(ctx context.Context, path string) error {
-	contentLock.Lock()
-	defer contentLock.Unlock()
-	if _, ok := contentMap[path]; !ok {
-		contentMap[path] = semaphore.NewWeighted(1)
-	}
-	return contentMap[path].Acquire(ctx, 1)
-}
-
-func unlockPath(path string) {
-	contentLock.Lock()
-	defer contentLock.Unlock()
-	if sem, ok := contentMap[path]; ok {
-		sem.Release(1)
-		delete(contentMap, path)
-	}
 }
 
 /*
