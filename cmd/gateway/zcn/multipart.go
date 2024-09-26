@@ -108,16 +108,16 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object, conte
 	} else {
 		remotePath = filepath.Join(rootPath, bucket, object)
 	}
-	ref, err := getSingleRegularRef(zob.alloc, remotePath)
-	if err != nil {
-		if !isPathNoExistError(err) {
-			return "", err
-		}
-	}
+	// ref, err := getSingleRegularRef(zob.alloc, remotePath)
+	// if err != nil {
+	// 	if !isPathNoExistError(err) {
+	// 		return "", err
+	// 	}
+	// }
 
-	if ref != nil {
-		isUpdate = true
-	}
+	// if ref != nil {
+	// 	isUpdate = true
+	// }
 	uploadID := uuid.New().String()
 	mapLock.Lock()
 	memFile := &memFile{
