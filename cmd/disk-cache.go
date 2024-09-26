@@ -124,8 +124,7 @@ type cacheObjects struct {
 	// retry queue for writeback cache mode to reattempt upload to backend
 	wbRetryCh chan ObjectInfo
 	// Cache stats
-	cacheStats   *CacheStats
-	uploadGoPool *ants.MultiPool
+	cacheStats *CacheStats
 
 	//listTree                art.Tree
 	listTree                *ThreadSafeListTree
@@ -256,9 +255,9 @@ func (c *cacheObjects) GetObjectNInfo(ctx context.Context, bucket, object string
 	// fetch diskCache if object is currently cached or nearest available cache drive
 	dcache, err := c.getCacheToLoc(ctx, bucket, object)
 	if err != nil {
-		log.Println("errorGettingLoc: ", err)
 		return c.InnerGetObjectNInfoFn(ctx, bucket, object, rs, h, lockType, opts)
 	}
+
 	cacheReader, numCacheHits, cacheErr := dcache.Get(ctx, bucket, object, rs, h, opts)
 	if cacheErr == nil {
 		cacheObjSize = cacheReader.ObjInfo.Size
@@ -942,7 +941,6 @@ func (c *cacheObjects) uploadObject(ctx context.Context, oi ObjectInfo) {
 	}
 	cReader, _, bErr := dcache.Get(ctx, oi.Bucket, oi.Name, nil, http.Header{}, ObjectOptions{})
 	if bErr != nil {
-		log.Println("errorGettingReader: ", bErr)
 		return
 	}
 	defer cReader.Close()
@@ -1016,11 +1014,6 @@ func newServerCacheObjects(ctx context.Context, config cache.Config) (CacheObjec
 	if err != nil {
 		return nil, err
 	}
-	uploadGoPool, err := ants.NewMultiPool(10, 40, ants.RoundRobin)
-	if err != nil {
-		return nil, err
-	}
-
 	c := &cacheObjects{
 		cache:                   cache,
 		exclude:                 config.Exclude,
@@ -1100,6 +1093,11 @@ func newServerCacheObjects(ctx context.Context, config cache.Config) (CacheObjec
 			go c.uploadToBackendFromCh()
 		}
 		go c.batcher()
+	}
+
+	return c, nil
+}
+
 func (c *cacheObjects) gc(ctx context.Context) {
 	ticker := time.NewTicker(cacheGCInterval)
 
