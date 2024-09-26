@@ -7,7 +7,6 @@ toolchain go1.21.6
 require (
 	cloud.google.com/go/storage v1.27.0
 	github.com/0chain/errors v1.0.3
-	github.com/0chain/gosdk v1.17.6
 	github.com/Azure/azure-pipeline-go v0.2.2
 	github.com/Azure/azure-storage-blob-go v0.10.0
 	github.com/Shopify/sarama v1.28.0
@@ -105,6 +104,7 @@ require (
 	cloud.google.com/go/compute/metadata v0.2.3 // indirect
 	cloud.google.com/go/iam v0.11.0 // indirect
 	github.com/0chain/common v0.0.6-0.20230127095721-8df4d1d72565 // indirect
+	github.com/0chain/gosdk v1.17.9 // indirect
 	github.com/Azure/go-ntlmssp v0.0.0-20200615164410-66371956d46c // indirect
 	github.com/Luzifer/go-openssl/v3 v3.1.0 // indirect
 	github.com/PuerkitoBio/purell v1.1.1 // indirect
@@ -169,7 +169,7 @@ require (
 	github.com/hashicorp/golang-lru/v2 v2.0.1 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/herumi/bls-go-binary v1.31.0 // indirect
-	github.com/hitenjain14/fasthttp v0.0.0-20240527123209-06019e79bff9 // indirect
+	github.com/hitenjain14/fasthttp v0.0.0-20240916135632-f9303a91736c // indirect
 	github.com/holiman/uint256 v1.2.2-0.20230321075855-87b91420868c // indirect
 	github.com/jcmturner/aescts/v2 v2.0.0 // indirect
 	github.com/jcmturner/dnsutils/v2 v2.0.0 // indirect

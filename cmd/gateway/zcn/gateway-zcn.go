@@ -260,6 +260,11 @@ func (zob *zcnObjects) DeleteObjects(ctx context.Context, bucket string, objects
 	ops := make([]sdk.OperationRequest, 0, len(objects))
 	for _, object := range objects {
 		remotePath := filepath.Join(basePath, object.ObjectName)
+		_, err := getSingleRegularRef(zob.alloc, filepath.Clean(remotePath))
+		if err != nil {
+			continue
+		}
+
 		ops = append(ops, sdk.OperationRequest{
 			OperationType: constants.FileOperationDelete,
 			RemotePath:    remotePath,
