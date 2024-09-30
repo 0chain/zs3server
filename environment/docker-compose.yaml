@@ -98,6 +98,7 @@ services:
 
 
 volumes:
+  bleve-index:
   db:
     driver: local
 
