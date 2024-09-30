@@ -78,6 +78,25 @@ services:
     networks:
       zs_network:
   
+  tika:
+    image: apache/tika:latest
+    container_name: tika-server
+    ports:
+      - "9998:9998"
+    networks:
+      zs_network:
+  
+  zsearch:
+    build: ../zsearch
+    container_name: zsearch
+    ports:
+      - 3003:3003
+    volumes:
+      - bleve-index:/vindex
+    networks:
+      zs_network:
+
+
 volumes:
   db:
     driver: local
