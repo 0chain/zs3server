@@ -22,7 +22,7 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/index", ihandler.IndexHandler(index, client))
 	mux.HandleFunc("/search", handler.SearchHandler(index))
-
+	mux.HandleFunc("/psearch", ihandler.PutIndexHandler(index, client))
 	log.Println("Server is starting on port 3003")
 	if err := http.ListenAndServe(":3003", mux); err != nil {
 		log.Fatalln(err)
