@@ -24,6 +24,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -118,7 +119,7 @@ type cacheObjects struct {
 	maxCacheFileSize   int64
 	uploadWorkers      int
 	uploadQueueTh      int
-
+	indexSvcUrl        string
 	// if true migration is in progress from v1 to v2
 	migrating bool
 	// retry queue for writeback cache mode to reattempt upload to backend
@@ -984,6 +985,41 @@ func (c *cacheObjects) uploadObject(ctx context.Context, oi ObjectInfo) {
 		time.Sleep(time.Second * time.Duration(retryCnt%10+1))
 		c.queueWritebackRetry(oi)
 	}
+
+	log.Println("indexing file started")
+	cReader2, _, bErr2 := dcache.Get(ctx, oi.Bucket, oi.Name, nil, http.Header{}, ObjectOptions{})
+	if bErr2 != nil {
+		return
+	}
+	defer cReader2.Close()
+	c.indexFile(cReader2, oi.Bucket, oi.Name)
+}
+
+func (c *cacheObjects) indexFile(body io.ReadCloser, bucket string, object string) {
+	fmt.Println("indexing file func")
+
+	indexUrl := c.indexSvcUrl + "/zindex"
+	u, err := url.Parse(indexUrl)
+	if err != nil {
+		log.Println("err parsing url of zsearch", err)
+		return
+	}
+	query := u.Query()
+	query.Set("bucketName", bucket)
+	query.Set("objName", object)
+	u.RawQuery = query.Encode()
+	req, err := http.NewRequest("PUT", u.String(), body)
+	if err != nil {
+		log.Println("err creating index req", err)
+		return
+	}
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Println("err sending file for indexing", err)
+		return
+	}
+	defer resp.Body.Close()
 }
 
 func (c *cacheObjects) deleteFromListTree(key string) {
@@ -1024,6 +1060,7 @@ func newServerCacheObjects(ctx context.Context, config cache.Config) (CacheObjec
 		maxCacheFileSize:        config.MaxCacheFileSize,
 		uploadWorkers:           config.UploadWorkers,
 		uploadQueueTh:           config.UploadQueueTh,
+		indexSvcUrl:             config.IndexSvcUrl,
 		cacheStats:              newCacheStats(),
 		listTree:                newThreadSafeListTree(),
 		writeBackUploadBufferCh: make(chan ObjectInfo, 100000),

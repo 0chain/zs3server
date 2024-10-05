@@ -67,7 +67,6 @@ func PutIndexHandler(index bleve.Index, client *tika.Client) http.HandlerFunc {
 			return
 		}
 		eText := body[0]
-		fmt.Println("Extracted text", eText)
 		cleanText := utility.CleanText(eText)
 		fileInfo := model.FileInfo{}
 		fileInfo.Path = bucketName + "/" + objName

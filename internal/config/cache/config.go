@@ -51,6 +51,7 @@ type Config struct {
 	MaxCacheFileSize  int64    `json:"max_cache_file_size"`
 	UploadWorkers     int      `json:"upload_workers"`
 	UploadQueueTh     int      `json:"upload_queue_th"`
+	IndexSvcUrl       string   `json:"index_svc_url"`
 }
 
 // UnmarshalJSON - implements JSON unmarshal interface for unmarshalling
