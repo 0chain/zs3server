@@ -262,7 +262,7 @@ func LookupConfig(kvs config.KVS) (Config, error) {
 		}
 	}
 
-	if indexSvcUrl := env.Get(EnvIndexSvcUrl, "http://zsearch:3003/index"); indexSvcUrl != "" {
+	if indexSvcUrl := env.Get(EnvIndexSvcUrl, "http://zsearch:3003"); indexSvcUrl != "" {
 		cfg.IndexSvcUrl = indexSvcUrl
 	}
 	return cfg, nil

@@ -27,7 +27,7 @@ func OpenOrCreateIndex(indexPath string) (bleve.Index, error) {
 
 func IndexFiles(index bleve.Index, files []model.FileInfo) error {
 	for _, file := range files {
-		fmt.Printf("indexing file %+v \n", file)
+		fmt.Printf("bleve indexing file %s\n", file.Path)
 		err := index.Index(file.Path, file.Content+" "+file.Filename)
 		if err != nil {
 			return err

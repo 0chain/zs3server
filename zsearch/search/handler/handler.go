@@ -36,8 +36,8 @@ func SearchHandler(index bleve.Index) http.HandlerFunc {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		totalSearchTime := float64(time.Since(startTime).Microseconds())
-		log.Printf("Time taken for search %s is %f \n", query, totalSearchTime)
+		totalSearchTime := float64(time.Since(startTime).Milliseconds())
+		log.Printf("Time taken for search %s is %f ms\n", query, totalSearchTime)
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(searchResult)
 	}

@@ -26,11 +26,16 @@ func IndexHandler(index bleve.Index, client *tika.Client) http.HandlerFunc {
 		bucketName := r.FormValue("bucketName")
 		objName := r.FormValue("objName")
 		body, err := client.ParseRecursive(context.Background(), file)
-		if err != nil || len(body) == 0 {
+		if err != nil {
 			log.Printf("err parsing the file using tika %+v \n", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		if len(body) == 0 {
+			log.Println("No texts processed")
+			return
+		}
+
 		eText := body[0]
 		cleanText := utility.CleanText(eText)
 		fileInfo := model.FileInfo{}
@@ -49,37 +54,36 @@ func IndexHandler(index bleve.Index, client *tika.Client) http.HandlerFunc {
 	}
 }
 
-func PutIndexHandler(index bleve.Index, client *tika.Client) http.HandlerFunc {
+func PutIndexHandler(jobChan chan<- model.FileInfo, client *tika.Client) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("indexing file")
 		bucketName := r.URL.Query().Get("bucketName")
 		objName := r.URL.Query().Get("objName")
-		fmt.Println("objName", objName)
+		log.Printf("parsing file %s", bucketName+"/"+objName)
+
 		body, err := client.ParseRecursive(context.Background(), r.Body)
 		if err != nil {
-			log.Printf("err parsing the file using tika %+v \n", err)
+			log.Printf("Error parsing the file using Tika for %s/%s: %+v", bucketName, objName, err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		if len(body) == 0 {
-			log.Printf("no texts processed")
+			log.Printf("No texts processed for %s/%s", bucketName, objName)
 			http.Error(w, "no texts processed", http.StatusInternalServerError)
 			return
 		}
-		eText := body[0]
-		cleanText := utility.CleanText(eText)
-		fileInfo := model.FileInfo{}
-		fileInfo.Path = bucketName + "/" + objName
-		fileInfo.Filename = objName
-		fileInfo.Content = cleanText
-		err = utility.IndexFiles(index, []model.FileInfo{fileInfo})
-		if err != nil {
-			log.Printf("err indexing file %+v \n", err)
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
+
+		cleanText := utility.CleanText(body[0])
+
+		fileInfo := model.FileInfo{
+			Path:     bucketName + "/" + objName,
+			Filename: objName,
+			Content:  cleanText,
 		}
+
+		jobChan <- fileInfo
+
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("Files indexed successfully"))
+		w.Write([]byte("File received for processing"))
 
 	}
 }
