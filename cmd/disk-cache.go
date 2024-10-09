@@ -24,7 +24,7 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"runtime/debug"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -39,7 +39,7 @@ import (
 	"github.com/minio/minio/internal/logger"
 	"github.com/minio/minio/internal/sync/errgroup"
 	"github.com/minio/pkg/wildcard"
-	"github.com/panjf2000/ants/v2"
+	art "github.com/plar/go-adaptive-radix-tree"
 )
 
 const (
@@ -90,6 +90,8 @@ type CacheObjectLayer interface {
 	DeleteObjects(ctx context.Context, bucket string, objects []ObjectToDelete, opts ObjectOptions) ([]DeletedObject, []error)
 	PutObject(ctx context.Context, bucket, object string, data *PutObjReader, opts ObjectOptions) (objInfo ObjectInfo, err error)
 	CopyObject(ctx context.Context, srcBucket, srcObject, destBucket, destObject string, srcInfo ObjectInfo, srcOpts, dstOpts ObjectOptions) (objInfo ObjectInfo, err error)
+	ListObjects(ctx context.Context, bucket, prefix, marker, delimiter string, maxKeys int) (result ListObjectsInfo, err error)
+	ListObjectsV2(ctx context.Context, bucket, prefix, continuationToken, delimiter string, maxKeys int, fetchOwner bool, startAfter string) (result ListObjectsV2Info, err error)
 	// Multipart operations.
 	NewMultipartUpload(ctx context.Context, bucket, object string, opts ObjectOptions) (uploadID string, err error)
 	PutObjectPart(ctx context.Context, bucket, object, uploadID string, partID int, data *PutObjReader, opts ObjectOptions) (info PartInfo, err error)
@@ -113,14 +115,21 @@ type cacheObjects struct {
 	// commit objects in async manner
 	commitWriteback    bool
 	commitWritethrough bool
+	maxCacheFileSize   int64
+	uploadWorkers      int
+	uploadQueueTh      int
 
 	// if true migration is in progress from v1 to v2
 	migrating bool
 	// retry queue for writeback cache mode to reattempt upload to backend
 	wbRetryCh chan ObjectInfo
 	// Cache stats
-	cacheStats   *CacheStats
-	uploadGoPool *ants.MultiPool
+	cacheStats *CacheStats
+
+	//listTree                art.Tree
+	listTree                *ThreadSafeListTree
+	writeBackUploadBufferCh chan ObjectInfo
+	writeBackInputCh        chan ObjectInfo
 
 	InnerGetObjectNInfoFn          func(ctx context.Context, bucket, object string, rs *HTTPRangeSpec, h http.Header, lockType LockType, opts ObjectOptions) (gr *GetObjectReader, err error)
 	InnerGetObjectInfoFn           func(ctx context.Context, bucket, object string, opts ObjectOptions) (objInfo ObjectInfo, err error)
@@ -169,19 +178,20 @@ func (c *cacheObjects) updateMetadataIfChanged(ctx context.Context, dcache *disk
 
 // DeleteObject clears cache entry if backend delete operation succeeds
 func (c *cacheObjects) DeleteObject(ctx context.Context, bucket, object string, opts ObjectOptions) (objInfo ObjectInfo, err error) {
-	if objInfo, err = c.InnerDeleteObjectFn(ctx, bucket, object, opts); err != nil {
-		return
-	}
+	// delete from backend and then delete from cache always
+	objInfoB, errB := c.InnerDeleteObjectFn(ctx, bucket, object, opts)
+
 	if c.isCacheExclude(bucket, object) || c.skipCache() {
 		return
 	}
 
 	dcache, cerr := c.getCacheLoc(bucket, object)
 	if cerr != nil {
-		return objInfo, cerr
+		return objInfoB, cerr
 	}
 	dcache.Delete(ctx, bucket, object)
-	return
+	c.deleteFromListTree(bucket + "/" + object)
+	return objInfoB, errB
 }
 
 // DeleteObjects batch deletes objects in slice, and clears any cached entries
@@ -280,9 +290,7 @@ func (c *cacheObjects) GetObjectNInfo(ctx context.Context, bucket, object string
 			return bReader, err
 		}
 		// serve cached content without ETag verification if writeback commit is not yet complete
-		if writebackInProgress(cacheReader.ObjInfo.UserDefined) {
-			return cacheReader, nil
-		}
+		return cacheReader, nil
 	}
 
 	objInfo, err := c.InnerGetObjectInfoFn(ctx, bucket, object, opts)
@@ -430,9 +438,8 @@ func (c *cacheObjects) GetObjectInfo(ctx context.Context, bucket, object string,
 			return cachedObjInfo, nil
 		}
 		// serve cache metadata without ETag verification if writeback commit is not yet complete
-		if writebackInProgress(cachedObjInfo.UserDefined) {
-			return cachedObjInfo, nil
-		}
+		return cachedObjInfo, nil
+
 	}
 
 	objInfo, err := getObjectInfoFn(ctx, bucket, object, opts)
@@ -492,6 +499,144 @@ func (c *cacheObjects) CopyObject(ctx context.Context, srcBucket, srcObject, dst
 	return copyObjectFn(ctx, srcBucket, srcObject, dstBucket, dstObject, srcInfo, srcOpts, dstOpts)
 }
 
+// ListObjects from disk cache
+func (c *cacheObjects) ListObjects(ctx context.Context, bucket, prefix, marker, delimiter string, maxKeys int) (result ListObjectsInfo, err error) {
+	log.Printf("listobject cache prefix %s marker %s delim %s maxkey %d \n", prefix, marker, delimiter, maxKeys)
+	objInfos := []ObjectInfo{}
+	prefixes := map[string]bool{}
+
+	if marker != "" {
+		// Marker not common with prefix is not implemented. Send an empty response
+		if !HasPrefix(marker, prefix) {
+			return ListObjectsInfo{}, nil
+		}
+	}
+
+	if maxKeys == 0 {
+		return ListObjectsInfo{}, nil
+	}
+	if delimiter == "" {
+		delimiter = SlashSeparator
+	}
+	if delimiter == SlashSeparator && prefix == SlashSeparator {
+		return ListObjectsInfo{}, nil
+	}
+	// for prefix add trailing slash
+	if prefix != "" {
+		if !strings.HasSuffix(prefix, "/") {
+			prefix = prefix + "/"
+		}
+	}
+	rootprefix := bucket + "/" + prefix
+	rootMarker := bucket + "/" + marker
+	objectCount := 0
+	leafFilter := func(n art.Node) bool {
+		if n.Kind() == art.Leaf {
+			if strings.HasPrefix(string(n.Key()), rootprefix) {
+				if marker == "" || string(n.Key()) > rootMarker {
+					trimmed := strings.TrimPrefix(string(n.Key()), rootprefix)
+					parts := strings.Split(trimmed, delimiter)
+					if len(parts) > 0 && parts[0] != "" {
+						if (len(objInfos) + len(prefixes)) < maxKeys {
+							if len(parts) == 1 {
+								ob, ok := n.Value().(ObjectInfo)
+								if ok {
+									objInfos = append(objInfos, ob)
+								}
+							} else if delimiter != "" {
+								dir := prefix + parts[0] + delimiter
+								if marker == "" || dir > marker {
+									prefixes[dir] = true
+								}
+							}
+						}
+					}
+					objectCount++
+				}
+			}
+		}
+		return true
+	}
+	c.prefixSearch(rootprefix, leafFilter)
+	var uPrefixes []string
+	for key := range prefixes {
+		uPrefixes = append(uPrefixes, key)
+	}
+	isTruncated := false
+	if objectCount > maxKeys {
+		isTruncated = true
+	}
+	return ListObjectsInfo{
+		Objects:     objInfos,
+		Prefixes:    unique(uPrefixes),
+		IsTruncated: isTruncated,
+	}, nil
+}
+
+func (c *cacheObjects) prefixSearch(rootprefix string, leafFilter art.Callback) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Println("recovered from panic from list tree listobj")
+		}
+	}()
+	c.listTree.ForEachPrefix([]byte(rootprefix), leafFilter)
+}
+
+func (c *cacheObjects) ListObjectsV2(ctx context.Context, bucket, prefix, continuationToken, delimiter string, maxKeys int, fetchOwner bool, startAfter string) (result ListObjectsV2Info, err error) {
+	marker := continuationToken
+	if marker == "" {
+		marker = startAfter
+	}
+	loi, err := c.ListObjects(ctx, bucket, prefix, marker, delimiter, maxKeys)
+	if err != nil {
+		return result, err
+	}
+
+	listObjectsV2Info := ListObjectsV2Info{
+		IsTruncated:           loi.IsTruncated,
+		ContinuationToken:     continuationToken,
+		NextContinuationToken: loi.NextMarker,
+		Objects:               loi.Objects,
+		Prefixes:              loi.Prefixes,
+	}
+	return listObjectsV2Info, err
+}
+
+func getCacheStat(cacheObjPath string) (meta *cacheMeta, partial bool, numHits int, err error) {
+	// Stat the file to get file size.
+	metaPath := pathJoin(cacheObjPath, cacheMetaJSONFile)
+	f, err := os.Open(metaPath)
+	if err != nil {
+		return meta, partial, 0, err
+	}
+	defer f.Close()
+	meta = &cacheMeta{Version: cacheMetaVersion}
+	if err := jsonLoad(f, meta); err != nil {
+		return meta, partial, 0, err
+	}
+	// get metadata of part.1 if full file has been cached.
+	partial = true
+	if _, err := os.Stat(pathJoin(cacheObjPath, cacheDataFile)); err == nil {
+		partial = false
+	}
+	if writebackInProgress(meta.Meta) {
+		partial = false
+	}
+	return meta, partial, meta.Hits, nil
+}
+
+func unique(items []string) []string {
+	keys := make(map[string]bool)
+	var list []string
+	for _, entry := range items {
+		if _, value := keys[entry]; !value {
+			keys[entry] = true
+			list = append(list, entry)
+		}
+	}
+	return list
+}
+
 // StorageInfo - returns underlying storage statistics.
 func (c *cacheObjects) StorageInfo(ctx context.Context) (cInfo CacheStorageInfo) {
 	var total, free uint64
@@ -523,7 +668,7 @@ func (c *cacheObjects) skipCache() bool {
 
 // Returns true if object should be excluded from cache
 func (c *cacheObjects) isCacheExclude(bucket, object string) bool {
-	// exclude directories from cache
+	// uncomment this to exclude directories from cache
 	// if strings.HasSuffix(object, SlashSeparator) {
 	// 	return true
 	// }
@@ -653,6 +798,7 @@ func (c *cacheObjects) migrateCacheFromV1toV2(ctx context.Context) {
 
 // PutObject - caches the uploaded object for single Put operations
 func (c *cacheObjects) PutObject(ctx context.Context, bucket, object string, r *PutObjReader, opts ObjectOptions) (objInfo ObjectInfo, err error) {
+	log.Println("put object to be cached", object)
 	putObjectFn := c.InnerPutObjectFn
 	dcache, err := c.getCacheToLoc(ctx, bucket, object)
 	if err != nil {
@@ -664,13 +810,20 @@ func (c *cacheObjects) PutObject(ctx context.Context, bucket, object string, r *
 		return putObjectFn(ctx, bucket, object, r, opts)
 	}
 
+	// skip cache if file size is too large
+	if size > c.maxCacheFileSize {
+		log.Printf("skipping cache as file size is large than %d \n", c.maxCacheFileSize)
+		return putObjectFn(ctx, bucket, object, r, opts)
+	}
+
 	// fetch from backend if there is no space on cache drive
 	if !dcache.diskSpaceAvailable(size) {
-		log.Println("diskSpaceNotAvailable")
+		log.Println("uploading to  backend no space on cache drive")
 		return putObjectFn(ctx, bucket, object, r, opts)
 	}
 
 	if opts.ServerSideEncryption != nil {
+		log.Println("uploading to backend if server side encryption")
 		dcache.Delete(ctx, bucket, object)
 		return putObjectFn(ctx, bucket, object, r, opts)
 	}
@@ -680,6 +833,7 @@ func (c *cacheObjects) PutObject(ctx context.Context, bucket, object string, r *
 	legalHold := objectlock.GetObjectLegalHoldMeta(opts.UserDefined)
 	if objRetention.Mode.Valid() || legalHold.Status.Valid() {
 		dcache.Delete(ctx, bucket, object)
+		log.Println("uploadng backend because objects have locks")
 		return putObjectFn(ctx, bucket, object, r, opts)
 	}
 
@@ -687,25 +841,21 @@ func (c *cacheObjects) PutObject(ctx context.Context, bucket, object string, r *
 	// directive set to exclude
 	if c.isCacheExclude(bucket, object) {
 		dcache.Delete(ctx, bucket, object)
+		log.Println("uploading backend as cache exclude")
 		return putObjectFn(ctx, bucket, object, r, opts)
 	}
 	if c.commitWriteback {
+		log.Println("uploading to cache writeback", object)
 		oi, err := dcache.Put(ctx, bucket, object, r, r.Size(), nil, opts, false, true)
 		if err != nil {
 			return ObjectInfo{}, err
 		}
-		coi := oi.Clone()
-		err = c.uploadGoPool.Submit(func() {
-			defer func() {
-				if r := recover(); r != nil {
-					fmt.Println("[recover]", r, debug.Stack())
-				}
-			}()
-			c.uploadObject(GlobalContext, coi)
-		})
-		if err != nil {
-			dcache.delete(bucket, object)
-			return ObjectInfo{}, err
+		objPath := oi.Bucket + "/" + oi.Name
+		c.listTree.Insert([]byte(objPath), oi)
+		//go c.uploadObject(GlobalContext, oi) // use schedule to upload in batch
+		select {
+		case c.writeBackInputCh <- oi:
+		default:
 		}
 		return oi, nil
 	}
@@ -782,6 +932,7 @@ func (c *cacheObjects) PutObject(ctx context.Context, bucket, object string, r *
 
 // upload cached object to backend in async commit mode.
 func (c *cacheObjects) uploadObject(ctx context.Context, oi ObjectInfo) {
+	log.Printf("uploading object %s in backend in async commit mode", oi.Name)
 	dcache, err := c.getCacheToLoc(ctx, oi.Bucket, oi.Name)
 	if err != nil {
 		// disk cache could not be located.
@@ -815,7 +966,6 @@ func (c *cacheObjects) uploadObject(ctx context.Context, oi ObjectInfo) {
 	if err != nil {
 		wbCommitStatus = CommitFailed
 	}
-
 	meta := cloneMSS(cReader.ObjInfo.UserDefined)
 	retryCnt := 0
 	if wbCommitStatus == CommitFailed {
@@ -825,6 +975,7 @@ func (c *cacheObjects) uploadObject(ctx context.Context, oi ObjectInfo) {
 		size = cReader.ObjInfo.Size
 	} else {
 		delete(meta, writeBackRetryHeader)
+		c.deleteFromListTree(oi.Bucket + "/" + oi.Name)
 	}
 	meta[writeBackStatusHeader] = wbCommitStatus.String()
 	meta["etag"] = oi.ETag
@@ -836,14 +987,25 @@ func (c *cacheObjects) uploadObject(ctx context.Context, oi ObjectInfo) {
 	}
 }
 
+func (c *cacheObjects) deleteFromListTree(key string) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Println("Recovered from panic from list tree delete")
+		}
+	}()
+	c.listTree.Delete([]byte(key))
+}
+
 func (c *cacheObjects) queueWritebackRetry(oi ObjectInfo) {
-	select {
-	case <-GlobalContext.Done():
-		return
-	case c.wbRetryCh <- oi:
-		c.uploadObject(GlobalContext, oi)
-	default:
-	}
+	c.uploadObject(GlobalContext, oi)
+	// remove it as wbRetryCh has limited buffer and its not needed
+	// select {
+	// case <-GlobalContext.Done():
+	// 	return
+	// case c.wbRetryCh <- oi:
+	// 	c.uploadObject(GlobalContext, oi)
+	// default:
+	// }
 }
 
 // Returns cacheObjects for use by Server.
@@ -859,15 +1021,19 @@ func newServerCacheObjects(ctx context.Context, config cache.Config) (CacheObjec
 	}
 
 	c := &cacheObjects{
-		cache:              cache,
-		exclude:            config.Exclude,
-		after:              config.After,
-		migrating:          migrateSw,
-		commitWriteback:    config.CacheCommitMode == CommitWriteBack,
-		commitWritethrough: config.CacheCommitMode == CommitWriteThrough,
-
-		cacheStats:   newCacheStats(),
-		uploadGoPool: uploadGoPool,
+		cache:                   cache,
+		exclude:                 config.Exclude,
+		after:                   config.After,
+		migrating:               migrateSw,
+		commitWriteback:         config.CacheCommitMode == CommitWriteBack,
+		commitWritethrough:      config.CacheCommitMode == CommitWriteThrough,
+		maxCacheFileSize:        config.MaxCacheFileSize,
+		uploadWorkers:           config.UploadWorkers,
+		uploadQueueTh:           config.UploadQueueTh,
+		cacheStats:              newCacheStats(),
+		listTree:                newThreadSafeListTree(),
+		writeBackUploadBufferCh: make(chan ObjectInfo, 100000),
+		writeBackInputCh:        make(chan ObjectInfo, 100000),
 		InnerGetObjectInfoFn: func(ctx context.Context, bucket, object string, opts ObjectOptions) (ObjectInfo, error) {
 			return newObjectLayerFn().GetObjectInfo(ctx, bucket, object, opts)
 		},
@@ -925,9 +1091,14 @@ func newServerCacheObjects(ctx context.Context, config cache.Config) (CacheObjec
 		go func() {
 			<-GlobalContext.Done()
 			close(c.wbRetryCh)
-			uploadGoPool.ReleaseTimeout(5 * time.Second)
+			close(c.writeBackInputCh)
 		}()
 		go c.queuePendingWriteback(ctx)
+		go c.recreateListTreeOnStartUp()
+		for i := 0; i < c.uploadWorkers; i++ {
+			go c.uploadToBackendFromCh()
+		}
+		go c.batcher()
 	}
 
 	return c, nil
@@ -956,24 +1127,83 @@ func (c *cacheObjects) gc(ctx context.Context) {
 	}
 }
 
+func (c *cacheObjects) batcher() {
+	var batch []ObjectInfo
+	for obj := range c.writeBackInputCh {
+		batch = append(batch, obj)
+		if len(batch) >= c.uploadQueueTh {
+			for _, batchItem := range batch {
+				c.writeBackUploadBufferCh <- batchItem
+			}
+			batch = nil // Reset batch
+		}
+	}
+
+	if len(batch) > 0 {
+		for _, batchItem := range batch {
+			c.writeBackUploadBufferCh <- batchItem
+		}
+	}
+
+	close(c.writeBackUploadBufferCh)
+}
+
+func (c *cacheObjects) uploadToBackendFromCh() {
+	for obj := range c.writeBackUploadBufferCh {
+		c.uploadObject(GlobalContext, obj)
+	}
+}
+
+func (c *cacheObjects) recreateListTreeOnStartUp() {
+	log.Println("recreating list tree on startup")
+	for _, dcache := range c.cache {
+		if dcache != nil {
+			filterFn := func(name string, typ os.FileMode) error {
+				if name == minioMetaBucket {
+					// Proceed to next file.
+					return nil
+				}
+				cacheDir := pathJoin(dcache.dir, name)
+				meta, _, _, err := getCacheStat(cacheDir)
+				if err != nil {
+					return nil
+				}
+
+				objInfo := meta.ToObjectInfo()
+				status, ok := objInfo.UserDefined[writeBackStatusHeader]
+				if !ok || status == CommitComplete.String() {
+					return nil
+				}
+				c.listTree.Insert([]byte(objInfo.Bucket+"/"+objInfo.Name), objInfo)
+				return nil
+			}
+
+			if err := readDirFn(dcache.dir, filterFn); err != nil {
+				return
+			}
+		}
+	}
+}
+
 // queues any pending or failed async commits when server restarts
 func (c *cacheObjects) queuePendingWriteback(ctx context.Context) {
 	for _, dcache := range c.cache {
 		if dcache != nil {
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				case oi, ok := <-dcache.retryWritebackCh:
-					if !ok {
-						goto next
+			go func(d *diskCache) {
+				for {
+					select {
+					case <-ctx.Done():
+						return
+					case oi, ok := <-d.retryWritebackCh:
+						if !ok {
+							return
+						}
+						c.queueWritebackRetry(oi)
+					default:
+						time.Sleep(time.Second * 1)
 					}
-					c.queueWritebackRetry(oi)
-				default:
-					time.Sleep(time.Second * 1)
 				}
-			}
-		next:
+			}(dcache)
 		}
 	}
 }
@@ -1009,7 +1239,7 @@ func (c *cacheObjects) NewMultipartUpload(ctx context.Context, bucket, object st
 		dcache.Delete(ctx, bucket, object)
 		return newMultipartUploadFn(ctx, bucket, object, opts)
 	}
-	if !c.commitWritethrough && !c.commitWriteback {
+	if !c.commitWritethrough {
 		return newMultipartUploadFn(ctx, bucket, object, opts)
 	}
 
@@ -1028,7 +1258,7 @@ func (c *cacheObjects) PutObjectPart(ctx context.Context, bucket, object, upload
 		return putObjectPartFn(ctx, bucket, object, uploadID, partID, data, opts)
 	}
 
-	if !c.commitWritethrough && !c.commitWriteback {
+	if !c.commitWritethrough {
 		return putObjectPartFn(ctx, bucket, object, uploadID, partID, data, opts)
 	}
 	if c.skipCache() {
@@ -1126,7 +1356,7 @@ func (c *cacheObjects) CopyObjectPart(ctx context.Context, srcBucket, srcObject,
 		return copyObjectPartFn(ctx, srcBucket, srcObject, dstBucket, dstObject, uploadID, partID, startOffset, length, srcInfo, srcOpts, dstOpts)
 	}
 
-	if !c.commitWritethrough && !c.commitWriteback {
+	if !c.commitWritethrough {
 		return copyObjectPartFn(ctx, srcBucket, srcObject, dstBucket, dstObject, uploadID, partID, startOffset, length, srcInfo, srcOpts, dstOpts)
 	}
 	if err := dcache.uploadIDExists(dstBucket, dstObject, uploadID); err != nil {
@@ -1164,7 +1394,7 @@ func (c *cacheObjects) CopyObjectPart(ctx context.Context, srcBucket, srcObject,
 // finalizes the upload saved in cache multipart dir.
 func (c *cacheObjects) CompleteMultipartUpload(ctx context.Context, bucket, object, uploadID string, uploadedParts []CompletePart, opts ObjectOptions) (oi ObjectInfo, err error) {
 	completeMultipartUploadFn := c.InnerCompleteMultipartUploadFn
-	if !c.commitWritethrough && !c.commitWriteback {
+	if !c.commitWritethrough {
 		return completeMultipartUploadFn(ctx, bucket, object, uploadID, uploadedParts, opts)
 	}
 	dcache, err := c.getCacheToLoc(ctx, bucket, object)
@@ -1200,7 +1430,7 @@ func (c *cacheObjects) CompleteMultipartUpload(ctx context.Context, bucket, obje
 // AbortMultipartUpload - aborts multipart upload on backend and cache.
 func (c *cacheObjects) AbortMultipartUpload(ctx context.Context, bucket, object, uploadID string, opts ObjectOptions) error {
 	abortMultipartUploadFn := c.InnerAbortMultipartUploadFn
-	if !c.commitWritethrough && !c.commitWriteback {
+	if !c.commitWritethrough {
 		return abortMultipartUploadFn(ctx, bucket, object, uploadID, opts)
 	}
 	dcache, err := c.getCacheToLoc(ctx, bucket, object)

@@ -552,6 +552,11 @@ func (api objectAPIHandlers) getObjectHandler(ctx context.Context, objectAPI Obj
 // This implementation of the GET operation retrieves object. To use GET,
 // you must have READ access to the object.
 func (api objectAPIHandlers) GetObjectHandler(w http.ResponseWriter, r *http.Request) {
+	st := time.Now()
+	defer func() {
+		elapsed := time.Since(st).Milliseconds()
+		log.Printf("GetObjectHandler took %d ms\n", elapsed)
+	}()
 	ctx := newContext(r, w, "GetObject")
 
 	defer logger.AuditLog(ctx, w, r, mustGetClaimsFromToken(r))
@@ -1523,6 +1528,11 @@ func (api objectAPIHandlers) CopyObjectHandler(w http.ResponseWriter, r *http.Re
 //   - X-Amz-Server-Side-Encryption-Customer-Key
 //   - X-Amz-Copy-Source-Server-Side-Encryption-Customer-Key
 func (api objectAPIHandlers) PutObjectHandler(w http.ResponseWriter, r *http.Request) {
+	st := time.Now()
+	defer func() {
+		elapsed := time.Since(st).Milliseconds()
+		log.Printf("PutObjectHandler took %d ms\n", elapsed)
+	}()
 	ctx := newContext(r, w, "PutObject")
 	defer logger.AuditLog(ctx, w, r, mustGetClaimsFromToken(r))
 

@@ -7,7 +7,7 @@ toolchain go1.21.6
 require (
 	cloud.google.com/go/storage v1.27.0
 	github.com/0chain/errors v1.0.3
-	github.com/0chain/gosdk v1.17.10-0.20240924100108-c8f84a95a7f9
+	github.com/0chain/gosdk v1.17.0-RC4.0.20240823181919-acf47eb7ed93
 	github.com/Azure/azure-pipeline-go v0.2.2
 	github.com/Azure/azure-storage-blob-go v0.10.0
 	github.com/Shopify/sarama v1.28.0
@@ -69,10 +69,10 @@ require (
 	github.com/nats-io/stan.go v0.8.3
 	github.com/ncw/directio v1.0.5
 	github.com/nsqio/go-nsq v1.0.8
-	github.com/panjf2000/ants/v2 v2.10.0
 	github.com/philhofer/fwd v1.1.2-0.20210722190033-5c56ac6d0bb9
 	github.com/pierrec/lz4/v4 v4.1.21
 	github.com/pkg/errors v0.9.1
+	github.com/plar/go-adaptive-radix-tree v1.0.5
 	github.com/prometheus/client_golang v1.14.0
 	github.com/prometheus/client_model v0.3.0
 	github.com/prometheus/procfs v0.9.0
