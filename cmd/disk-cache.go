@@ -31,6 +31,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	art "github.com/arriqaaq/art"
 	objectlock "github.com/minio/minio/internal/bucket/object/lock"
 	"github.com/minio/minio/internal/color"
 	"github.com/minio/minio/internal/config/cache"
@@ -39,7 +40,6 @@ import (
 	"github.com/minio/minio/internal/logger"
 	"github.com/minio/minio/internal/sync/errgroup"
 	"github.com/minio/pkg/wildcard"
-	art "github.com/plar/go-adaptive-radix-tree"
 )
 
 const (
@@ -530,8 +530,8 @@ func (c *cacheObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 	rootprefix := bucket + "/" + prefix
 	rootMarker := bucket + "/" + marker
 	objectCount := 0
-	leafFilter := func(n art.Node) bool {
-		if n.Kind() == art.Leaf {
+	leafFilter := func(n *art.Node) {
+		if n.IsLeaf() {
 			if strings.HasPrefix(string(n.Key()), rootprefix) {
 				if marker == "" || string(n.Key()) > rootMarker {
 					trimmed := strings.TrimPrefix(string(n.Key()), rootprefix)
@@ -555,7 +555,6 @@ func (c *cacheObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 				}
 			}
 		}
-		return true
 	}
 	c.prefixSearch(rootprefix, leafFilter)
 	var uPrefixes []string
@@ -574,11 +573,11 @@ func (c *cacheObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 }
 
 func (c *cacheObjects) prefixSearch(rootprefix string, leafFilter art.Callback) {
-	defer func() {
-		if r := recover(); r != nil {
-			log.Println("recovered from panic from list tree listobj")
-		}
-	}()
+	// defer func() {
+	// 	if r := recover(); r != nil {
+	// 		log.Println("recovered from panic from list tree listobj")
+	// 	}
+	// }()
 	c.listTree.ForEachPrefix([]byte(rootprefix), leafFilter)
 }
 
@@ -988,11 +987,11 @@ func (c *cacheObjects) uploadObject(ctx context.Context, oi ObjectInfo) {
 }
 
 func (c *cacheObjects) deleteFromListTree(key string) {
-	defer func() {
-		if r := recover(); r != nil {
-			log.Println("Recovered from panic from list tree delete")
-		}
-	}()
+	// defer func() {
+	// 	if r := recover(); r != nil {
+	// 		log.Println("Recovered from panic from list tree delete")
+	// 	}
+	// }()
 	c.listTree.Delete([]byte(key))
 }
 
@@ -1012,10 +1011,6 @@ func (c *cacheObjects) queueWritebackRetry(oi ObjectInfo) {
 func newServerCacheObjects(ctx context.Context, config cache.Config) (CacheObjectLayer, error) {
 	// list of disk caches for cache "drives" specified in config.json or MINIO_CACHE_DRIVES env var.
 	cache, migrateSw, err := newCache(config)
-	if err != nil {
-		return nil, err
-	}
-	uploadGoPool, err := ants.NewMultiPool(10, 40, ants.RoundRobin)
 	if err != nil {
 		return nil, err
 	}
