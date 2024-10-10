@@ -31,6 +31,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/armon/go-radix"
 	objectlock "github.com/minio/minio/internal/bucket/object/lock"
 	"github.com/minio/minio/internal/color"
 	"github.com/minio/minio/internal/config/cache"
@@ -39,7 +40,6 @@ import (
 	"github.com/minio/minio/internal/logger"
 	"github.com/minio/minio/internal/sync/errgroup"
 	"github.com/minio/pkg/wildcard"
-	art "github.com/plar/go-adaptive-radix-tree"
 )
 
 const (
@@ -255,9 +255,9 @@ func (c *cacheObjects) GetObjectNInfo(ctx context.Context, bucket, object string
 	// fetch diskCache if object is currently cached or nearest available cache drive
 	dcache, err := c.getCacheToLoc(ctx, bucket, object)
 	if err != nil {
+		log.Println("errorGettingLoc: ", err)
 		return c.InnerGetObjectNInfoFn(ctx, bucket, object, rs, h, lockType, opts)
 	}
-
 	cacheReader, numCacheHits, cacheErr := dcache.Get(ctx, bucket, object, rs, h, opts)
 	if cacheErr == nil {
 		cacheObjSize = cacheReader.ObjInfo.Size
@@ -530,32 +530,30 @@ func (c *cacheObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 	rootprefix := bucket + "/" + prefix
 	rootMarker := bucket + "/" + marker
 	objectCount := 0
-	leafFilter := func(n art.Node) bool {
-		if n.Kind() == art.Leaf {
-			if strings.HasPrefix(string(n.Key()), rootprefix) {
-				if marker == "" || string(n.Key()) > rootMarker {
-					trimmed := strings.TrimPrefix(string(n.Key()), rootprefix)
-					parts := strings.Split(trimmed, delimiter)
-					if len(parts) > 0 && parts[0] != "" {
-						if (len(objInfos) + len(prefixes)) < maxKeys {
-							if len(parts) == 1 {
-								ob, ok := n.Value().(ObjectInfo)
-								if ok {
-									objInfos = append(objInfos, ob)
-								}
-							} else if delimiter != "" {
-								dir := prefix + parts[0] + delimiter
-								if marker == "" || dir > marker {
-									prefixes[dir] = true
-								}
+	leafFilter := func(key string, value any) bool {
+		if strings.HasPrefix(key, rootprefix) {
+			if marker == "" || key > rootMarker {
+				trimmed := strings.TrimPrefix(key, rootprefix)
+				parts := strings.Split(trimmed, delimiter)
+				if len(parts) > 0 && parts[0] != "" {
+					if (len(objInfos) + len(prefixes)) < maxKeys {
+						if len(parts) == 1 {
+							ob, ok := value.(ObjectInfo)
+							if ok {
+								objInfos = append(objInfos, ob)
+							}
+						} else if delimiter != "" {
+							dir := prefix + parts[0] + delimiter
+							if marker == "" || dir > marker {
+								prefixes[dir] = true
 							}
 						}
 					}
-					objectCount++
 				}
+				objectCount++
 			}
 		}
-		return true
+		return false
 	}
 	c.prefixSearch(rootprefix, leafFilter)
 	var uPrefixes []string
@@ -573,13 +571,13 @@ func (c *cacheObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 	}, nil
 }
 
-func (c *cacheObjects) prefixSearch(rootprefix string, leafFilter art.Callback) {
-	defer func() {
-		if r := recover(); r != nil {
-			log.Println("recovered from panic from list tree listobj")
-		}
-	}()
-	c.listTree.ForEachPrefix([]byte(rootprefix), leafFilter)
+func (c *cacheObjects) prefixSearch(rootprefix string, leafFilter radix.WalkFn) {
+	// defer func() {
+	// 	if r := recover(); r != nil {
+	// 		log.Println("recovered from panic from list tree listobj")
+	// 	}
+	// }()
+	c.listTree.ForEachPrefix(rootprefix, leafFilter)
 }
 
 func (c *cacheObjects) ListObjectsV2(ctx context.Context, bucket, prefix, continuationToken, delimiter string, maxKeys int, fetchOwner bool, startAfter string) (result ListObjectsV2Info, err error) {
@@ -851,7 +849,7 @@ func (c *cacheObjects) PutObject(ctx context.Context, bucket, object string, r *
 			return ObjectInfo{}, err
 		}
 		objPath := oi.Bucket + "/" + oi.Name
-		c.listTree.Insert([]byte(objPath), oi)
+		c.listTree.Insert(objPath, oi)
 		//go c.uploadObject(GlobalContext, oi) // use schedule to upload in batch
 		select {
 		case c.writeBackInputCh <- oi:
@@ -941,6 +939,7 @@ func (c *cacheObjects) uploadObject(ctx context.Context, oi ObjectInfo) {
 	}
 	cReader, _, bErr := dcache.Get(ctx, oi.Bucket, oi.Name, nil, http.Header{}, ObjectOptions{})
 	if bErr != nil {
+		log.Println("errorGettingReader: ", bErr)
 		return
 	}
 	defer cReader.Close()
@@ -987,12 +986,12 @@ func (c *cacheObjects) uploadObject(ctx context.Context, oi ObjectInfo) {
 }
 
 func (c *cacheObjects) deleteFromListTree(key string) {
-	defer func() {
-		if r := recover(); r != nil {
-			log.Println("Recovered from panic from list tree delete")
-		}
-	}()
-	c.listTree.Delete([]byte(key))
+	// defer func() {
+	// 	if r := recover(); r != nil {
+	// 		log.Println("Recovered from panic from list tree delete")
+	// 	}
+	// }()
+	c.listTree.Delete(key)
 }
 
 func (c *cacheObjects) queueWritebackRetry(oi ObjectInfo) {
@@ -1014,6 +1013,7 @@ func newServerCacheObjects(ctx context.Context, config cache.Config) (CacheObjec
 	if err != nil {
 		return nil, err
 	}
+
 	c := &cacheObjects{
 		cache:                   cache,
 		exclude:                 config.Exclude,
@@ -1168,7 +1168,7 @@ func (c *cacheObjects) recreateListTreeOnStartUp() {
 				if !ok || status == CommitComplete.String() {
 					return nil
 				}
-				c.listTree.Insert([]byte(objInfo.Bucket+"/"+objInfo.Name), objInfo)
+				c.listTree.Insert(objInfo.Bucket+"/"+objInfo.Name, objInfo)
 				return nil
 			}
 
