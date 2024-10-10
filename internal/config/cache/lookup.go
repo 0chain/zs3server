@@ -52,6 +52,7 @@ const (
 	EnvMaxCacheFileSize   = "MINIO_MAX_CACHE_FILE_SIZE"
 	EnvUploadWorkers      = "MINIO_WRITE_BACK_UPLOAD_WORKERS"
 	EnvUploadQueueTh      = "MINIO_UPLOAD_QUEUE_TH"
+	EnvIndexSvcUrl        = "INDEX_SVC_URL"
 
 	EnvCacheEncryptionKey = "MINIO_CACHE_ENCRYPTION_SECRET_KEY"
 
@@ -259,6 +260,10 @@ func LookupConfig(kvs config.KVS) (Config, error) {
 			err := errors.New("upload queue threshold shoud be a number")
 			return cfg, config.ErrInvalidUploadQueueTh(err)
 		}
+	}
+
+	if indexSvcUrl := env.Get(EnvIndexSvcUrl, "http://zsearch:3003"); indexSvcUrl != "" {
+		cfg.IndexSvcUrl = indexSvcUrl
 	}
 	return cfg, nil
 }
