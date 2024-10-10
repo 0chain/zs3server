@@ -50,7 +50,7 @@ services:
       MINIO_CACHE_QUOTA: 99 # maximum permitted usage of the cache in percentage 
       MINIO_CACHE_WATERMARK_LOW: 90 # % of cache quota at which cache eviction stops
       MINIO_CACHE_WATERMARK_HIGH: 95 # % of cache quota at which cache eviction starts
-      MINIO_WRITE_BACK_INTERVAL: 900 # interval in seconds
+      MINIO_WRITE_BACK_INTERVAL: 1800 # interval in seconds
       MINIO_MAX_CACHE_FILE_SIZE: 1000000000 # max file size in bytes
       MINIO_WRITE_BACK_UPLOAD_WORKERS: 20
       MINIO_UPLOAD_QUEUE_TH: 10
