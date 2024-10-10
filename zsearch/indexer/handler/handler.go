@@ -2,18 +2,15 @@ package handler
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"net/http"
 
 	"zsearch/indexer/model"
-	"zsearch/utility"
 
-	"github.com/blevesearch/bleve/v2"
 	"github.com/google/go-tika/tika"
 )
 
-func IndexHandler(index bleve.Index, client *tika.Client) http.HandlerFunc {
+func IndexHandler(jobChan chan<- model.FileInfo, client *tika.Client) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		file, handler, err := r.FormFile("file")
 		if err != nil {
@@ -21,7 +18,6 @@ func IndexHandler(index bleve.Index, client *tika.Client) http.HandlerFunc {
 			return
 		}
 		defer file.Close()
-		fmt.Println("filenameee", handler.Filename)
 		log.Printf("indexing file %+v \n", handler.Filename)
 		bucketName := r.FormValue("bucketName")
 		objName := r.FormValue("objName")
@@ -36,18 +32,13 @@ func IndexHandler(index bleve.Index, client *tika.Client) http.HandlerFunc {
 			return
 		}
 
-		eText := body[0]
-		cleanText := utility.CleanText(eText)
-		fileInfo := model.FileInfo{}
-		fileInfo.Path = bucketName + "/" + objName
-		fileInfo.Filename = objName
-		fileInfo.Content = cleanText
-		err = utility.IndexFiles(index, []model.FileInfo{fileInfo})
-		if err != nil {
-			log.Printf("err indexing file %+v \n", err)
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
+		fileInfo := model.FileInfo{
+			Path:     bucketName + "/" + objName,
+			Filename: objName,
+			Content:  body[0],
 		}
+
+		jobChan <- fileInfo
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("Files indexed successfully"))
 
@@ -72,12 +63,10 @@ func PutIndexHandler(jobChan chan<- model.FileInfo, client *tika.Client) http.Ha
 			return
 		}
 
-		cleanText := utility.CleanText(body[0])
-
 		fileInfo := model.FileInfo{
 			Path:     bucketName + "/" + objName,
 			Filename: objName,
-			Content:  cleanText,
+			Content:  body[0],
 		}
 
 		jobChan <- fileInfo

@@ -2,12 +2,13 @@ package utility
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 
 	"zsearch/indexer/model"
 
-	"github.com/bbalet/stopwords"
 	"github.com/blevesearch/bleve/v2"
 )
 
@@ -47,8 +48,28 @@ func CleanText(input string) string {
 	input = strings.ToLower(input)
 
 	// 4. Remove stop words using the stopwords library
-	cleanedText := stopwords.CleanString(input, "en", true)
-
+	//cleanedText := stopwords.CleanString(input, "en", true)
+	cleanedText := input
 	// 5. Return the cleaned result
 	return cleanedText
+}
+
+func SizeOfIndex(path string) (int64, error) {
+	var size int64
+
+	err := filepath.Walk(path, func(filePath string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() {
+			size += info.Size()
+		}
+		return nil
+	})
+
+	if err != nil {
+		return 0, err
+	}
+
+	return size, nil
 }
