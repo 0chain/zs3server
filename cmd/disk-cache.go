@@ -553,9 +553,6 @@ func (c *cacheObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 				objectCount++
 			}
 		}
-		if objectCount >= maxKeys {
-			return true
-		}
 		return false
 	}
 	c.prefixSearch(rootprefix, leafFilter)
