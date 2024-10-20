@@ -71,7 +71,7 @@ func batchUploadWorker(ctx context.Context, alloc *sdk.Allocation, opsChan chan 
 			log.Println("processing batch upload: ", len(ops))
 			err := alloc.DoMultiOperation(ops)
 			if err != nil {
-				if !isSameRootError(err) {
+				if isSameRootError(err) {
 					err = nil
 				} else if err == context.Canceled {
 					err = errors.New("operation canceled")
