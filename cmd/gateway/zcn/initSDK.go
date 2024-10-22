@@ -3,6 +3,7 @@ package zcn
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/0chain/gosdk/core/client"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -10,7 +11,6 @@ import (
 
 	"github.com/0chain/gosdk/core/conf"
 	"github.com/0chain/gosdk/core/logger"
-	"github.com/0chain/gosdk/zboxcore/blockchain"
 	"github.com/0chain/gosdk/zboxcore/sdk"
 	"github.com/0chain/gosdk/zcncore"
 	"github.com/mitchellh/go-homedir"
@@ -90,42 +90,18 @@ func initializeSDK(configDir, allocid string, nonce int64) error {
 		return err
 	}
 
-	network, _ := conf.LoadNetworkFile(filepath.Join(configDir, "network.yaml"))
-	if network.IsValid() {
-		zcncore.SetNetwork(network.Miners, network.Sharders)
-		conf.InitChainNetwork(&conf.Network{
-			Miners:   network.Miners,
-			Sharders: network.Sharders,
-		})
-	}
-
 	logger.SyncLoggers([]*logger.Logger{zcncore.GetLogger(), sdk.GetLogger()})
 	zcncore.SetLogFile("cmdlog.log", true)
 	sdk.SetLogFile("cmd.log", true)
 	zcncore.SetLogLevel(3)
 	sdk.SetLogLevel(3)
 
-	err = zcncore.InitZCNSDK(cfg.BlockWorker, cfg.SignatureScheme,
-		zcncore.WithChainID(cfg.ChainID),
-		zcncore.WithMinSubmit(cfg.MinSubmit),
-		zcncore.WithMinConfirmation(cfg.MinConfirmation),
-		zcncore.WithConfirmationChainLength(cfg.ConfirmationChainLength))
+	err = client.InitSDK(string(walletBytes), cfg.BlockWorker, cfg.ChainID, cfg.SignatureScheme, nonce, false, true, cfg.MinSubmit, cfg.MinConfirmation, cfg.ConfirmationChainLength, cfg.SharderConsensous)
 	if err != nil {
 		return err
 	}
 
-	err = sdk.InitStorageSDK(string(walletBytes), cfg.BlockWorker, cfg.ChainID, cfg.SignatureScheme, cfg.PreferredBlobbers, nonce)
-	if err != nil {
-		return err
-	}
-
-	blockchain.SetMaxTxnQuery(cfg.MaxTxnQuery)
-	blockchain.SetQuerySleepTime(cfg.QuerySleepTime)
 	conf.InitClientConfig(&cfg)
-
-	if network.IsValid() {
-		sdk.SetNetwork(network.Miners, network.Sharders)
-	}
 
 	sdk.SetNumBlockDownloads(10)
 	return nil

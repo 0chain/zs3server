@@ -1,4 +1,4 @@
-FROM golang:1.21-alpine3.18 as zbox_base
+FROM golang:1.22-alpine3.18 as zbox_base
 
 RUN apk add --update --no-cache linux-headers build-base git cmake bash perl grep py3-pip python3-dev curl
 
