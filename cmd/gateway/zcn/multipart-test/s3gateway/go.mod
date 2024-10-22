@@ -1,6 +1,6 @@
 module github.com/peterlimg/s3gateway
 
-go 1.21
+go 1.22
 
 require (
 	github.com/0chain/gosdk v1.10.1-0.20231214200656-5a5e14d7d186
