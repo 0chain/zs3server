@@ -3,32 +3,32 @@ package cmd
 import (
 	"sync"
 
-	art "github.com/plar/go-adaptive-radix-tree"
+	"github.com/armon/go-radix"
 )
 
 type ThreadSafeListTree struct {
-	tree art.Tree
+	tree *radix.Tree
 	mu   sync.RWMutex
 }
 
 func newThreadSafeListTree() *ThreadSafeListTree {
-	return &ThreadSafeListTree{tree: art.New()}
+	return &ThreadSafeListTree{tree: radix.New()}
 }
 
-func (t *ThreadSafeListTree) Insert(key art.Key, value art.Value) (oldValue art.Value, updated bool) {
+func (t *ThreadSafeListTree) Insert(key string, value any) (any, bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return t.tree.Insert(key, value)
 }
 
-func (t *ThreadSafeListTree) Delete(key art.Key) (value art.Value, deleted bool) {
+func (t *ThreadSafeListTree) Delete(key string) (any, bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return t.tree.Delete(key)
 }
 
-func (t *ThreadSafeListTree) ForEachPrefix(keyPrefix art.Key, callback art.Callback) {
+func (t *ThreadSafeListTree) ForEachPrefix(keyPrefix string, callback radix.WalkFn) {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
-	t.tree.ForEachPrefix(keyPrefix, callback)
+	t.tree.WalkPrefix(keyPrefix, callback)
 }

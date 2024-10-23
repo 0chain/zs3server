@@ -13,6 +13,7 @@ require (
 	github.com/Shopify/sarama v1.28.0
 	github.com/VividCortex/ewma v1.1.1
 	github.com/alecthomas/participle v0.2.1
+	github.com/armon/go-radix v1.0.0
 	github.com/bcicen/jstream v1.0.1
 	github.com/beevik/ntp v0.3.0
 	github.com/bits-and-blooms/bloom/v3 v3.0.1
@@ -72,7 +73,6 @@ require (
 	github.com/philhofer/fwd v1.1.2-0.20210722190033-5c56ac6d0bb9
 	github.com/pierrec/lz4/v4 v4.1.21
 	github.com/pkg/errors v0.9.1
-	github.com/plar/go-adaptive-radix-tree v1.0.5
 	github.com/prometheus/client_golang v1.14.0
 	github.com/prometheus/client_model v0.3.0
 	github.com/prometheus/procfs v0.9.0
