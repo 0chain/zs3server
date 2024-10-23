@@ -19,7 +19,6 @@ import (
 	"github.com/minio/minio/internal/logger"
 	"github.com/minio/pkg/mimedb"
 	"github.com/mitchellh/go-homedir"
-	"golang.org/x/sync/semaphore"
 
 	"github.com/0chain/gosdk/zboxcore/sdk"
 	"github.com/minio/cli"
@@ -122,7 +121,6 @@ func (z *ZCN) Name() string {
 }
 
 var (
-	contentMap  map[string]*semaphore.Weighted
 	contentLock sync.Mutex
 )
 
@@ -156,7 +154,6 @@ func (z *ZCN) NewGatewayLayer(creds madmin.Credentials) (minio.ObjectLayer, erro
 	if err != nil {
 		return nil, err
 	}
-	contentMap = make(map[string]*semaphore.Weighted)
 	ctx, cancel := context.WithCancel(context.Background())
 	zob.ctxCancel = cancel
 	IntiBatchUploadWorkers(ctx, allocation, serverConfig.BatchWaitTime, serverConfig.MaxBatchSize, serverConfig.BatchWorkers)
@@ -446,6 +443,10 @@ func (zob *zcnObjects) ListObjectsV2(ctx context.Context, bucket, prefix, contin
 
 // ListObjects Lists files of directories as objects
 func (zob *zcnObjects) ListObjects(ctx context.Context, bucket, prefix, marker, delimiter string, maxKeys int) (result minio.ListObjectsInfo, err error) {
+	now := time.Now()
+	defer func() {
+		log.Println("ListObjectsTook: ", time.Since(now).Milliseconds())
+	}()
 	// objFileType For root path list objects should only provide file and not dirs.
 	// Dirs under root path are presented as buckets as well
 	var remotePath, objFileType string
@@ -493,15 +494,15 @@ func (zob *zcnObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 			},
 			nil
 	}
-
-	if len(prefix) > 0 && prefix[len(prefix)-1] != '/' {
-		return minio.ListObjectsInfo{
-				IsTruncated: false,
-				Objects:     []minio.ObjectInfo{},
-				Prefixes:    []string{prefix + "/"},
-			},
-			nil
-	}
+	// warp does not send paths with trailing slash
+	// if len(prefix) > 0 && prefix[len(prefix)-1] != '/' {
+	// 	return minio.ListObjectsInfo{
+	// 			IsTruncated: false,
+	// 			Objects:     []minio.ObjectInfo{},
+	// 			Prefixes:    []string{prefix + "/"},
+	// 		},
+	// 		nil
+	// }
 
 	var objects []minio.ObjectInfo
 	if prefix != "" {
@@ -600,27 +601,27 @@ func (zob *zcnObjects) PutObject(ctx context.Context, bucket, object string, r *
 		remotePath = filepath.Join(rootPath, bucket, object)
 	}
 
-	var ref *sdk.ORef
-	var isUpdate bool
-	err = lockPath(ctx, remotePath)
-	if err != nil {
-		return
-	}
-	ref, err = getSingleRegularRef(zob.alloc, remotePath)
-	if err != nil {
-		if !isPathNoExistError(err) {
-			unlockPath(remotePath)
-			return
-		}
-	}
+	// var ref *sdk.ORef
+	// var isUpdate bool
+	// err = lockPath(ctx, remotePath)
+	// if err != nil {
+	// 	return
+	// }
+	// ref, err = getSingleRegularRef(zob.alloc, remotePath)
+	// if err != nil {
+	// 	if !isPathNoExistError(err) {
+	// 		unlockPath(remotePath)
+	// 		return
+	// 	}
+	// }
 
-	if ref != nil {
-		logger.Info("updateFile: ", remotePath)
-		isUpdate = true
-		unlockPath(remotePath)
-	} else {
-		defer unlockPath(remotePath)
-	}
+	// if ref != nil {
+	// 	logger.Info("updateFile: ", remotePath)
+	// 	isUpdate = true
+	// 	unlockPath(remotePath)
+	// } else {
+	// 	defer unlockPath(remotePath)
+	// }
 
 	contentType := opts.UserDefined["content-type"]
 	if contentType == "" {
@@ -653,7 +654,7 @@ func (zob *zcnObjects) PutObject(ctx context.Context, bucket, object string, r *
 		}
 	}
 
-	err = putFile(ctx, zob.alloc, remotePath, contentType, r, r.Size(), isUpdate, opts.UserDefined)
+	err = putFile(ctx, zob.alloc, remotePath, contentType, r, r.Size(), false, opts.UserDefined)
 	if err != nil {
 		return
 	}
@@ -832,24 +833,6 @@ func (zob *zcnObjects) StorageInfo(ctx context.Context) (si minio.StorageInfo, _
 	si.Backend.Type = madmin.Gateway
 	si.Backend.GatewayOnline = true
 	return
-}
-
-func lockPath(ctx context.Context, path string) error {
-	contentLock.Lock()
-	defer contentLock.Unlock()
-	if _, ok := contentMap[path]; !ok {
-		contentMap[path] = semaphore.NewWeighted(1)
-	}
-	return contentMap[path].Acquire(ctx, 1)
-}
-
-func unlockPath(path string) {
-	contentLock.Lock()
-	defer contentLock.Unlock()
-	if sem, ok := contentMap[path]; ok {
-		sem.Release(1)
-		delete(contentMap, path)
-	}
 }
 
 /*

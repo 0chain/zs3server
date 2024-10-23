@@ -7,7 +7,7 @@ toolchain go1.21.6
 require (
 	cloud.google.com/go/storage v1.27.0
 	github.com/0chain/errors v1.0.3
-	github.com/0chain/gosdk v1.17.6
+	github.com/0chain/gosdk v1.17.12-0.20241023084317-d4d99f55ac84
 	github.com/Azure/azure-pipeline-go v0.2.2
 	github.com/Azure/azure-storage-blob-go v0.10.0
 	github.com/Shopify/sarama v1.28.0
@@ -92,7 +92,6 @@ require (
 	go.uber.org/zap v1.24.0
 	golang.org/x/crypto v0.17.0
 	golang.org/x/oauth2 v0.5.0
-	golang.org/x/sync v0.5.0
 	golang.org/x/sys v0.15.0
 	golang.org/x/time v0.3.0
 	google.golang.org/api v0.110.0
@@ -169,7 +168,7 @@ require (
 	github.com/hashicorp/golang-lru/v2 v2.0.1 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/herumi/bls-go-binary v1.31.0 // indirect
-	github.com/hitenjain14/fasthttp v0.0.0-20240527123209-06019e79bff9 // indirect
+	github.com/hitenjain14/fasthttp v0.0.0-20240916135632-f9303a91736c // indirect
 	github.com/holiman/uint256 v1.2.2-0.20230321075855-87b91420868c // indirect
 	github.com/jcmturner/aescts/v2 v2.0.0 // indirect
 	github.com/jcmturner/dnsutils/v2 v2.0.0 // indirect
@@ -251,6 +250,7 @@ require (
 	go.opencensus.io v0.24.0 // indirect
 	go.uber.org/multierr v1.9.0 // indirect
 	golang.org/x/net v0.19.0 // indirect
+	golang.org/x/sync v0.8.0 // indirect
 	golang.org/x/term v0.15.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect
