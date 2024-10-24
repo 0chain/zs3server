@@ -7,7 +7,7 @@ toolchain go1.22.5
 require (
 	cloud.google.com/go/storage v1.28.1
 	github.com/0chain/errors v1.0.3
-	github.com/0chain/gosdk v1.18.0-RC5
+	github.com/0chain/gosdk v1.18.0-RC8
 	github.com/Azure/azure-pipeline-go v0.2.2
 	github.com/Azure/azure-storage-blob-go v0.10.0
 	github.com/Shopify/sarama v1.28.0
@@ -104,7 +104,7 @@ require (
 	cloud.google.com/go/compute v1.19.1 // indirect
 	cloud.google.com/go/compute/metadata v0.2.3 // indirect
 	cloud.google.com/go/iam v0.13.0 // indirect
-	github.com/0chain/common v1.18.0 // indirect
+	github.com/0chain/common v1.18.1 // indirect
 	github.com/Azure/go-ntlmssp v0.0.0-20200615164410-66371956d46c // indirect
 	github.com/Luzifer/go-openssl/v3 v3.1.0 // indirect
 	github.com/PuerkitoBio/purell v1.1.1 // indirect
