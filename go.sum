@@ -59,12 +59,12 @@ contrib.go.opencensus.io/exporter/stackdriver v0.12.1/go.mod h1:iwB6wGarfphGGe/e
 contrib.go.opencensus.io/integrations/ocsql v0.1.4/go.mod h1:8DsSdjz3F+APR+0z0WkU1aRorQCFfRxvqjUUPMbF3fE=
 contrib.go.opencensus.io/resource v0.1.1/go.mod h1:F361eGI91LCmW1I/Saf+rX0+OFcigGlFvXwEGEnkRLA=
 dmitri.shuralyov.com/gpu/mtl v0.0.0-20190408044501-666a987793e9/go.mod h1:H6x//7gZCb22OMCxBHrMx7a5I7Hp++hsVxbQ4BYO7hU=
-github.com/0chain/common v1.18.0 h1:vCkD869DR0zTZS4CDl5MMN3qixxyfTNxDDcHp7cTRrc=
-github.com/0chain/common v1.18.0/go.mod h1:vHK9Q0/nz28PxmKsLSMLzEs5iK6QVgl1LxdDQdR7y6s=
+github.com/0chain/common v1.18.1 h1:QKXdEjK6SB3SqzDS/XbK74jy20d3tc+6PA8J8dFpuGw=
+github.com/0chain/common v1.18.1/go.mod h1:Lapu2Tj7z5Sm4r+X141e7vsz4NDODTEypeElYAP3iSw=
 github.com/0chain/errors v1.0.3 h1:QQZPFxTfnMcRdt32DXbzRQIfGWmBsKoEdszKQDb0rRM=
 github.com/0chain/errors v1.0.3/go.mod h1:xymD6nVgrbgttWwkpSCfLLEJbFO6iHGQwk/yeSuYkIc=
-github.com/0chain/gosdk v1.18.0-RC5 h1:zmxjYm+KL0hrc22xZlSp6iE2xvQVpALC1PaOViTj4fw=
-github.com/0chain/gosdk v1.18.0-RC5/go.mod h1:BJQPX/J6ShHV5ViGjh5aCooQD/aOhvBfnfkBOuSIFfQ=
+github.com/0chain/gosdk v1.18.0-RC8 h1:QT9AVC/kDaq9dhjmKBt5ZqmhHa/LoUlSCTKAIsQSrAw=
+github.com/0chain/gosdk v1.18.0-RC8/go.mod h1:fw3TUzF7HWNBuksA2WZzLcHlMz+A1XA9as5i3KUBqXg=
 github.com/Azure/azure-amqp-common-go/v2 v2.1.0/go.mod h1:R8rea+gJRuJR6QxTir/XuEd+YuKoUiazDC/N96FiDEU=
 github.com/Azure/azure-pipeline-go v0.2.1/go.mod h1:UGSo8XybXnIGZ3epmeBw7Jdz+HiUVpqIlpz/HKHylF4=
 github.com/Azure/azure-pipeline-go v0.2.2 h1:6oiIS9yaG6XCCzhgAgKFfIWyo4LLCiDhZot6ltoThhY=
