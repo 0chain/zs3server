@@ -54,7 +54,7 @@ func InitializeSDK(configDir, allocid string, nonce int64) error {
 
 	walletFile := filepath.Join(configDir, "wallet.json")
 
-	walletBytes, err := ioutil.ReadFile(walletFile)
+	walletBytes, err := os.ReadFile(walletFile)
 	if err != nil {
 		return err
 	}
@@ -63,7 +63,7 @@ func InitializeSDK(configDir, allocid string, nonce int64) error {
 	zcncore.SetLogFile("cmdlog.log", true)
 	sdk.SetLogFile("cmd.log", true)
 
-	err = client.InitSDK(string(walletBytes), cfg.BlockWorker, cfg.ChainID, cfg.SignatureScheme, nonce, false, true, cfg.MinSubmit, cfg.MinConfirmation, cfg.ConfirmationChainLength, cfg.SharderConsensous)
+	err = client.InitSDK(string(walletBytes), cfg.BlockWorker, cfg.ChainID, cfg.SignatureScheme, nonce, true, cfg.MinSubmit, cfg.MinConfirmation, cfg.ConfirmationChainLength, cfg.SharderConsensous)
 	if err != nil {
 		return err
 	}
