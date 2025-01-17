@@ -1,13 +1,13 @@
 module github.com/minio/minio
 
-go 1.21
+go 1.22.5
 
-toolchain go1.21.6
+toolchain go1.22.11
 
 require (
 	cloud.google.com/go/storage v1.27.0
 	github.com/0chain/errors v1.0.3
-	github.com/0chain/gosdk v1.17.12-0.20241023084317-d4d99f55ac84
+	github.com/0chain/gosdk v1.17.12-0.20250117104923-a8e43acb2a0a
 	github.com/Azure/azure-pipeline-go v0.2.2
 	github.com/Azure/azure-storage-blob-go v0.10.0
 	github.com/Shopify/sarama v1.28.0

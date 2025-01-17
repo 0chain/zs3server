@@ -81,7 +81,7 @@ func InitializeSDK(configDir, allocid string, nonce int64) error {
 		return err
 	}
 
-	err = sdk.InitStorageSDK(string(walletBytes), cfg.BlockWorker, cfg.ChainID, cfg.SignatureScheme, cfg.PreferredBlobbers, nonce)
+	err = sdk.InitStorageSDK(string(walletBytes), cfg.BlockWorker, cfg.ChainID, cfg.SignatureScheme, nil, nonce)
 	if err != nil {
 		return err
 	}
