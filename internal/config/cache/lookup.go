@@ -246,14 +246,14 @@ func LookupConfig(kvs config.KVS) (Config, error) {
 			return cfg, config.ErrInvalidMaxCacheFS(err)
 		}
 	}
-	if uploadWorkers := env.Get(EnvUploadWorkers, "20"); uploadWorkers != "" {
+	if uploadWorkers := env.Get(EnvUploadWorkers, "50"); uploadWorkers != "" {
 		cfg.UploadWorkers, err = strconv.Atoi(uploadWorkers)
 		if err != nil {
 			err := errors.New("upload workers shoud be a number")
 			return cfg, config.ErrInvalidUploadWorkers(err)
 		}
 	}
-	if uploadQueueTh := env.Get(EnvUploadQueueTh, "100"); uploadQueueTh != "" {
+	if uploadQueueTh := env.Get(EnvUploadQueueTh, "50"); uploadQueueTh != "" {
 		cfg.UploadQueueTh, err = strconv.Atoi(uploadQueueTh)
 		if err != nil {
 			err := errors.New("upload queue threshold shoud be a number")
