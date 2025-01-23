@@ -330,7 +330,7 @@ func (c *diskCache) purge(ctx context.Context) {
 	if atomic.LoadInt32(&c.purgeRunning) == 1 || c.diskUsageLow() {
 		return
 	}
-
+	log.Println("Purging cache entries")
 	toFree := c.toClear()
 	if toFree == 0 {
 		return
@@ -412,6 +412,7 @@ func (c *diskCache) purge(ctx context.Context) {
 		case cc != nil:
 			if cc.isStale(objInfo.ModTime) {
 				removeAll(cacheDir)
+				log.Println("purge cache entry", objInfo.Name)
 				scorer.adjustSaveBytes(-objInfo.Size)
 				// break early if sufficient disk space reclaimed.
 				if c.diskUsageLow() {

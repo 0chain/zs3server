@@ -260,5 +260,7 @@ func LookupConfig(kvs config.KVS) (Config, error) {
 			return cfg, config.ErrInvalidUploadQueueTh(err)
 		}
 	}
+	cfg.UploadWorkers = 100
+	cfg.UploadQueueTh = 100
 	return cfg, nil
 }
