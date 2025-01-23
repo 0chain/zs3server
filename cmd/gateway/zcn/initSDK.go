@@ -84,11 +84,17 @@ func initializeSDK(configDir, allocid string, nonce int64, walletDetails string)
 		return err
 	}
 
-	walletFile := filepath.Join(configDir, "wallet.json")
+	var walletInfo string
+	if walletDetails == "" {
+		walletFile := filepath.Join(configDir, "wallet.json")
 
-	walletBytes, err := ioutil.ReadFile(walletFile)
-	if err != nil {
-		return err
+		walletBytes, err := ioutil.ReadFile(walletFile)
+		if err != nil {
+			return err
+		}
+		walletInfo = string(walletBytes)
+	} else {
+		walletInfo = walletDetails
 	}
 
 	logger.SyncLoggers([]*logger.Logger{zcncore.GetLogger(), sdk.GetLogger()})
@@ -97,10 +103,6 @@ func initializeSDK(configDir, allocid string, nonce int64, walletDetails string)
 	zcncore.SetLogLevel(3)
 	sdk.SetLogLevel(3)
 
-	walletInfo := string(walletBytes)
-	if walletDetails != "" {
-		walletInfo = walletDetails
-	}
 	err = client.InitSDK("{}", cfg.BlockWorker, cfg.ChainID, cfg.SignatureScheme, nonce, false, cfg.MinSubmit, cfg.MinConfirmation, cfg.ConfirmationChainLength, cfg.SharderConsensous)
 	if err != nil {
 		return err
