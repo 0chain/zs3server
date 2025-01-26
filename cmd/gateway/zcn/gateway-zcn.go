@@ -35,13 +35,14 @@ const (
 )
 
 var (
-	configDir    string
-	allocationID string
-	nonce        int64
-	encrypt      bool
-	compress     bool
-	workDir      string
-	serverConfig serverOptions
+	configDir     string
+	allocationID  string
+	nonce         int64
+	encrypt       bool
+	compress      bool
+	workDir       string
+	serverConfig  serverOptions
+	walletDetails string
 )
 
 var zFlags = []cli.Flag{
@@ -54,11 +55,18 @@ var zFlags = []cli.Flag{
 		Name:        "allocationId",
 		Usage:       "Allocation id of an allocation",
 		Destination: &allocationID,
+		EnvVar:      "ALLOCATION_ID",
 	},
 	cli.Int64Flag{
 		Name:        "nonce",
 		Usage:       "nonce to use in transaction",
 		Destination: &nonce,
+	},
+	cli.StringFlag{
+		Name:        "wallet",
+		Usage:       "wallet details",
+		Destination: &walletDetails,
+		EnvVar:      "WALLET_DETAILS",
 	},
 }
 
@@ -128,7 +136,7 @@ var (
 
 // NewGatewayLayer initializes 0chain gosdk and return zcnObjects
 func (z *ZCN) NewGatewayLayer(creds madmin.Credentials) (minio.ObjectLayer, error) {
-	err := initializeSDK(configDir, allocationID, nonce)
+	err := initializeSDK(configDir, allocationID, nonce, walletDetails)
 	if err != nil {
 		return nil, err
 	}

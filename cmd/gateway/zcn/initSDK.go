@@ -3,7 +3,6 @@ package zcn
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -28,7 +27,7 @@ type serverOptions struct {
 	MaxConcurrentRequests int  `json:"max_concurrent_requests"`
 }
 
-func initializeSDK(configDir, allocid string, nonce int64) error {
+func initializeSDK(configDir, allocid string, nonce int64, walletDetails string) error {
 	if configDir == "" {
 		var err error
 		configDir, err = getDefaultConfigDir()
@@ -84,11 +83,17 @@ func initializeSDK(configDir, allocid string, nonce int64) error {
 		return err
 	}
 
-	walletFile := filepath.Join(configDir, "wallet.json")
+	var walletInfo string
+	if walletDetails == "" {
+		walletFile := filepath.Join(configDir, "wallet.json")
 
-	walletBytes, err := ioutil.ReadFile(walletFile)
-	if err != nil {
-		return err
+		walletBytes, err := os.ReadFile(walletFile)
+		if err != nil {
+			return err
+		}
+		walletInfo = string(walletBytes)
+	} else {
+		walletInfo = walletDetails
 	}
 
 	logger.SyncLoggers([]*logger.Logger{zcncore.GetLogger(), sdk.GetLogger()})
@@ -97,12 +102,21 @@ func initializeSDK(configDir, allocid string, nonce int64) error {
 	zcncore.SetLogLevel(3)
 	sdk.SetLogLevel(3)
 
-	err = client.InitSDK(string(walletBytes), cfg.BlockWorker, cfg.ChainID, cfg.SignatureScheme, nonce, false, true, cfg.MinSubmit, cfg.MinConfirmation, cfg.ConfirmationChainLength, cfg.SharderConsensous)
+	err = client.InitSDK("{}", cfg.BlockWorker, cfg.ChainID, cfg.SignatureScheme, nonce, true, cfg.MinSubmit, cfg.MinConfirmation, cfg.ConfirmationChainLength, cfg.SharderConsensous)
 	if err != nil {
 		return err
 	}
 
 	conf.InitClientConfig(&cfg)
+
+	err = zcncore.SetGeneralWalletInfo(walletInfo, cfg.SignatureScheme)
+	if err != nil {
+		return err
+	}
+
+	if client.GetClient().IsSplit {
+		zcncore.RegisterZauthServer(cfg.ZauthServer)
+	}
 
 	sdk.SetNumBlockDownloads(100)
 	return nil
