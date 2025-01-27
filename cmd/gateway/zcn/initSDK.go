@@ -114,6 +114,8 @@ func initializeSDK(configDir, allocid string, nonce int64, walletDetails string)
 		return err
 	}
 
+	fmt.Println("zauthhhhh", cfg.ZauthServer)
+
 	if client.GetClient().IsSplit {
 		zcncore.RegisterZauthServer(cfg.ZauthServer)
 	}
