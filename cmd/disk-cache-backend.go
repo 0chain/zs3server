@@ -938,6 +938,7 @@ func (c *diskCache) put(ctx context.Context, bucket, object string, data io.Read
 			ETag:        metadata["etag"],
 			Size:        n,
 			UserDefined: metadata,
+			ModTime:     time.Now(),
 		},
 		c.saveMetadata(ctx, bucket, object, metadata, n, nil, "", incHitsOnly)
 }

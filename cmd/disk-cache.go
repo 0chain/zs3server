@@ -938,6 +938,17 @@ func (c *cacheObjects) uploadObject(ctx context.Context, oi ObjectInfo) {
 		logger.LogIf(ctx, fmt.Errorf("Could not upload %s/%s to backend: %w", oi.Bucket, oi.Name, err))
 		return
 	}
+	objPath := oi.Bucket + "/" + oi.Name
+	cachedObj, ok := c.listTree.Get(objPath)
+	if !ok {
+		log.Println("object not found in list tree")
+		return
+	}
+	cachedObjInfo := cachedObj.(ObjectInfo)
+	if !cachedObjInfo.ModTime.IsZero() && cachedObjInfo.ModTime != oi.ModTime {
+		log.Println("object modified since cached")
+		return
+	}
 	cReader, _, bErr := dcache.Get(ctx, oi.Bucket, oi.Name, nil, http.Header{}, ObjectOptions{})
 	if bErr != nil {
 		log.Println("errorGettingReader: ", bErr)

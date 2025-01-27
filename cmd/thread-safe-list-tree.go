@@ -32,3 +32,9 @@ func (t *ThreadSafeListTree) ForEachPrefix(keyPrefix string, callback radix.Walk
 	defer t.mu.RUnlock()
 	t.tree.WalkPrefix(keyPrefix, callback)
 }
+
+func (t *ThreadSafeListTree) Get(key string) (any, bool) {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	return t.tree.Get(key)
+}
