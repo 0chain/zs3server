@@ -330,11 +330,13 @@ func (c *diskCache) purge(ctx context.Context) {
 	if atomic.LoadInt32(&c.purgeRunning) == 1 || c.diskUsageLow() {
 		return
 	}
-	log.Println("Purging cache entries")
+
 	toFree := c.toClear()
 	if toFree == 0 {
+		log.Println("No cache entries to purge")
 		return
 	}
+	log.Println("Purging cache entries: ", toFree)
 
 	atomic.StoreInt32(&c.purgeRunning, 1) // do not run concurrent purge()
 	defer atomic.StoreInt32(&c.purgeRunning, 0)
