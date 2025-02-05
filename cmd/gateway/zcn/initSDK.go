@@ -3,7 +3,6 @@ package zcn
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -88,7 +87,7 @@ func initializeSDK(configDir, allocid string, nonce int64, walletDetails string)
 	if walletDetails == "" {
 		walletFile := filepath.Join(configDir, "wallet.json")
 
-		walletBytes, err := ioutil.ReadFile(walletFile)
+		walletBytes, err := os.ReadFile(walletFile)
 		if err != nil {
 			return err
 		}
@@ -103,7 +102,7 @@ func initializeSDK(configDir, allocid string, nonce int64, walletDetails string)
 	zcncore.SetLogLevel(3)
 	sdk.SetLogLevel(3)
 
-	err = client.InitSDK("{}", cfg.BlockWorker, cfg.ChainID, cfg.SignatureScheme, nonce, false, cfg.MinSubmit, cfg.MinConfirmation, cfg.ConfirmationChainLength, cfg.SharderConsensous)
+	err = client.InitSDK("{}", cfg.BlockWorker, cfg.ChainID, cfg.SignatureScheme, nonce, true, cfg.MinSubmit, cfg.MinConfirmation, cfg.ConfirmationChainLength, cfg.SharderConsensous)
 	if err != nil {
 		return err
 	}
