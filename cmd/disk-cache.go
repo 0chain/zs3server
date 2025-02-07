@@ -931,7 +931,6 @@ func (c *cacheObjects) PutObject(ctx context.Context, bucket, object string, r *
 
 // upload cached object to backend in async commit mode.
 func (c *cacheObjects) uploadObject(ctx context.Context, oi ObjectInfo) {
-	log.Printf("uploading object %s in backend in async commit mode", oi.Name)
 	dcache, err := c.getCacheToLoc(ctx, oi.Bucket, oi.Name)
 	if err != nil {
 		// disk cache could not be located.
@@ -941,14 +940,15 @@ func (c *cacheObjects) uploadObject(ctx context.Context, oi ObjectInfo) {
 	objPath := oi.Bucket + "/" + oi.Name
 	cachedObj, ok := c.listTree.Get(objPath)
 	if !ok {
-		log.Println("object not found in list tree")
+		log.Println("object not found in list tree ", objPath)
 		return
 	}
 	cachedObjInfo := cachedObj.(ObjectInfo)
-	if !cachedObjInfo.ModTime.IsZero() && cachedObjInfo.ModTime != oi.ModTime {
-		log.Println("object modified since cached")
+	if !cachedObjInfo.ModTime.IsZero() && cachedObjInfo.ModTime.Equal(oi.ModTime) {
+		log.Println("object modified since cached", cachedObjInfo.ModTime.Unix(), oi.ModTime.Unix(), objPath)
 		return
 	}
+	log.Printf("uploading object %s in backend in async commit mode", oi.Name)
 	cReader, _, bErr := dcache.Get(ctx, oi.Bucket, oi.Name, nil, http.Header{}, ObjectOptions{})
 	if bErr != nil {
 		log.Println("errorGettingReader: ", bErr)
@@ -985,7 +985,7 @@ func (c *cacheObjects) uploadObject(ctx context.Context, oi ObjectInfo) {
 		size = cReader.ObjInfo.Size
 	} else {
 		delete(meta, writeBackRetryHeader)
-		c.deleteFromListTree(oi.Bucket + "/" + oi.Name)
+		c.listTree.CheckTimeAndDelete(objPath, cachedObjInfo.ModTime)
 	}
 	meta[writeBackStatusHeader] = wbCommitStatus.String()
 	meta["etag"] = oi.ETag
