@@ -944,8 +944,8 @@ func (c *cacheObjects) uploadObject(ctx context.Context, oi ObjectInfo) {
 		return
 	}
 	cachedObjInfo := cachedObj.(ObjectInfo)
-	if !cachedObjInfo.ModTime.IsZero() && !cachedObjInfo.ModTime.Equal(oi.ModTime) {
-		log.Println("object modified since cached", cachedObjInfo.ModTime.Unix(), oi.ModTime.Unix(), objPath)
+	if !cachedObjInfo.ModTime.IsZero() && cachedObjInfo.ModTime.UnixNano() != oi.ModTime.UnixNano() {
+		log.Println("object modified since cached", cachedObjInfo.ModTime.Unix(), oi.ModTime.Unix(), objPath, cachedObjInfo.ModTime.Equal(oi.ModTime))
 		return
 	}
 	log.Printf("uploading object %s in backend in async commit mode", oi.Name)

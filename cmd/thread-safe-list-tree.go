@@ -48,7 +48,7 @@ func (t *ThreadSafeListTree) CheckTimeAndDelete(key string, time time.Time) (any
 		return nil, false
 	}
 	v := value.(ObjectInfo)
-	if v.ModTime.Equal(time) {
+	if v.ModTime.UnixNano() == time.UnixNano() {
 		return t.tree.Delete(key)
 	}
 	return nil, false
