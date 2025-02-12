@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"log"
 	"sync"
 	"time"
 
@@ -50,6 +51,8 @@ func (t *ThreadSafeListTree) CheckTimeAndDelete(key string, time time.Time) (any
 	v := value.(ObjectInfo)
 	if v.ModTime.UnixNano() == time.UnixNano() {
 		return t.tree.Delete(key)
+	} else {
+		log.Println("CheckTimeAndDelete: time not match", v.ModTime.UnixNano, time.UnixNano())
 	}
 	return nil, false
 }

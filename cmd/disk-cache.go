@@ -816,7 +816,7 @@ func (c *cacheObjects) PutObject(ctx context.Context, bucket, object string, r *
 
 	// fetch from backend if there is no space on cache drive
 	if !dcache.diskSpaceAvailable(size) {
-		log.Println("uploading to  backend no space on cache drive")
+		log.Println("uploading to backend no space on cache drive")
 		return putObjectFn(ctx, bucket, object, r, opts)
 	}
 
@@ -843,12 +843,12 @@ func (c *cacheObjects) PutObject(ctx context.Context, bucket, object string, r *
 		return putObjectFn(ctx, bucket, object, r, opts)
 	}
 	if c.commitWriteback {
-		log.Println("uploading to cache writeback", object)
 		oi, err := dcache.Put(ctx, bucket, object, r, r.Size(), nil, opts, false, true)
 		if err != nil {
 			return ObjectInfo{}, err
 		}
 		objPath := oi.Bucket + "/" + oi.Name
+		log.Println("uploading to cache writeback", object, " modTime", oi.ModTime.UnixNano())
 		c.listTree.Insert(objPath, oi)
 		coi := oi.Clone()
 		//go c.uploadObject(GlobalContext, oi) // use schedule to upload in batch
@@ -945,7 +945,7 @@ func (c *cacheObjects) uploadObject(ctx context.Context, oi ObjectInfo) {
 	}
 	cachedObjInfo := cachedObj.(ObjectInfo)
 	if !cachedObjInfo.ModTime.IsZero() && cachedObjInfo.ModTime.UnixNano() != oi.ModTime.UnixNano() {
-		log.Println("object modified since cached", cachedObjInfo.ModTime.Unix(), oi.ModTime.Unix(), objPath, cachedObjInfo.ModTime.Equal(oi.ModTime))
+		log.Println("object modified since cached", cachedObjInfo.ModTime.UnixNano(), oi.ModTime.UnixNano(), oi.Name, cachedObjInfo.ModTime.UnixNano() != oi.ModTime.UnixNano())
 		return
 	}
 	log.Printf("uploading object %s in backend in async commit mode", oi.Name)
