@@ -140,7 +140,7 @@ func (z *ZCN) NewGatewayLayer(creds madmin.Credentials) (minio.ObjectLayer, erro
 	if err != nil {
 		return nil, err
 	}
-	log.Println("0chain gosdk initialized: ", allocationID, "compress: ", compress, "encrypt: ", encrypt)
+	log.Println("0chain gosdk initialized: ", allocationID, "compress: ", compress, "encrypt: ", encrypt, serverConfig.UploadWorkers, serverConfig.DownloadWorkers, serverConfig.MaxConcurrentRequests)
 	if serverConfig.UploadWorkers > 0 {
 		sdk.SetHighModeWorkers(serverConfig.UploadWorkers)
 	}
