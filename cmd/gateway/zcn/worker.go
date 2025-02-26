@@ -40,13 +40,6 @@ func IntiBatchUploadWorkers(ctx context.Context, alloc *sdk.Allocation, waitTime
 					continue
 				}
 				if len(batchUploadChan) == 0 {
-					if len(opRequest) > maxOperations/2 {
-						log.Println("processing half batch")
-						workerChan <- opRequest
-						opRequest = make([]sdk.OperationRequest, 0, 5)
-						iterations = 0
-						continue
-					}
 					// wait for more operations
 					log.Println("waiting for more operations: ", len(opRequest))
 					iterations++
