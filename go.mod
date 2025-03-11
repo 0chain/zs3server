@@ -7,7 +7,7 @@ toolchain go1.22.5
 require (
 	cloud.google.com/go/storage v1.28.1
 	github.com/0chain/errors v1.0.3
-	github.com/0chain/gosdk v1.19.9-0.20250301125856-e83dd3b8f71a
+	github.com/0chain/gosdk v1.19.9-0.20250311061058-60a16fff6cbb
 	github.com/Azure/azure-pipeline-go v0.2.2
 	github.com/Azure/azure-storage-blob-go v0.10.0
 	github.com/Shopify/sarama v1.28.0
