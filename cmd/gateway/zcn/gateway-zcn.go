@@ -162,6 +162,7 @@ func (z *ZCN) NewGatewayLayer(creds madmin.Credentials) (minio.ObjectLayer, erro
 	sdk.SetSingleClietnMode(true)
 	sdk.SetShouldVerifyHash(false)
 	sdk.SetSaveProgress(false)
+	sdk.SetShouldTimeRequest(false)
 	allocation.SetCheckStatus(true)
 	zob := &zcnObjects{
 		alloc:   allocation,
