@@ -521,24 +521,24 @@ func (zob *zcnObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 	// }
 
 	var objects []minio.ObjectInfo
-	if prefix != "" {
-		userDefined := make(map[string]string)
-		if ref.CustomMeta != "" {
-			_ = json.Unmarshal([]byte(ref.CustomMeta), &userDefined)
-		}
-		log.Println("prefixNonEmpty: ", prefix)
-		objects = append(objects, minio.ObjectInfo{
-			Bucket:       bucket,
-			Name:         prefix,
-			ModTime:      ref.UpdatedAt.ToTime(),
-			Size:         0,
-			IsDir:        true,
-			ContentType:  s3DirectoryContentType,
-			ETag:         s3ContentHash,
-			StorageClass: "STANDARD",
-			UserDefined:  userDefined,
-		})
-	}
+	// if prefix != "" {
+	// 	userDefined := make(map[string]string)
+	// 	if ref.CustomMeta != "" {
+	// 		_ = json.Unmarshal([]byte(ref.CustomMeta), &userDefined)
+	// 	}
+	// 	log.Println("prefixNonEmpty: ", prefix)
+	// 	objects = append(objects, minio.ObjectInfo{
+	// 		Bucket:       bucket,
+	// 		Name:         prefix,
+	// 		ModTime:      ref.UpdatedAt.ToTime(),
+	// 		Size:         0,
+	// 		IsDir:        true,
+	// 		ContentType:  s3DirectoryContentType,
+	// 		ETag:         s3ContentHash,
+	// 		StorageClass: "STANDARD",
+	// 		UserDefined:  userDefined,
+	// 	})
+	// }
 	var isDelimited bool
 	if delimiter != "" {
 		isDelimited = true
