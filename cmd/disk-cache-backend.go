@@ -57,15 +57,15 @@ const (
 	cacheDataFilePrefix = "part"
 
 	cacheMetaVersion = "1.0.0"
-	cacheExpiryDays  = time.Minute * 2 // defaults to 90 days
+	cacheExpiryDays  = time.Minute * 30 // defaults to 90 days
 	// SSECacheEncrypted is the metadata key indicating that the object
 	// is a cache entry encrypted with cache KMS master key in globalCacheKMS.
 	SSECacheEncrypted = "X-Minio-Internal-Encrypted-Cache"
 	cacheMultipartDir = "multipart"
 	cacheWritebackDir = "writeback"
 
-	cacheStaleUploadCleanupInterval = time.Hour * 24
-	cacheStaleUploadExpiry          = time.Hour * 24
+	cacheStaleUploadCleanupInterval = time.Hour * 12
+	cacheStaleUploadExpiry          = time.Hour * 12
 	cacheWBStaleUploadExpiry        = time.Hour * 24 * 7
 )
 
@@ -283,6 +283,7 @@ func (c *diskCache) diskSpaceAvailable(size int64) bool {
 	usedPercent := float64(di.Used) * 100 / float64(di.Total)
 	if usedPercent >= float64(gcTriggerPct) {
 		atomic.StoreInt32(&c.stats.UsageState, 1)
+		log.Println("Disk usage exceeds high watermark, triggering GC", usedPercent, gcTriggerPct)
 		c.queueGC()
 	}
 	atomic.StoreUint64(&c.stats.UsagePercent, uint64(usedPercent))
