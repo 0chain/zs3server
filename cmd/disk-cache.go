@@ -200,7 +200,6 @@ func (c *cacheObjects) DeleteObjects(ctx context.Context, bucket string, objects
 	errs := make([]error, len(objects))
 	objInfos := make([]ObjectInfo, len(objects))
 	deletedObjects := make([]DeletedObject, len(objInfos))
-	dObjs, derrs := c.InnerDeleteObjectsFn(ctx, bucket, objects, opts)
 	for idx, object := range objects {
 		dcache, cerr := c.getCacheLoc(bucket, object.ObjectName)
 		if cerr != nil {
@@ -210,6 +209,7 @@ func (c *cacheObjects) DeleteObjects(ctx context.Context, bucket string, objects
 		dcache.Delete(ctx, bucket, object.ObjectName)
 		c.deleteFromListTree(bucket + "/" + object.ObjectName)
 	}
+	dObjs, derrs := c.InnerDeleteObjectsFn(ctx, bucket, objects, opts)
 	for idx := range derrs {
 		if errs[idx] != nil {
 			continue
