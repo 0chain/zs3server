@@ -57,7 +57,7 @@ const (
 	cacheDataFilePrefix = "part"
 
 	cacheMetaVersion = "1.0.0"
-	cacheExpiryDays  = 90 * time.Hour * 24 // defaults to 90 days
+	cacheExpiryDays  = time.Minute * 2 // defaults to 90 days
 	// SSECacheEncrypted is the metadata key indicating that the object
 	// is a cache entry encrypted with cache KMS master key in globalCacheKMS.
 	SSECacheEncrypted = "X-Minio-Internal-Encrypted-Cache"
@@ -333,8 +333,10 @@ func (c *diskCache) purge(ctx context.Context) {
 
 	toFree := c.toClear()
 	if toFree == 0 {
+		log.Println("No cache entries to purge")
 		return
 	}
+	log.Println("Purging cache entries: ", toFree)
 
 	atomic.StoreInt32(&c.purgeRunning, 1) // do not run concurrent purge()
 	defer atomic.StoreInt32(&c.purgeRunning, 0)
@@ -405,6 +407,7 @@ func (c *diskCache) purge(ctx context.Context) {
 		// cache writeback commit setting is enabled.
 		status, ok := objInfo.UserDefined[writeBackStatusHeader]
 		if ok && status != CommitComplete.String() {
+			log.Println("Skipping cache entry", objInfo.Name, "as it is not committed yet")
 			return nil
 		}
 		cc := cacheControlOpts(objInfo)
@@ -412,6 +415,7 @@ func (c *diskCache) purge(ctx context.Context) {
 		case cc != nil:
 			if cc.isStale(objInfo.ModTime) {
 				removeAll(cacheDir)
+				log.Println("purge cache entry", objInfo.Name)
 				scorer.adjustSaveBytes(-objInfo.Size)
 				// break early if sufficient disk space reclaimed.
 				if c.diskUsageLow() {
@@ -448,6 +452,7 @@ func (c *diskCache) purge(ctx context.Context) {
 		// clean up stale cache.json files for objects that never got cached but access count was maintained in cache.json
 		fi, err := os.Stat(pathJoin(cacheDir, cacheMetaJSONFile))
 		if err != nil || (fi != nil && fi.ModTime().Before(expiry) && len(cachedRngFiles) == 0) {
+			log.Println("purge cache dir", cacheDir)
 			removeAll(cacheDir)
 			if fi != nil {
 				scorer.adjustSaveBytes(-fi.Size())
@@ -472,6 +477,7 @@ func (c *diskCache) purge(ctx context.Context) {
 
 	scorer.purgeFunc(func(qfile queuedFile) {
 		fileName := qfile.name
+		log.Println("score purge", fileName)
 		removeAll(fileName)
 		slashIdx := strings.LastIndex(fileName, SlashSeparator)
 		if slashIdx >= 0 {
@@ -924,12 +930,14 @@ func (c *diskCache) put(ctx context.Context, bucket, object string, data io.Read
 		removeAll(cachePath)
 		return oi, IncompleteBody{Bucket: bucket, Object: object}
 	}
+	modTime := time.Now()
 	if writeback {
 		metadata["content-md5"] = md5sum
 		if md5bytes, err := base64.StdEncoding.DecodeString(md5sum); err == nil {
 			metadata["etag"] = hex.EncodeToString(md5bytes)
 		}
 		metadata[writeBackStatusHeader] = CommitPending.String()
+		metadata["last-modified"] = modTime.UTC().Format(http.TimeFormat)
 	}
 	return ObjectInfo{
 			Bucket:      bucket,
@@ -937,6 +945,7 @@ func (c *diskCache) put(ctx context.Context, bucket, object string, data io.Read
 			ETag:        metadata["etag"],
 			Size:        n,
 			UserDefined: metadata,
+			ModTime:     modTime,
 		},
 		c.saveMetadata(ctx, bucket, object, metadata, n, nil, "", incHitsOnly)
 }

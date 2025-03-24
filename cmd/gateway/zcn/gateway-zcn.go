@@ -246,6 +246,9 @@ func (zob *zcnObjects) DeleteObject(ctx context.Context, bucket, object string, 
 	var ref *sdk.ORef
 	ref, err = getSingleRegularRef(zob.alloc, remotePath)
 	if err != nil {
+		if remotePathNotExistError(err) {
+			err = nil
+		}
 		return
 	}
 
