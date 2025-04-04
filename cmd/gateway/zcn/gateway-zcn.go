@@ -246,6 +246,9 @@ func (zob *zcnObjects) DeleteObject(ctx context.Context, bucket, object string, 
 	var ref *sdk.ORef
 	ref, err = getSingleRegularRef(zob.alloc, remotePath)
 	if err != nil {
+		if remotePathNotExistError(err) {
+			err = nil
+		}
 		return
 	}
 
@@ -511,33 +514,34 @@ func (zob *zcnObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 			nil
 	}
 
-	if len(prefix) > 0 && prefix[len(prefix)-1] != '/' {
-		return minio.ListObjectsInfo{
-				IsTruncated: false,
-				Objects:     []minio.ObjectInfo{},
-				Prefixes:    []string{prefix + "/"},
-			},
-			nil
-	}
+	// if len(prefix) > 0 && prefix[len(prefix)-1] != '/' {
+	// 	return minio.ListObjectsInfo{
+	// 			IsTruncated: false,
+	// 			Objects:     []minio.ObjectInfo{},
+	// 			Prefixes:    []string{prefix + "/"},
+	// 		},
+	// 		nil
+	// }
 
 	var objects []minio.ObjectInfo
-	if prefix != "" {
-		userDefined := make(map[string]string)
-		if ref.CustomMeta != "" {
-			_ = json.Unmarshal([]byte(ref.CustomMeta), &userDefined)
-		}
-		objects = append(objects, minio.ObjectInfo{
-			Bucket:       bucket,
-			Name:         prefix,
-			ModTime:      ref.UpdatedAt.ToTime(),
-			Size:         0,
-			IsDir:        true,
-			ContentType:  s3DirectoryContentType,
-			ETag:         s3ContentHash,
-			StorageClass: "STANDARD",
-			UserDefined:  userDefined,
-		})
-	}
+	// if prefix != "" {
+	// 	userDefined := make(map[string]string)
+	// 	if ref.CustomMeta != "" {
+	// 		_ = json.Unmarshal([]byte(ref.CustomMeta), &userDefined)
+	// 	}
+	// 	log.Println("prefixNonEmpty: ", prefix)
+	// 	objects = append(objects, minio.ObjectInfo{
+	// 		Bucket:       bucket,
+	// 		Name:         prefix,
+	// 		ModTime:      ref.UpdatedAt.ToTime(),
+	// 		Size:         0,
+	// 		IsDir:        true,
+	// 		ContentType:  s3DirectoryContentType,
+	// 		ETag:         s3ContentHash,
+	// 		StorageClass: "STANDARD",
+	// 		UserDefined:  userDefined,
+	// 	})
+	// }
 	var isDelimited bool
 	if delimiter != "" {
 		isDelimited = true

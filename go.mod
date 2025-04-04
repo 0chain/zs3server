@@ -7,12 +7,13 @@ toolchain go1.22.5
 require (
 	cloud.google.com/go/storage v1.28.1
 	github.com/0chain/errors v1.0.3
-	github.com/0chain/gosdk v1.19.10
+	github.com/0chain/gosdk v1.20.2-0.20250328102140-4c947d24304c
 	github.com/Azure/azure-pipeline-go v0.2.2
 	github.com/Azure/azure-storage-blob-go v0.10.0
 	github.com/Shopify/sarama v1.28.0
 	github.com/VividCortex/ewma v1.1.1
 	github.com/alecthomas/participle v0.2.1
+	github.com/armon/go-radix v0.0.0-20180808171621-7fddfc383310
 	github.com/bcicen/jstream v1.0.1
 	github.com/beevik/ntp v0.3.0
 	github.com/bits-and-blooms/bloom/v3 v3.0.1
@@ -41,7 +42,7 @@ require (
 	github.com/inconshreveable/mousetrap v1.0.0
 	github.com/jcmturner/gokrb5/v8 v8.4.2
 	github.com/json-iterator/go v1.1.12
-	github.com/klauspost/compress v1.17.0
+	github.com/klauspost/compress v1.17.9
 	github.com/klauspost/cpuid/v2 v2.2.4
 	github.com/klauspost/pgzip v1.2.5
 	github.com/klauspost/readahead v1.4.0
@@ -72,7 +73,6 @@ require (
 	github.com/philhofer/fwd v1.1.2-0.20210722190033-5c56ac6d0bb9
 	github.com/pierrec/lz4/v4 v4.1.21
 	github.com/pkg/errors v0.9.1
-	github.com/plar/go-adaptive-radix-tree v1.0.5
 	github.com/prometheus/client_golang v1.14.0
 	github.com/prometheus/client_model v0.3.0
 	github.com/prometheus/procfs v0.9.0
@@ -90,10 +90,10 @@ require (
 	go.etcd.io/etcd/client/v3 v3.5.6
 	go.uber.org/atomic v1.10.0
 	go.uber.org/zap v1.24.0
-	golang.org/x/crypto v0.21.0
+	golang.org/x/crypto v0.26.0
 	golang.org/x/oauth2 v0.7.0
-	golang.org/x/sync v0.7.0
-	golang.org/x/sys v0.18.0
+	golang.org/x/sync v0.8.0
+	golang.org/x/sys v0.23.0
 	golang.org/x/time v0.3.0
 	google.golang.org/api v0.114.0
 	gopkg.in/yaml.v2 v2.4.0
@@ -252,9 +252,9 @@ require (
 	go.mongodb.org/mongo-driver v1.4.6 // indirect
 	go.opencensus.io v0.24.0 // indirect
 	go.uber.org/multierr v1.9.0 // indirect
-	golang.org/x/net v0.23.0 // indirect
-	golang.org/x/term v0.18.0 // indirect
-	golang.org/x/text v0.14.0 // indirect
+	golang.org/x/net v0.28.0 // indirect
+	golang.org/x/term v0.23.0 // indirect
+	golang.org/x/text v0.17.0 // indirect
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/genproto v0.0.0-20230410155749-daa745c078e1 // indirect

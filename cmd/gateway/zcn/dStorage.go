@@ -482,3 +482,10 @@ func isSameRootError(err error) bool {
 	}
 	return strings.Contains(err.Error(), "previous allocation root are same")
 }
+
+func remotePathNotExistError(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(err.Error(), "does not exist")
+}

@@ -24,7 +24,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -32,6 +31,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/armon/go-radix"
 	objectlock "github.com/minio/minio/internal/bucket/object/lock"
 	"github.com/minio/minio/internal/color"
 	"github.com/minio/minio/internal/config/cache"
@@ -40,7 +40,6 @@ import (
 	"github.com/minio/minio/internal/logger"
 	"github.com/minio/minio/internal/sync/errgroup"
 	"github.com/minio/pkg/wildcard"
-	art "github.com/plar/go-adaptive-radix-tree"
 )
 
 const (
@@ -114,13 +113,12 @@ type cacheObjects struct {
 	// number of accesses after which to cache an object
 	after int
 	// commit objects in async manner
-	commitWriteback     bool
-	commitWritethrough  bool
-	maxCacheFileSize    int64
-	uploadWorkers       int
-	uploadQueueTh       int
-	indexSvcUrl         string
-	contentSearchEnable string
+	commitWriteback    bool
+	commitWritethrough bool
+	maxCacheFileSize   int64
+	uploadWorkers      int
+	uploadQueueTh      int
+
 	// if true migration is in progress from v1 to v2
 	migrating bool
 	// retry queue for writeback cache mode to reattempt upload to backend
@@ -143,6 +141,7 @@ type cacheObjects struct {
 	InnerAbortMultipartUploadFn    func(ctx context.Context, bucket, object, uploadID string, opts ObjectOptions) error
 	InnerCompleteMultipartUploadFn func(ctx context.Context, bucket, object, uploadID string, uploadedParts []CompletePart, opts ObjectOptions) (objInfo ObjectInfo, err error)
 	InnerCopyObjectPartFn          func(ctx context.Context, srcBucket, srcObject, dstBucket, dstObject, uploadID string, partID int, startOffset int64, length int64, srcInfo ObjectInfo, srcOpts, dstOpts ObjectOptions) (pi PartInfo, e error)
+	InnerDeleteObjectsFn           func(ctx context.Context, bucket string, objects []ObjectToDelete, opts ObjectOptions) ([]DeletedObject, []error)
 }
 
 func (c *cacheObjects) incHitsToMeta(ctx context.Context, dcache *diskCache, bucket, object string, size int64, eTag string, rs *HTTPRangeSpec) error {
@@ -182,7 +181,7 @@ func (c *cacheObjects) updateMetadataIfChanged(ctx context.Context, dcache *disk
 func (c *cacheObjects) DeleteObject(ctx context.Context, bucket, object string, opts ObjectOptions) (objInfo ObjectInfo, err error) {
 	// delete from backend and then delete from cache always
 	objInfoB, errB := c.InnerDeleteObjectFn(ctx, bucket, object, opts)
-
+	log.Println("delete object from cache", bucket, object)
 	if c.isCacheExclude(bucket, object) || c.skipCache() {
 		return
 	}
@@ -193,59 +192,38 @@ func (c *cacheObjects) DeleteObject(ctx context.Context, bucket, object string, 
 	}
 	dcache.Delete(ctx, bucket, object)
 	c.deleteFromListTree(bucket + "/" + object)
-	if c.contentSearchEnable == "true" {
-		go c.deleteObjectFromIndex(bucket, object)
-	}
 	return objInfoB, errB
-}
-
-func (c *cacheObjects) deleteObjectFromIndex(bucket string, object string) {
-	u, err := url.Parse(c.indexSvcUrl + "/delete")
-	if err != nil {
-		log.Println("err parsing url of zsearch delete", err)
-		return
-	}
-	q := u.Query()
-	q.Set("bucketName", bucket)
-	q.Set("objName", object)
-	u.RawQuery = q.Encode()
-	dreq, err := http.NewRequest(http.MethodDelete, u.String(), nil)
-	if err != nil {
-		log.Println("err creating delete req", err)
-		return
-	}
-	client := &http.Client{}
-	resp, err := client.Do(dreq)
-	if err != nil {
-		log.Println("err sending delete file req", err)
-		return
-	}
-	defer resp.Body.Close()
 }
 
 // DeleteObjects batch deletes objects in slice, and clears any cached entries
 func (c *cacheObjects) DeleteObjects(ctx context.Context, bucket string, objects []ObjectToDelete, opts ObjectOptions) ([]DeletedObject, []error) {
 	errs := make([]error, len(objects))
 	objInfos := make([]ObjectInfo, len(objects))
-	for idx, object := range objects {
-		opts.VersionID = object.VersionID
-		objInfos[idx], errs[idx] = c.DeleteObject(ctx, bucket, object.ObjectName, opts)
-	}
 	deletedObjects := make([]DeletedObject, len(objInfos))
-	for idx := range errs {
+	for idx, object := range objects {
+		dcache, cerr := c.getCacheLoc(bucket, object.ObjectName)
+		if cerr != nil {
+			errs[idx] = cerr
+			return deletedObjects, errs
+		}
+		dcache.Delete(ctx, bucket, object.ObjectName)
+		c.deleteFromListTree(bucket + "/" + object.ObjectName)
+	}
+	dObjs, derrs := c.InnerDeleteObjectsFn(ctx, bucket, objects, opts)
+	for idx := range derrs {
 		if errs[idx] != nil {
 			continue
 		}
-		if objInfos[idx].DeleteMarker {
+		if dObjs[idx].DeleteMarker {
 			deletedObjects[idx] = DeletedObject{
-				DeleteMarker:          objInfos[idx].DeleteMarker,
-				DeleteMarkerVersionID: objInfos[idx].VersionID,
+				DeleteMarker:          dObjs[idx].DeleteMarker,
+				DeleteMarkerVersionID: dObjs[idx].VersionID,
 			}
 			continue
 		}
 		deletedObjects[idx] = DeletedObject{
-			ObjectName: objInfos[idx].Name,
-			VersionID:  objInfos[idx].VersionID,
+			ObjectName: dObjs[idx].ObjectName,
+			VersionID:  dObjs[idx].VersionID,
 		}
 	}
 	return deletedObjects, errs
@@ -284,9 +262,9 @@ func (c *cacheObjects) GetObjectNInfo(ctx context.Context, bucket, object string
 	// fetch diskCache if object is currently cached or nearest available cache drive
 	dcache, err := c.getCacheToLoc(ctx, bucket, object)
 	if err != nil {
+		log.Println("errorGettingLoc: ", err)
 		return c.InnerGetObjectNInfoFn(ctx, bucket, object, rs, h, lockType, opts)
 	}
-
 	cacheReader, numCacheHits, cacheErr := dcache.Get(ctx, bucket, object, rs, h, opts)
 	if cacheErr == nil {
 		cacheObjSize = cacheReader.ObjInfo.Size
@@ -530,7 +508,6 @@ func (c *cacheObjects) CopyObject(ctx context.Context, srcBucket, srcObject, dst
 
 // ListObjects from disk cache
 func (c *cacheObjects) ListObjects(ctx context.Context, bucket, prefix, marker, delimiter string, maxKeys int) (result ListObjectsInfo, err error) {
-	log.Printf("listobject cache prefix %s marker %s delim %s maxkey %d \n", prefix, marker, delimiter, maxKeys)
 	objInfos := []ObjectInfo{}
 	prefixes := map[string]bool{}
 
@@ -559,32 +536,30 @@ func (c *cacheObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 	rootprefix := bucket + "/" + prefix
 	rootMarker := bucket + "/" + marker
 	objectCount := 0
-	leafFilter := func(n art.Node) bool {
-		if n.Kind() == art.Leaf {
-			if strings.HasPrefix(string(n.Key()), rootprefix) {
-				if marker == "" || string(n.Key()) > rootMarker {
-					trimmed := strings.TrimPrefix(string(n.Key()), rootprefix)
-					parts := strings.Split(trimmed, delimiter)
-					if len(parts) > 0 && parts[0] != "" {
-						if (len(objInfos) + len(prefixes)) < maxKeys {
-							if len(parts) == 1 {
-								ob, ok := n.Value().(ObjectInfo)
-								if ok {
-									objInfos = append(objInfos, ob)
-								}
-							} else if delimiter != "" {
-								dir := prefix + parts[0] + delimiter
-								if marker == "" || dir > marker {
-									prefixes[dir] = true
-								}
+	leafFilter := func(key string, value any) bool {
+		if strings.HasPrefix(key, rootprefix) {
+			if marker == "" || key > rootMarker {
+				trimmed := strings.TrimPrefix(key, rootprefix)
+				parts := strings.Split(trimmed, delimiter)
+				if len(parts) > 0 && parts[0] != "" {
+					if (len(objInfos) + len(prefixes)) < maxKeys {
+						if len(parts) == 1 {
+							ob, ok := value.(ObjectInfo)
+							if ok {
+								objInfos = append(objInfos, ob)
+							}
+						} else if delimiter != "" {
+							dir := prefix + parts[0] + delimiter
+							if marker == "" || dir > marker {
+								prefixes[dir] = true
 							}
 						}
 					}
-					objectCount++
 				}
+				objectCount++
 			}
 		}
-		return true
+		return false
 	}
 	c.prefixSearch(rootprefix, leafFilter)
 	var uPrefixes []string
@@ -595,6 +570,7 @@ func (c *cacheObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 	if objectCount > maxKeys {
 		isTruncated = true
 	}
+	log.Printf("listobject cache prefix %s marker %s delim %s maxkey %d result %d \n", prefix, marker, delimiter, maxKeys, len(objInfos))
 	return ListObjectsInfo{
 		Objects:     objInfos,
 		Prefixes:    unique(uPrefixes),
@@ -602,13 +578,13 @@ func (c *cacheObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 	}, nil
 }
 
-func (c *cacheObjects) prefixSearch(rootprefix string, leafFilter art.Callback) {
-	defer func() {
-		if r := recover(); r != nil {
-			log.Println("recovered from panic from list tree listobj")
-		}
-	}()
-	c.listTree.ForEachPrefix([]byte(rootprefix), leafFilter)
+func (c *cacheObjects) prefixSearch(rootprefix string, leafFilter radix.WalkFn) {
+	// defer func() {
+	// 	if r := recover(); r != nil {
+	// 		log.Println("recovered from panic from list tree listobj")
+	// 	}
+	// }()
+	c.listTree.ForEachPrefix(rootprefix, leafFilter)
 }
 
 func (c *cacheObjects) ListObjectsV2(ctx context.Context, bucket, prefix, continuationToken, delimiter string, maxKeys int, fetchOwner bool, startAfter string) (result ListObjectsV2Info, err error) {
@@ -847,7 +823,7 @@ func (c *cacheObjects) PutObject(ctx context.Context, bucket, object string, r *
 
 	// fetch from backend if there is no space on cache drive
 	if !dcache.diskSpaceAvailable(size) {
-		log.Println("uploading to  backend no space on cache drive")
+		log.Println("uploading to backend no space on cache drive")
 		return putObjectFn(ctx, bucket, object, r, opts)
 	}
 
@@ -874,16 +850,17 @@ func (c *cacheObjects) PutObject(ctx context.Context, bucket, object string, r *
 		return putObjectFn(ctx, bucket, object, r, opts)
 	}
 	if c.commitWriteback {
-		log.Println("uploading to cache writeback", object)
 		oi, err := dcache.Put(ctx, bucket, object, r, r.Size(), nil, opts, false, true)
 		if err != nil {
 			return ObjectInfo{}, err
 		}
 		objPath := oi.Bucket + "/" + oi.Name
-		c.listTree.Insert([]byte(objPath), oi)
+		log.Println("uploading to cache writeback", object, " modTime", oi.ModTime.UnixNano())
+		c.listTree.Insert(objPath, oi)
+		coi := oi.Clone()
 		//go c.uploadObject(GlobalContext, oi) // use schedule to upload in batch
 		select {
-		case c.writeBackInputCh <- oi:
+		case c.writeBackInputCh <- coi:
 		default:
 		}
 		return oi, nil
@@ -961,15 +938,27 @@ func (c *cacheObjects) PutObject(ctx context.Context, bucket, object string, r *
 
 // upload cached object to backend in async commit mode.
 func (c *cacheObjects) uploadObject(ctx context.Context, oi ObjectInfo) {
-	log.Printf("uploading object %s in backend in async commit mode", oi.Name)
 	dcache, err := c.getCacheToLoc(ctx, oi.Bucket, oi.Name)
 	if err != nil {
 		// disk cache could not be located.
 		logger.LogIf(ctx, fmt.Errorf("Could not upload %s/%s to backend: %w", oi.Bucket, oi.Name, err))
 		return
 	}
+	objPath := oi.Bucket + "/" + oi.Name
+	cachedObj, ok := c.listTree.Get(objPath)
+	if !ok {
+		log.Println("object not found in list tree ", objPath)
+		return
+	}
+	cachedObjInfo := cachedObj.(ObjectInfo)
+	if !cachedObjInfo.ModTime.IsZero() && cachedObjInfo.ModTime.UnixNano() != oi.ModTime.UnixNano() {
+		log.Println("object modified since cached", cachedObjInfo.ModTime.UnixNano(), oi.ModTime.UnixNano(), oi.Name, cachedObjInfo.ModTime.UnixNano() != oi.ModTime.UnixNano())
+		return
+	}
+	log.Printf("uploading object %s in backend in async commit mode", oi.Name)
 	cReader, _, bErr := dcache.Get(ctx, oi.Bucket, oi.Name, nil, http.Header{}, ObjectOptions{})
 	if bErr != nil {
+		log.Println("errorGettingReader: ", bErr)
 		return
 	}
 	defer cReader.Close()
@@ -1003,7 +992,7 @@ func (c *cacheObjects) uploadObject(ctx context.Context, oi ObjectInfo) {
 		size = cReader.ObjInfo.Size
 	} else {
 		delete(meta, writeBackRetryHeader)
-		c.deleteFromListTree(oi.Bucket + "/" + oi.Name)
+		c.listTree.CheckTimeAndDelete(objPath, cachedObjInfo.ModTime)
 	}
 	meta[writeBackStatusHeader] = wbCommitStatus.String()
 	meta["etag"] = oi.ETag
@@ -1013,51 +1002,15 @@ func (c *cacheObjects) uploadObject(ctx context.Context, oi ObjectInfo) {
 		time.Sleep(time.Second * time.Duration(retryCnt%10+1))
 		c.queueWritebackRetry(oi)
 	}
-	if c.contentSearchEnable == "true" {
-		log.Println("indexing file started")
-		cReader2, _, bErr2 := dcache.Get(ctx, oi.Bucket, oi.Name, nil, http.Header{}, ObjectOptions{})
-		if bErr2 != nil {
-			return
-		}
-		defer cReader2.Close()
-		c.indexFile(cReader2, oi.Bucket, oi.Name)
-	}
-}
-
-func (c *cacheObjects) indexFile(body io.ReadCloser, bucket string, object string) {
-	log.Println("indexing file", bucket+"/"+object)
-
-	indexUrl := c.indexSvcUrl + "/zindex"
-	u, err := url.Parse(indexUrl)
-	if err != nil {
-		log.Println("err parsing url of zsearch", err)
-		return
-	}
-	query := u.Query()
-	query.Set("bucketName", bucket)
-	query.Set("objName", object)
-	u.RawQuery = query.Encode()
-	req, err := http.NewRequest("PUT", u.String(), body)
-	if err != nil {
-		log.Println("err creating index req", err)
-		return
-	}
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		log.Println("err sending file for indexing", err)
-		return
-	}
-	defer resp.Body.Close()
 }
 
 func (c *cacheObjects) deleteFromListTree(key string) {
-	defer func() {
-		if r := recover(); r != nil {
-			log.Println("Recovered from panic from list tree delete")
-		}
-	}()
-	c.listTree.Delete([]byte(key))
+	// defer func() {
+	// 	if r := recover(); r != nil {
+	// 		log.Println("Recovered from panic from list tree delete")
+	// 	}
+	// }()
+	c.listTree.Delete(key)
 }
 
 func (c *cacheObjects) queueWritebackRetry(oi ObjectInfo) {
@@ -1079,6 +1032,7 @@ func newServerCacheObjects(ctx context.Context, config cache.Config) (CacheObjec
 	if err != nil {
 		return nil, err
 	}
+
 	c := &cacheObjects{
 		cache:                   cache,
 		exclude:                 config.Exclude,
@@ -1089,8 +1043,6 @@ func newServerCacheObjects(ctx context.Context, config cache.Config) (CacheObjec
 		maxCacheFileSize:        config.MaxCacheFileSize,
 		uploadWorkers:           config.UploadWorkers,
 		uploadQueueTh:           config.UploadQueueTh,
-		indexSvcUrl:             config.IndexSvcUrl,
-		contentSearchEnable:     config.ContentSearchEnable,
 		cacheStats:              newCacheStats(),
 		listTree:                newThreadSafeListTree(),
 		writeBackUploadBufferCh: make(chan ObjectInfo, 100000),
@@ -1124,6 +1076,9 @@ func newServerCacheObjects(ctx context.Context, config cache.Config) (CacheObjec
 		},
 		InnerCopyObjectPartFn: func(ctx context.Context, srcBucket, srcObject, dstBucket, dstObject, uploadID string, partID int, startOffset int64, length int64, srcInfo ObjectInfo, srcOpts, dstOpts ObjectOptions) (pi PartInfo, e error) {
 			return newObjectLayerFn().CopyObjectPart(ctx, srcBucket, srcObject, dstBucket, dstObject, uploadID, partID, startOffset, length, srcInfo, srcOpts, dstOpts)
+		},
+		InnerDeleteObjectsFn: func(ctx context.Context, bucket string, objects []ObjectToDelete, opts ObjectOptions) ([]DeletedObject, []error) {
+			return newObjectLayerFn().DeleteObjects(ctx, bucket, objects, opts)
 		},
 	}
 	c.cacheStats.GetDiskStats = func() []CacheDiskStats {
@@ -1235,7 +1190,7 @@ func (c *cacheObjects) recreateListTreeOnStartUp() {
 				if !ok || status == CommitComplete.String() {
 					return nil
 				}
-				c.listTree.Insert([]byte(objInfo.Bucket+"/"+objInfo.Name), objInfo)
+				c.listTree.Insert(objInfo.Bucket+"/"+objInfo.Name, objInfo)
 				return nil
 			}
 
