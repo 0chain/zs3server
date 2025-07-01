@@ -443,10 +443,6 @@ func (zob *zcnObjects) ListObjectsV2(ctx context.Context, bucket, prefix, contin
 
 // ListObjects Lists files of directories as objects
 func (zob *zcnObjects) ListObjects(ctx context.Context, bucket, prefix, marker, delimiter string, maxKeys int) (result minio.ListObjectsInfo, err error) {
-	now := time.Now()
-	defer func() {
-		log.Println("ListObjectsTook: ", time.Since(now).Milliseconds())
-	}()
 	// objFileType For root path list objects should only provide file and not dirs.
 	// Dirs under root path are presented as buckets as well
 	var remotePath, objFileType string
@@ -461,14 +457,12 @@ func (zob *zcnObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 	ref, err = getSingleRegularRef(zob.alloc, remotePath)
 	if err != nil {
 		if isPathNoExistError(err) {
-			log.Println("path does not exist: ", remotePath)
 			return result, nil
 		}
 		return
 	}
 
 	if ref.Type == fileType {
-		log.Println("path is file: ", remotePath)
 		if strings.HasSuffix(prefix, "/") {
 			return minio.ListObjectsInfo{
 					IsTruncated: false,
@@ -496,7 +490,7 @@ func (zob *zcnObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 			},
 			nil
 	}
-	// warp does not send paths with trailing slash
+
 	// if len(prefix) > 0 && prefix[len(prefix)-1] != '/' {
 	// 	return minio.ListObjectsInfo{
 	// 			IsTruncated: false,
@@ -507,23 +501,24 @@ func (zob *zcnObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 	// }
 
 	var objects []minio.ObjectInfo
-	if prefix != "" {
-		userDefined := make(map[string]string)
-		if ref.CustomMeta != "" {
-			_ = json.Unmarshal([]byte(ref.CustomMeta), &userDefined)
-		}
-		objects = append(objects, minio.ObjectInfo{
-			Bucket:       bucket,
-			Name:         prefix,
-			ModTime:      ref.UpdatedAt.ToTime(),
-			Size:         0,
-			IsDir:        true,
-			ContentType:  s3DirectoryContentType,
-			ETag:         s3ContentHash,
-			StorageClass: "STANDARD",
-			UserDefined:  userDefined,
-		})
-	}
+	// if prefix != "" {
+	// 	userDefined := make(map[string]string)
+	// 	if ref.CustomMeta != "" {
+	// 		_ = json.Unmarshal([]byte(ref.CustomMeta), &userDefined)
+	// 	}
+	// 	log.Println("prefixNonEmpty: ", prefix)
+	// 	objects = append(objects, minio.ObjectInfo{
+	// 		Bucket:       bucket,
+	// 		Name:         prefix,
+	// 		ModTime:      ref.UpdatedAt.ToTime(),
+	// 		Size:         0,
+	// 		IsDir:        true,
+	// 		ContentType:  s3DirectoryContentType,
+	// 		ETag:         s3ContentHash,
+	// 		StorageClass: "STANDARD",
+	// 		UserDefined:  userDefined,
+	// 	})
+	// }
 	var isDelimited bool
 	if delimiter != "" {
 		isDelimited = true
@@ -563,7 +558,6 @@ func (zob *zcnObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 	result.NextMarker = nextMarker
 	result.Objects = objects
 	result.Prefixes = prefixes
-	log.Printf("listobject cache prefix %s marker %s delim %s maxkey %d result %d \n", prefix, marker, delimiter, maxKeys, len(objects))
 	return
 }
 
