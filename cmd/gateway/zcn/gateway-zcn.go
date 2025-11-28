@@ -139,7 +139,8 @@ func (z *ZCN) NewGatewayLayer(creds madmin.Credentials) (minio.ObjectLayer, erro
 	}
 	allocation, err := sdk.GetAllocation(allocationID)
 	if err != nil {
-		return nil, err
+		// Provide more context about allocation initialization failure
+		return nil, fmt.Errorf("failed to initialize allocation %s: %w. Please ensure the allocation exists and storage nodes are accessible", allocationID, err)
 	}
 	sdk.CurrentMode = sdk.UploadModeHigh
 	sdk.SetSingleClietnMode(true)

@@ -188,13 +188,40 @@ func (c *DBClient) CreateIndices(ctx context.Context) error {
 	return nil
 }
 
+// indexExists checks if an index exists in the database
+func (c *DBClient) indexExists(ctx context.Context, indexName string) (bool, error) {
+	var exists bool
+	query := `SELECT EXISTS (
+		SELECT 1 FROM pg_indexes 
+		WHERE indexname = $1
+	)`
+	err := c.QueryRowContext(ctx, query, indexName).Scan(&exists)
+	return exists, err
+}
+
 // CreatePartitionIndices creates all indices described by optses on partition.
 // It returns true if a new index was created on this partition. Note: this
 // function ignores the index already exists error.
 func (c *DBClient) CreatePartitionIndices(ctx context.Context, optses []indexOpts, partition string) (indexed bool, err error) {
 	for _, opts := range optses {
+		var idxName string
+		if opts.indexSuffix != "" {
+			idxName = fmt.Sprintf("%s_%s_index", partition, opts.indexSuffix)
+		} else {
+			idxName = fmt.Sprintf("%s_%s_index", partition, opts.col.name)
+		}
+
+		// Check if index already exists before attempting to create
+		exists, err := c.indexExists(ctx, idxName)
+		if err != nil {
+			return indexed, err
+		}
+		if exists {
+			continue // Index already exists, skip
+		}
+
 		q := opts.createPartitionQuery(partition)
-		_, err := c.ExecContext(ctx, q)
+		_, err = c.ExecContext(ctx, q)
 		if err == nil {
 			indexed = true
 		}
@@ -290,9 +317,9 @@ func (opts indexOpts) createParentQuery() string {
 
 	var q string
 	if opts.idxType != "" {
-		q = fmt.Sprintf("CREATE INDEX %s ON %s USING %s %s", idxName, opts.tableName, opts.idxType, opts.colWithOrder())
+		q = fmt.Sprintf("CREATE INDEX IF NOT EXISTS %s ON %s USING %s %s", idxName, opts.tableName, opts.idxType, opts.colWithOrder())
 	} else {
-		q = fmt.Sprintf("CREATE INDEX %s ON %s %s", idxName, opts.tableName, opts.colWithOrder())
+		q = fmt.Sprintf("CREATE INDEX IF NOT EXISTS %s ON %s %s", idxName, opts.tableName, opts.colWithOrder())
 	}
 	return q
 }
@@ -307,9 +334,9 @@ func (opts indexOpts) createPartitionQuery(partition string) string {
 
 	var q string
 	if opts.idxType != "" {
-		q = fmt.Sprintf("CREATE INDEX CONCURRENTLY %s ON %s USING %s %s", idxName, partition, opts.idxType, opts.colWithOrder())
+		q = fmt.Sprintf("CREATE INDEX CONCURRENTLY IF NOT EXISTS %s ON %s USING %s %s", idxName, partition, opts.idxType, opts.colWithOrder())
 	} else {
-		q = fmt.Sprintf("CREATE INDEX CONCURRENTLY %s ON %s %s", idxName, partition, opts.colWithOrder())
+		q = fmt.Sprintf("CREATE INDEX CONCURRENTLY IF NOT EXISTS %s ON %s %s", idxName, partition, opts.colWithOrder())
 	}
 	return q
 }

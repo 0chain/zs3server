@@ -93,7 +93,17 @@ func (h *Target) Init() error {
 	client := http.Client{Transport: h.config.Transport}
 	resp, err := client.Do(req)
 	if err != nil {
-		return err
+		// Connection errors during initialization are not fatal - the endpoint
+		// might be temporarily unavailable. Start the logger goroutine anyway
+		// so it can retry when actually sending logs. Only fail on configuration
+		// errors that prevent the request from being created.
+		if h.config.LogOnce != nil {
+			h.config.LogOnce(ctx, fmt.Errorf("Unable to connect to audit HTTP target %s during initialization (will retry on send): %w", h.config.Endpoint, err), h.config.Endpoint)
+		}
+		go h.startHTTPLogger()
+		// Return nil to allow the target to be added - connection errors are
+		// non-fatal and the target will retry when sending logs
+		return nil
 	}
 
 	// Drain any response.
