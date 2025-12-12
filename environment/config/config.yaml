@@ -1,0 +1,10 @@
+local_development : true
+# block_worker: http://host.docker.internal:9091
+# block_worker: http://198.18.0.98:9091
+# block_worker: http://localhost:9091
+block_worker: http://0dns-0dns-1:9091
+signature_scheme: bls0chain
+min_submit: 50 # in percentage
+min_confirmation: 50 # in percentage
+confirmation_chain_length: 3
+

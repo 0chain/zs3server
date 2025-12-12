@@ -36,21 +36,27 @@ services:
     image: 0chaindev/blimp-minioserver:staging
     platform: linux/amd64
     container_name: minioserver
-    network_mode: host
-    command: ["minio", "gateway", "zcn"]
+    ports:
+      - '9000:9000'
+    command: ["minio", "gateway", "zcn", "--address", "0.0.0.0:9000", "--configDir", "/root/.zcn-local"]
     environment:
-      MINIO_AUDIT_WEBHOOK_ENDPOINT: http://localhost:8080/api/ingest?token=1234
+      MINIO_AUDIT_WEBHOOK_ENDPOINT: http://logsearchapi:8080/api/ingest?token=1234
       MINIO_AUDIT_WEBHOOK_AUTH_TOKEN: 1234
       MINIO_AUDIT_WEBHOOK_ENABLE: "on"
       MINIO_ROOT_USER: rootroot
       MINIO_ROOT_PASSWORD: rootroot
       MINIO_BROWSER: "OFF"
     volumes:
-      - ~/.zcn:/root/.zcn
+      - ./config:/root/.zcn-local
+      - ~/.zcn/allocation.txt:/root/.zcn-local/allocation.txt:ro
       # - /mnt/mcache1:/mcache1
       # - /mnt/mcache2:/mcache2
       # - /mnt/mcache3:/mcache3
       # - /mnt/mcache4:/mcache4
+    networks:
+      zs_network:
+      blockchain_network:
+      testnet_network:
 
   minioclient:
     image: 0chaindev/blimp-clientapi:staging
@@ -72,3 +78,9 @@ volumes:
 networks:
   zs_network:
     driver: bridge
+  blockchain_network:
+    external: true
+    name: 0dns_default
+  testnet_network:
+    external: true
+    name: testnet0
