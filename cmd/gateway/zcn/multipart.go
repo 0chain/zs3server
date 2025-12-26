@@ -155,142 +155,205 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object, conte
 		blobberCount = maxParallelParts
 	}
 
+	// Calculate chunking worker pool size (parallel chunking workers)
+	chunkingWorkers := blobberCount
+	if chunkingWorkers < 3 {
+		chunkingWorkers = 3 // Minimum 3 chunking workers
+	}
+	if chunkingWorkers > 10 {
+		chunkingWorkers = 10 // Cap at 10 to avoid excessive memory usage
+	}
+
 	multiPartFile := &MultiPartFile{
 		memFile:          memFile,
 		errorC:           make(chan error, 1),
-		dataC:            make(chan []byte, 50), // Increased buffer for better pipelining
-		orderedDataC:     make(chan partData, 50),
+		dataC:            make(chan []byte, 200), // Increased buffer for better pipelining (was 50)
+		orderedDataC:     make(chan partData, 200), // Increased buffer (was 50)
 		partsReady:       make(map[int]bool),
 		workerPool:       make(chan struct{}, blobberCount), // Dynamic worker pool = blobber count
 		cancelC:          make(chan struct{}, 1),
 		parts:            make(map[int][]byte), // In-memory storage for parts
 		etags:            make(map[int]string), // In-memory storage for ETags
-		availableParts:   make(chan int, 100),  // Channel for parts ready to process (replaces seqPQ)
+		availableParts:   make(chan int, 200),  // Increased buffer (was 100)
 		fileHasher:       md5.New(),            // Inline file hash (MD5)
 		allPartsReceived: false,
 	}
 	FileMap[uploadID] = multiPartFile
 	mapLock.Unlock()
-	// Create the bucket directory if it doesn't exist
-	bucketPath := filepath.Join(localStorageDir, bucket, uploadID, object)
-	if err := os.MkdirAll(bucketPath, os.ModePerm); err != nil {
-		log.Println(err)
-		return "", fmt.Errorf("erro creating bucket: %v", err)
-	}
+	// No need to create directories - we're using in-memory storage
 
-	go func() {
-		buf := &bytes.Buffer{}
-		var (
-			zw    *lz4.Writer
-			total int64
-			err   error
-		)
-		if toCompress {
-			zw = lz4.NewWriter(buf)
+	// Parallel chunking workers - process data from dataC concurrently
+	// For compression, we use a single sequential worker to maintain compression stream integrity
+	// For non-compressed uploads, we use multiple parallel workers
+	if toCompress {
+		// Sequential chunking for compression (compression requires sequential processing)
+		go func() {
+			buf := &bytes.Buffer{}
+			zw := lz4.NewWriter(buf)
 			zw.Apply(lz4.CompressionLevelOption(lz4.Level1)) //nolint:errcheck
-		}
-		st := time.Now()
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
-		defer cancel()
-		for {
-			select {
-			case <-multiPartFile.cancelC:
-				log.Println("upload is canceled, clean up temp dirs")
-				memFile.errChan <- fmt.Errorf("upload is canceled")
-				cleanupPartFilesAndDirs(bucket, uploadID, localStorageDir)
-				return
-			case <-ctx.Done():
-				log.Println("upload is timed out, clean up temp dirs")
-				memFile.errChan <- fmt.Errorf("upload is timed out")
-				cleanupPartFilesAndDirs(bucket, uploadID, localStorageDir)
-				return
-			case data, ok := <-multiPartFile.dataC:
-				if ok {
-					// Inline file hash (MD5) - sequential but non-blocking
-					multiPartFile.fileHasherLock.Lock()
-					multiPartFile.fileHasher.Write(data)
-					multiPartFile.fileHasherLock.Unlock()
+			var total int64
+			st := time.Now()
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+			defer cancel()
+			for {
+				select {
+				case <-multiPartFile.cancelC:
+					log.Println("upload is canceled, clean up temp dirs")
+					memFile.errChan <- fmt.Errorf("upload is canceled")
+					cleanupPartFilesAndDirs(bucket, uploadID, localStorageDir)
+					return
+				case <-ctx.Done():
+					log.Println("upload is timed out, clean up temp dirs")
+					memFile.errChan <- fmt.Errorf("upload is timed out")
+					cleanupPartFilesAndDirs(bucket, uploadID, localStorageDir)
+					return
+				case data, ok := <-multiPartFile.dataC:
+					if ok {
+						// Inline file hash (MD5) - thread-safe
+						multiPartFile.fileHasherLock.Lock()
+						multiPartFile.fileHasher.Write(data)
+						multiPartFile.fileHasherLock.Unlock()
 
-					if toCompress {
-						_, err = zw.Write(data)
-					} else {
-						_, err = buf.Write(data)
-					}
-					if err != nil {
-						log.Println("write data to buffer failed:", err)
-						multiPartFile.cancelC <- struct{}{}
-						break
-					}
-
-					n := buf.Len() / chunkWriteSize
-					if n == 0 {
-						continue
-					}
-					if buf.Len()%chunkWriteSize == 0 && n > 1 {
-						n--
-					}
-					bbuf := make([]byte, n*chunkWriteSize)
-					_, err = buf.Read(bbuf)
-					if err != nil {
-						log.Panic(err)
-					}
-
-					current := 0
-					for ; current < len(bbuf); current += chunkWriteSize {
-						memFileData := memFileData{}
-						end := current + chunkWriteSize
-						if end > len(bbuf) {
-							end = len(bbuf)
+						_, err := zw.Write(data)
+						if err != nil {
+							log.Println("write data to compression buffer failed:", err)
+							multiPartFile.cancelC <- struct{}{}
+							break
 						}
-						memFileData.buf = bbuf[current:end]
-						multiPartFile.memFile.memFileDataChan <- memFileData
-					}
-					cn := len(bbuf)
 
-					total += int64(cn)
-				} else {
-					if toCompress {
-						err = zw.Close()
+						n := buf.Len() / chunkWriteSize
+						if n == 0 {
+							continue
+						}
+						if buf.Len()%chunkWriteSize == 0 && n > 1 {
+							n--
+						}
+						bbuf := make([]byte, n*chunkWriteSize)
+						_, err = buf.Read(bbuf)
+						if err != nil {
+							log.Panic(err)
+						}
+
+						current := 0
+						for ; current < len(bbuf); current += chunkWriteSize {
+							memFileData := memFileData{}
+							end := current + chunkWriteSize
+							if end > len(bbuf) {
+								end = len(bbuf)
+							}
+							memFileData.buf = bbuf[current:end]
+							multiPartFile.memFile.memFileDataChan <- memFileData
+						}
+						total += int64(len(bbuf))
+					} else {
+						err := zw.Close()
 						if err != nil {
 							multiPartFile.cancelC <- struct{}{}
 							break
 						}
-					}
-					bbuf := make([]byte, buf.Len())
-					_, err := buf.Read(bbuf)
-					if err != nil {
-						multiPartFile.memFile.errChan <- err
+						bbuf := make([]byte, buf.Len())
+						_, err = buf.Read(bbuf)
+						if err != nil {
+							multiPartFile.memFile.errChan <- err
+							return
+						}
+						current := 0
+						for ; current < len(bbuf); current += chunkWriteSize {
+							memFileData := memFileData{}
+							end := current + chunkWriteSize
+							if end >= len(bbuf) {
+								end = len(bbuf)
+								memFileData.err = io.EOF
+							}
+							memFileData.buf = bbuf[current:end]
+							multiPartFile.memFile.memFileDataChan <- memFileData
+						}
+						close(multiPartFile.memFile.memFileDataChan)
+						total += int64(len(bbuf))
+
+						// Get final file hash
+						multiPartFile.fileHasherLock.Lock()
+						fileHash := hex.EncodeToString(multiPartFile.fileHasher.Sum(nil))
+						multiPartFile.fileHasherLock.Unlock()
+						log.Printf("uploaded: %d, duration: %v, file hash: %s", total, time.Since(st), fileHash)
+
+						multiPartFile.fileSize = total
 						return
 					}
-					current := 0
-					for ; current < len(bbuf); current += chunkWriteSize {
-						memFileData := memFileData{}
-						end := current + chunkWriteSize
-						if end >= len(bbuf) {
-							end = len(bbuf)
-							memFileData.err = io.EOF
-						}
-						memFileData.buf = bbuf[current:end]
-						multiPartFile.memFile.memFileDataChan <- memFileData
-					}
-					cn := len(bbuf)
-					close(multiPartFile.memFile.memFileDataChan)
-					total += int64(cn)
-
-					// Get final file hash
-					multiPartFile.fileHasherLock.Lock()
-					fileHash := hex.EncodeToString(multiPartFile.fileHasher.Sum(nil))
-					multiPartFile.fileHasherLock.Unlock()
-					log.Printf("uploaded: %d, duration: %v, file hash: %s", total, time.Since(st), fileHash)
-
-					if toCompress {
-						multiPartFile.fileSize = total
-					}
-					return
 				}
 			}
+		}()
+	} else {
+		// Parallel chunking workers for non-compressed uploads
+		var wg sync.WaitGroup
+		var totalMutex sync.Mutex
+		var total int64
+		st := time.Now()
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+		defer cancel()
+
+		// Start multiple chunking workers that process data from dataC in parallel
+		for i := 0; i < chunkingWorkers; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for {
+					select {
+					case <-multiPartFile.cancelC:
+						return
+					case <-ctx.Done():
+						log.Println("upload is timed out, clean up temp dirs")
+						multiPartFile.cancelC <- struct{}{}
+						memFile.errChan <- fmt.Errorf("upload is timed out")
+						cleanupPartFilesAndDirs(bucket, uploadID, localStorageDir)
+						return
+					case data, ok := <-multiPartFile.dataC:
+						if !ok {
+							return
+						}
+
+						// Inline file hash (MD5) - thread-safe
+						multiPartFile.fileHasherLock.Lock()
+						multiPartFile.fileHasher.Write(data)
+						multiPartFile.fileHasherLock.Unlock()
+
+						// Chunk the data and send to memFileDataChan
+						dataLen := len(data)
+						current := 0
+						for current < dataLen {
+							memFileData := memFileData{}
+							end := current + chunkWriteSize
+							if end > dataLen {
+								end = dataLen
+							}
+							// Make a copy of the chunk to avoid race conditions
+							chunkBuf := make([]byte, end-current)
+							copy(chunkBuf, data[current:end])
+							memFileData.buf = chunkBuf
+							multiPartFile.memFile.memFileDataChan <- memFileData
+							current = end
+						}
+
+						totalMutex.Lock()
+						total += int64(dataLen)
+						totalMutex.Unlock()
+					}
+				}
+			}()
 		}
-	}()
+
+		// Monitor for completion and close channel when all workers are done
+		go func() {
+			wg.Wait()
+			close(multiPartFile.memFile.memFileDataChan)
+
+			// Get final file hash
+			multiPartFile.fileHasherLock.Lock()
+			fileHash := hex.EncodeToString(multiPartFile.fileHasher.Sum(nil))
+			multiPartFile.fileHasherLock.Unlock()
+			log.Printf("uploaded: %d, duration: %v, file hash: %s", total, time.Since(st), fileHash)
+		}()
+	}
 
 	go func() {
 		var customMeta string
