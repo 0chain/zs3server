@@ -3,7 +3,6 @@ package zcn
 import (
 	"bytes"
 	"context"
-	"crypto/md5"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -36,7 +35,7 @@ var (
 const lz4MimeType = "application/x-lz4"
 
 const PartSize = 1024 * 128
-const maxMemorySize = 1024 * 1024 * 1024 // 1GB
+const maxParallelParts = 5 // Maximum number of parts to process in parallel
 
 type MultiPartFile struct {
 	memFile         *memFile
@@ -49,11 +48,15 @@ type MultiPartFile struct {
 	seqPQ           *seqpriorityqueue.SeqPriorityQueue
 	cancelC         chan struct{} // indicate the cancel of the uploading
 	dataC           chan []byte   // data to be uploaded
-	parts           map[int][]byte // in-memory storage for parts
-	partsLock       sync.Mutex     // lock for parts map
-	totalMemorySize int64          // total memory used by parts
-	etags           map[int]string // in-memory storage for part ETags
-	useMemory       bool           // flag to indicate if using memory storage
+	orderedDataC    chan partData // ordered channel for parallel processing
+	partsReady      map[int]bool  // track which parts are ready to process
+	partsReadyLock  sync.Mutex    // lock for partsReady map
+	workerPool      chan struct{} // worker pool semaphore
+}
+
+type partData struct {
+	partNumber int
+	data       []byte
 }
 
 func (mpf *MultiPartFile) UpdateFileSize(partID int, size int64) {
@@ -133,15 +136,14 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object, conte
 	}
 	chunkWriteSize := int(zob.alloc.GetChunkReadSize(encrypt))
 	multiPartFile := &MultiPartFile{
-		memFile:         memFile,
-		seqPQ:           seqpriorityqueue.NewSeqPriorityQueue(),
-		errorC:           make(chan error, 1),
-		dataC:            make(chan []byte, 20),
-		cancelC:          make(chan struct{}, 1),
-		parts:            make(map[int][]byte),
-		totalMemorySize:  0,
-		etags:            make(map[int]string),
-		useMemory:        true, // default to memory storage
+		memFile:      memFile,
+		seqPQ:        seqpriorityqueue.NewSeqPriorityQueue(),
+		errorC:       make(chan error, 1),
+		dataC:        make(chan []byte, 50), // Increased buffer for better pipelining
+		orderedDataC: make(chan partData, 50),
+		partsReady:   make(map[int]bool),
+		workerPool:   make(chan struct{}, maxParallelParts), // Worker pool for parallel processing
+		cancelC:      make(chan struct{}, 1),
 	}
 	FileMap[uploadID] = multiPartFile
 	mapLock.Unlock()
@@ -295,75 +297,107 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object, conte
 			multiPartFile.errorC <- uploadErr
 		}()
 
+		// Parallel part processing using worker pool
 		for {
 			select {
 			case <-multiPartFile.cancelC:
 				log.Println("upload is canceled, clean up temp dirs")
 				multiPartFile.memFile.errChan <- fmt.Errorf("upload is canceled")
-				// TODO: clean up temp dirs
 				cleanupPartFilesAndDirs(bucket, uploadID, localStorageDir)
 				return
 			default:
+				// Process parts in parallel using worker pool
 				partNumber := multiPartFile.seqPQ.Popup()
 
 				if partNumber == -1 {
-					close(multiPartFile.dataC)
+					// All parts have been queued, wait for remaining workers to finish
+					// Close orderedDataC to signal ordering goroutine to finish
+					close(multiPartFile.orderedDataC)
 					return
 				}
 
-				func() {
-					// Check if part is stored in memory
-					multiPartFile.partsLock.Lock()
-					partData, inMemory := multiPartFile.parts[partNumber]
-					multiPartFile.partsLock.Unlock()
+				// Acquire worker from pool
+				multiPartFile.workerPool <- struct{}{}
+				go func(pn int) {
+					defer func() { <-multiPartFile.workerPool }() // Release worker
 
-					if inMemory {
-						// Read from memory
-						// Make a copy to avoid race conditions
-						data := make([]byte, len(partData))
-						copy(data, partData)
-						multiPartFile.dataC <- data
-						// Free part data from memory after sending to channel (keep ETag for later use)
-						multiPartFile.partsLock.Lock()
-						if partSize, exists := multiPartFile.parts[partNumber]; exists {
-							multiPartFile.totalMemorySize -= int64(len(partSize))
-							delete(multiPartFile.parts, partNumber)
-							// Keep ETag in memory for constructCompleteObject
-						}
-						multiPartFile.partsLock.Unlock()
-					} else {
-						// Read from file (fallback)
-						partFilename := filepath.Join(localStorageDir, bucket, uploadID, object, fmt.Sprintf("part%d", partNumber))
-						partFile, err := os.Open(partFilename)
-						if err != nil {
-							log.Println("open error: ", err)
-							multiPartFile.cancelC <- struct{}{}
-							return
-						}
-						defer func() {
-							partFile.Close()
-							_ = os.Remove(partFilename)
-						}()
-						stat, err := partFile.Stat()
-						if err != nil {
-							log.Println("stat error: ", err)
-							multiPartFile.cancelC <- struct{}{}
-							return
-						}
-						data := make([]byte, stat.Size())
-						_, err = io.ReadFull(partFile, data)
-						if err != nil {
-							log.Printf("read part: %v failed, err: %v\n", partNumber, err)
-							multiPartFile.cancelC <- struct{}{}
-							return
-						}
-
-						multiPartFile.dataC <- data
+					// Read part data (from file)
+					partFilename := filepath.Join(localStorageDir, bucket, uploadID, object, fmt.Sprintf("part%d", pn))
+					partFile, err := os.Open(partFilename)
+					if err != nil {
+						log.Printf("open error for part %d: %v", pn, err)
+						multiPartFile.cancelC <- struct{}{}
+						return
 					}
-				}()
+					defer func() {
+						partFile.Close()
+						_ = os.Remove(partFilename)
+					}()
+
+					stat, err := partFile.Stat()
+					if err != nil {
+						log.Printf("stat error for part %d: %v", pn, err)
+						multiPartFile.cancelC <- struct{}{}
+						return
+					}
+
+					data := make([]byte, stat.Size())
+					_, err = io.ReadFull(partFile, data)
+					if err != nil {
+						log.Printf("read part %d failed, err: %v\n", pn, err)
+						multiPartFile.cancelC <- struct{}{}
+						return
+					}
+
+					// Send to ordered channel (ordering goroutine will handle sequencing)
+					multiPartFile.orderedDataC <- partData{
+						partNumber: pn,
+						data:       data,
+					}
+				}(partNumber)
 			}
 		}
 	}()
+
+	// Ordering goroutine: ensures parts are sent to dataC in correct order
+	go func() {
+		nextPart := 1
+		partBuffer := make(map[int][]byte)
+
+		for {
+			select {
+			case <-multiPartFile.cancelC:
+				return
+			case pd, ok := <-multiPartFile.orderedDataC:
+				if !ok {
+					// Channel closed, send any remaining buffered parts
+					for i := nextPart; ; i++ {
+						if data, exists := partBuffer[i]; exists {
+							multiPartFile.dataC <- data
+							delete(partBuffer, i)
+						} else {
+							break
+						}
+					}
+					return
+				}
+
+				partBuffer[pd.partNumber] = pd.data
+
+				// Send parts in order as they become available
+				for {
+					if data, exists := partBuffer[nextPart]; exists {
+						multiPartFile.dataC <- data
+						delete(partBuffer, nextPart)
+						nextPart++
+					} else {
+						break
+					}
+				}
+			}
+		}
+	}()
+
 	return uploadID, nil
 
 }
@@ -371,6 +405,19 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object, conte
 func (zob *zcnObjects) PutObjectPart(ctx context.Context, bucket, object, uploadID string, partID int, data *minio.PutObjReader, opts minio.ObjectOptions) (pi minio.PartInfo, err error) {
 	partFilename := filepath.Join(localStorageDir, bucket, uploadID, object, fmt.Sprintf("part%d", partID))
 	partETagFilename := partFilename + ".etag"
+
+	// Create directory if it doesn't exist
+	if err := os.MkdirAll(filepath.Dir(partFilename), os.ModePerm); err != nil {
+		log.Println(err)
+		return minio.PartInfo{}, fmt.Errorf("error creating directory: %v", err)
+	}
+
+	partFile, err := os.Create(partFilename)
+	if err != nil {
+		log.Println(err)
+		return minio.PartInfo{}, fmt.Errorf("error creating part file: %v", err)
+	}
+	defer partFile.Close()
 
 	mapLock.Lock()
 	multiPartFile, ok := FileMap[uploadID]
@@ -381,88 +428,31 @@ func (zob *zcnObjects) PutObjectPart(ctx context.Context, bucket, object, upload
 	}
 	seqPQ := multiPartFile.seqPQ
 
-	// Read all data into memory buffer
-	var partData []byte
-	var eTag string
-	var size int64
-
-	// Create MD5 hash for ETag calculation
-	hash := md5.New()
-
-	// Read data into buffer
 	buf := make([]byte, PartSize)
-	var totalRead int64
-	for {
-		n, err := data.Reader.Read(buf)
-		if n > 0 {
-			partData = append(partData, buf[:n]...)
-			hash.Write(buf[:n])
-			totalRead += int64(n)
-		}
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			log.Println(err)
-			return minio.PartInfo{}, fmt.Errorf("error reading part data: %v", err)
-		}
-	}
-	size = totalRead
-
-	// Calculate ETag
-	eTag = hex.EncodeToString(hash.Sum(nil))
-
-	// Check if we should use memory storage
-	multiPartFile.partsLock.Lock()
-	useMemory := multiPartFile.useMemory && (multiPartFile.totalMemorySize+size <= maxMemorySize)
-	
-	if useMemory {
-		// Store in memory
-		multiPartFile.parts[partID] = partData
-		multiPartFile.etags[partID] = eTag
-		multiPartFile.totalMemorySize += size
-		multiPartFile.partsLock.Unlock()
-		log.Printf("Stored part %d in memory (size: %d, total memory: %d)", partID, size, multiPartFile.totalMemorySize)
-	} else {
-		// Fall back to file storage
-		multiPartFile.useMemory = false
-		multiPartFile.partsLock.Unlock()
-		
-		// Create directory if it doesn't exist
-		if err := os.MkdirAll(filepath.Dir(partFilename), os.ModePerm); err != nil {
-			log.Println(err)
-			return minio.PartInfo{}, fmt.Errorf("error creating directory: %v", err)
-		}
-
-		partFile, err := os.Create(partFilename)
-		if err != nil {
-			log.Println(err)
-			return minio.PartInfo{}, fmt.Errorf("error creating part file: %v", err)
-		}
-		defer partFile.Close()
-
-		_, err = partFile.Write(partData)
-		if err != nil {
-			log.Println(err)
-			return minio.PartInfo{}, fmt.Errorf("error writing part data: %v", err)
-		}
-
-		// Save the ETag to a separate file
-		if err := os.WriteFile(partETagFilename, []byte(eTag), 0644); err != nil {
-			log.Println("error saving ETag file:", err)
-			return minio.PartInfo{}, fmt.Errorf("error saving ETag file: %v", err)
-		}
-		log.Printf("Stored part %d in file (size: %d, exceeded memory limit)", partID, size)
+	size, err := io.CopyBuffer(partFile, data.Reader, buf)
+	if err != nil {
+		log.Println(err)
+		return minio.PartInfo{}, fmt.Errorf("error writing part data: %v", err)
 	}
 
 	seqPQ.Push(partID)
-	multiPartFile.UpdateFileSize(partID, size)
+
+	// Calculate ETag for the part
+	eTag := data.MD5CurrentHexString()
+
+	// Save the ETag to a separate file
+	if err := os.WriteFile(partETagFilename, []byte(eTag), 0644); err != nil {
+		log.Println("error saving ETag file:", err)
+		return minio.PartInfo{}, fmt.Errorf("error saving ETag file: %v", err)
+	}
+
+	multiPartFile.UpdateFileSize(partID, int64(size))
 
 	return minio.PartInfo{
 		PartNumber: partID,
 		ETag:       eTag,
-		Size:       size,
-		ActualSize: size,
+		Size:       int64(size),
+		ActualSize: int64(size),
 	}, nil
 }
 
@@ -490,13 +480,6 @@ func (zob *zcnObjects) CompleteMultipartUpload(ctx context.Context, bucket, obje
 		return minio.ObjectInfo{}, fmt.Errorf("error constructing complete object: %v", err)
 	}
 
-	// Clean up memory storage
-	multiPartFile.partsLock.Lock()
-	multiPartFile.parts = make(map[int][]byte)
-	multiPartFile.etags = make(map[int]string)
-	multiPartFile.totalMemorySize = 0
-	multiPartFile.partsLock.Unlock()
-
 	if err = cleanupPartFilesAndDirs(bucket, uploadID, localStorageDir); err != nil {
 		log.Println("Error cleaning up part files and directories:", err)
 		// http.Error(w, "Error cleaning up part files and directories", http.StatusInternalServerError)
@@ -516,42 +499,23 @@ func (zob *zcnObjects) CompleteMultipartUpload(ctx context.Context, bucket, obje
 func (zob *zcnObjects) constructCompleteObject(bucket, uploadID, object, localStorageDir string) (string, error) {
 	// Create a slice to store individual part ETags
 	var partETags []string
-
-	mapLock.Lock()
-	multiPartFile, ok := FileMap[uploadID]
-	mapLock.Unlock()
-	if !ok {
-		return "", fmt.Errorf("uploadID: %v not found", uploadID)
-	}
-
 	for partNumber := 1; ; partNumber++ {
-		// Check if ETag is stored in memory
-		multiPartFile.partsLock.Lock()
-		etag, inMemory := multiPartFile.etags[partNumber]
-		multiPartFile.partsLock.Unlock()
+		partFilename := filepath.Join(localStorageDir, bucket, uploadID, object, fmt.Sprintf("part%d", partNumber))
+		partETagFilename := partFilename + ".etag"
 
-		if inMemory {
-			// Use ETag from memory
-			partETags = append(partETags, etag)
-		} else {
-			// Try to read from file
-			partFilename := filepath.Join(localStorageDir, bucket, uploadID, object, fmt.Sprintf("part%d", partNumber))
-			partETagFilename := partFilename + ".etag"
-
-			// Break the loop when there are no more parts
-			if _, err := os.Stat(partETagFilename); os.IsNotExist(err) {
-				break
-			}
-
-			// Read the ETag of the part
-			partETagBytes, err := os.ReadFile(partETagFilename)
-			if err != nil {
-				return "", err
-			}
-
-			// Append the part ETag to the slice
-			partETags = append(partETags, string(partETagBytes))
+		// Break the loop when there are no more parts
+		if _, err := os.Stat(partETagFilename); os.IsNotExist(err) {
+			break
 		}
+
+		// Read the ETag of the part
+		partETagBytes, err := os.ReadFile(partETagFilename)
+		if err != nil {
+			return "", err
+		}
+
+		// Append the part ETag to the slice
+		partETags = append(partETags, string(partETagBytes))
 	}
 
 	// Get the concatenated ETag value
@@ -637,12 +601,6 @@ func (zob *zcnObjects) AbortMultipartUpload(ctx context.Context, bucket string, 
 		log.Printf("uploadID: %v not found\n", uploadID)
 		return fmt.Errorf("abort - uploadID: %v not found", uploadID)
 	}
-	// Clear memory storage
-	multiPartFile.partsLock.Lock()
-	multiPartFile.parts = make(map[int][]byte)
-	multiPartFile.etags = make(map[int]string)
-	multiPartFile.totalMemorySize = 0
-	multiPartFile.partsLock.Unlock()
 	close(multiPartFile.cancelC)
 	return cleanupPartFilesAndDirs(bucket, uploadID, localStorageDir)
 }
