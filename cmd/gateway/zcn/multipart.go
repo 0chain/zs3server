@@ -155,14 +155,8 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object, conte
 		blobberCount = maxParallelParts
 	}
 
-	// Calculate chunking worker pool size (parallel chunking workers)
-	chunkingWorkers := blobberCount
-	if chunkingWorkers < 3 {
-		chunkingWorkers = 3 // Minimum 3 chunking workers
-	}
-	if chunkingWorkers > 10 {
-		chunkingWorkers = 10 // Cap at 10 to avoid excessive memory usage
-	}
+	// Note: Chunking is done sequentially to ensure chunks are sent to SDK in correct order
+	// This is critical for data integrity - chunks must match pr-177 behavior exactly
 
 	multiPartFile := &MultiPartFile{
 		memFile:          memFile,
@@ -182,9 +176,10 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object, conte
 	mapLock.Unlock()
 	// No need to create directories - we're using in-memory storage
 
-	// Parallel chunking workers - process data from dataC concurrently
-	// For compression, we use a single sequential worker to maintain compression stream integrity
-	// For non-compressed uploads, we use multiple parallel workers
+	// Chunking: Sequential processing ensures chunks are sent to SDK in correct file order
+	// This is CRITICAL for data integrity - chunks must be in the same order as pr-177
+	// For compression: sequential chunking required to maintain compression stream integrity
+	// For non-compressed: sequential chunking ensures correct file hash and SDK processing
 	if toCompress {
 		// Sequential chunking for compression (compression requires sequential processing)
 		go func() {
@@ -284,74 +279,73 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object, conte
 			}
 		}()
 	} else {
-		// Parallel chunking workers for non-compressed uploads
-		var wg sync.WaitGroup
-		var totalMutex sync.Mutex
-		var total int64
-		st := time.Now()
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
-		defer cancel()
-
-		// Start multiple chunking workers that process data from dataC in parallel
-		for i := 0; i < chunkingWorkers; i++ {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				for {
-					select {
-					case <-multiPartFile.cancelC:
-						return
-					case <-ctx.Done():
-						log.Println("upload is timed out, clean up temp dirs")
-						multiPartFile.cancelC <- struct{}{}
-						memFile.errChan <- fmt.Errorf("upload is timed out")
-						cleanupPartFilesAndDirs(bucket, uploadID, localStorageDir)
-						return
-					case data, ok := <-multiPartFile.dataC:
-						if !ok {
-							return
-						}
-
-						// Inline file hash (MD5) - thread-safe
-						multiPartFile.fileHasherLock.Lock()
-						multiPartFile.fileHasher.Write(data)
-						multiPartFile.fileHasherLock.Unlock()
-
-						// Chunk the data and send to memFileDataChan
-						dataLen := len(data)
-						current := 0
-						for current < dataLen {
-							memFileData := memFileData{}
-							end := current + chunkWriteSize
-							if end > dataLen {
-								end = dataLen
-							}
-							// Make a copy of the chunk to avoid race conditions
-							chunkBuf := make([]byte, end-current)
-							copy(chunkBuf, data[current:end])
-							memFileData.buf = chunkBuf
-							multiPartFile.memFile.memFileDataChan <- memFileData
-							current = end
-						}
-
-						totalMutex.Lock()
-						total += int64(dataLen)
-						totalMutex.Unlock()
-					}
-				}
-			}()
-		}
-
-		// Monitor for completion and close channel when all workers are done
+		// Sequential chunking for non-compressed uploads (ensures correct chunk order)
+		// This ensures chunks are sent to SDK in the exact order they appear in the file,
+		// which is critical for correct file hash calculation and data integrity
 		go func() {
-			wg.Wait()
-			close(multiPartFile.memFile.memFileDataChan)
+			var total int64
+			st := time.Now()
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+			defer cancel()
 
-			// Get final file hash
-			multiPartFile.fileHasherLock.Lock()
-			fileHash := hex.EncodeToString(multiPartFile.fileHasher.Sum(nil))
-			multiPartFile.fileHasherLock.Unlock()
-			log.Printf("uploaded: %d, duration: %v, file hash: %s", total, time.Since(st), fileHash)
+			for {
+				select {
+				case <-multiPartFile.cancelC:
+					log.Println("upload is canceled, clean up temp dirs")
+					memFile.errChan <- fmt.Errorf("upload is canceled")
+					cleanupPartFilesAndDirs(bucket, uploadID, localStorageDir)
+					return
+				case <-ctx.Done():
+					log.Println("upload is timed out, clean up temp dirs")
+					memFile.errChan <- fmt.Errorf("upload is timed out")
+					cleanupPartFilesAndDirs(bucket, uploadID, localStorageDir)
+					return
+				case data, ok := <-multiPartFile.dataC:
+					if !ok {
+						// Channel closed, we're done - close memFileDataChan to signal EOF to SDK
+						close(multiPartFile.memFile.memFileDataChan)
+
+						// Get final file hash (same calculation as pr-177)
+						multiPartFile.fileHasherLock.Lock()
+						fileHash := hex.EncodeToString(multiPartFile.fileHasher.Sum(nil))
+						multiPartFile.fileHasherLock.Unlock()
+						log.Printf("uploaded: %d, duration: %v, file hash: %s", total, time.Since(st), fileHash)
+						return
+					}
+
+					// Inline file hash (MD5) - calculates hash as data flows through
+					// This matches pr-177 behavior: MD5 hash of the complete file data in order
+					// The SDK also calculates its own hash, and both should match for data integrity
+					multiPartFile.fileHasherLock.Lock()
+					multiPartFile.fileHasher.Write(data)
+					multiPartFile.fileHasherLock.Unlock()
+
+					// Chunk the data sequentially (ensures chunks are in correct order for SDK)
+					// This matches pr-177 behavior: chunks must be sent in file order
+					dataLen := len(data)
+					dataOffset := 0
+
+					for dataOffset < dataLen {
+						chunkSize := chunkWriteSize
+						if dataOffset+chunkSize > dataLen {
+							chunkSize = dataLen - dataOffset
+						}
+
+						// Make a copy of the chunk to ensure data independence
+						chunkData := make([]byte, chunkSize)
+						copy(chunkData, data[dataOffset:dataOffset+chunkSize])
+
+						memFileData := memFileData{
+							buf: chunkData,
+						}
+
+						multiPartFile.memFile.memFileDataChan <- memFileData
+						dataOffset += chunkSize
+					}
+
+					total += int64(dataLen)
+				}
+			}
 		}()
 	}
 
