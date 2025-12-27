@@ -140,12 +140,7 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object, conte
 	// }
 	uploadID := uuid.New().String()
 	mapLock.Lock()
-	memFile := &memFile{
-		memFileDataChan: make(chan memFileData, 240),
-		errChan:         make(chan error),
-	}
-	chunkWriteSize := int(zob.alloc.GetChunkReadSize(encrypt))
-
+	
 	// Calculate dynamic worker pool size based on blobber count
 	blobberCount := zob.alloc.DataShards + zob.alloc.ParityShards
 	if blobberCount < minParallelParts {
@@ -154,21 +149,48 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object, conte
 	if blobberCount > maxParallelParts {
 		blobberCount = maxParallelParts
 	}
+	
+	// Increase memFileDataChan buffer significantly for better pipelining
+	// Larger buffer allows more chunks to be queued before blocking, improving throughput
+	// Formula: blobberCount * 10 provides good headroom for parallel processing
+	memFileDataChanSize := blobberCount * 10
+	if memFileDataChanSize < 500 {
+		memFileDataChanSize = 500 // Minimum buffer size for high throughput
+	}
+	if memFileDataChanSize > 2000 {
+		memFileDataChanSize = 2000 // Cap to prevent excessive memory usage
+	}
+	
+	memFile := &memFile{
+		memFileDataChan: make(chan memFileData, memFileDataChanSize),
+		errChan:         make(chan error),
+	}
+	chunkWriteSize := int(zob.alloc.GetChunkReadSize(encrypt))
 
 	// Note: Chunking is done sequentially to ensure chunks are sent to SDK in correct order
 	// This is critical for data integrity - chunks must match pr-177 behavior exactly
 
+	// Increase all channel buffer sizes for better pipelining and reduced blocking
+	// Larger buffers allow more data to flow through the pipeline before blocking
+	channelBufferSize := blobberCount * 5
+	if channelBufferSize < 300 {
+		channelBufferSize = 300 // Minimum buffer size
+	}
+	if channelBufferSize > 1000 {
+		channelBufferSize = 1000 // Cap to prevent excessive memory usage
+	}
+
 	multiPartFile := &MultiPartFile{
 		memFile:          memFile,
 		errorC:           make(chan error, 1),
-		dataC:            make(chan []byte, 200), // Increased buffer for better pipelining (was 50)
-		orderedDataC:     make(chan partData, 200), // Increased buffer (was 50)
+		dataC:            make(chan []byte, channelBufferSize), // Increased buffer for better pipelining
+		orderedDataC:     make(chan partData, channelBufferSize), // Increased buffer
 		partsReady:       make(map[int]bool),
 		workerPool:       make(chan struct{}, blobberCount), // Dynamic worker pool = blobber count
 		cancelC:          make(chan struct{}, 1),
 		parts:            make(map[int][]byte), // In-memory storage for parts
 		etags:            make(map[int]string), // In-memory storage for ETags
-		availableParts:   make(chan int, 200),  // Increased buffer (was 100)
+		availableParts:   make(chan int, channelBufferSize),  // Increased buffer
 		fileHasher:       md5.New(),            // Inline file hash (MD5)
 		allPartsReceived: false,
 	}
@@ -322,9 +344,22 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object, conte
 
 					// Chunk the data sequentially (ensures chunks are in correct order for SDK)
 					// This matches pr-177 behavior: chunks must be sent in file order
+					// Optimized: Reduce allocations when entire data fits in one chunk
 					dataLen := len(data)
+					
+					// Fast path: If entire data fits in one chunk, send it directly (no copy needed)
+					// The data is already a copy from the channel, so it's safe to use directly
+					if dataLen <= chunkWriteSize {
+						memFileData := memFileData{
+							buf: data, // Use slice directly - data is already a copy from channel
+						}
+						multiPartFile.memFile.memFileDataChan <- memFileData
+						total += int64(dataLen)
+						continue
+					}
+					
+					// Slow path: Data needs to be split into multiple chunks
 					dataOffset := 0
-
 					for dataOffset < dataLen {
 						chunkSize := chunkWriteSize
 						if dataOffset+chunkSize > dataLen {
@@ -342,6 +377,8 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object, conte
 						multiPartFile.memFile.memFileDataChan <- memFileData
 						dataOffset += chunkSize
 					}
+					
+					total += int64(dataLen)
 
 					total += int64(dataLen)
 				}
@@ -362,8 +399,17 @@ func (zob *zcnObjects) newMultiPartUpload(localStorageDir, bucket, object, conte
 			MimeType:   contentType,
 			CustomMeta: customMeta,
 		}
+		// Increase chunk number to reduce HTTP request overhead and improve throughput
+		// Higher chunk number means fewer HTTP requests but more data per request
+		// 100-150 is optimal for most scenarios (balance between latency and throughput)
+		chunkNumber := 120
+		if blobberCount > 10 {
+			// For larger allocations, use even higher chunk number for better throughput
+			chunkNumber = 150
+		}
+		
 		options := []sdk.ChunkedUploadOption{
-			sdk.WithChunkNumber(80),
+			sdk.WithChunkNumber(chunkNumber),
 			sdk.WithEncrypt(encrypt),
 		}
 		operationRequest := sdk.OperationRequest{
