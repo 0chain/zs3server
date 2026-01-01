@@ -23,8 +23,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"strings"
+	"syscall"
 	"time"
 
 	xhttp "github.com/minio/minio/internal/http"
@@ -70,6 +72,32 @@ func (h *Target) String() string {
 	return h.config.Name
 }
 
+// isConnRefusedErr checks if the error is a connection refused or network error
+func isConnRefusedErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	// Check for syscall errors
+	if errors.Is(err, syscall.ECONNREFUSED) {
+		return true
+	}
+	// Check for net.OpError
+	var opErr *net.OpError
+	if errors.As(err, &opErr) {
+		if opErr.Err != nil {
+			if errors.Is(opErr.Err, syscall.ECONNREFUSED) {
+				return true
+			}
+		}
+	}
+	// Check error string for common connection errors
+	errStr := strings.ToLower(err.Error())
+	return strings.Contains(errStr, "connection refused") ||
+		strings.Contains(errStr, "no such host") ||
+		strings.Contains(errStr, "dial tcp") ||
+		strings.Contains(errStr, "connect: connection refused")
+}
+
 // Init validate and initialize the http target
 func (h *Target) Init() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*webhookCallTimeout)
@@ -93,6 +121,17 @@ func (h *Target) Init() error {
 	client := http.Client{Transport: h.config.Transport}
 	resp, err := client.Do(req)
 	if err != nil {
+		// If connection is refused, allow initialization to proceed anyway
+		// The service may become available later, and logs will be queued
+		if isConnRefusedErr(err) {
+			// Log a warning but don't fail initialization
+			if h.config.LogOnce != nil {
+				h.config.LogOnce(ctx, fmt.Errorf("audit target endpoint %s is not available (connection refused), will retry when sending logs: %w", h.config.Endpoint, err), h.config.Endpoint)
+			}
+			// Start the logger anyway - it will retry when sending logs
+			go h.startHTTPLogger()
+			return nil
+		}
 		return err
 	}
 
