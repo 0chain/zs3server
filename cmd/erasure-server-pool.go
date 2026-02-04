@@ -1092,7 +1092,8 @@ func (z *erasureServerPools) ListObjectVersions(ctx context.Context, bucket, pre
 		Bucket:      bucket,
 		Prefix:      prefix,
 		Separator:   delimiter,
-		Limit:       maxKeysPlusOne(maxKeys, marker != ""),
+		// N+1 Strategy: Always request maxKeys + 1 to probe for more data
+		Limit:       maxKeysPlusOne(maxKeys, true),
 		Marker:      marker,
 		InclDeleted: true,
 		AskDisks:    globalAPIConfig.getListQuorum(),
@@ -1112,10 +1113,17 @@ func (z *erasureServerPools) ListObjectVersions(ctx context.Context, bucket, pre
 		merged.forwardPast(o.Marker)
 	}
 	objects := merged.fileInfoVersions(bucket, prefix, delimiter, versionMarker)
-	loi.IsTruncated = err == nil && len(objects) > 0
+	
+	// N+1 Strategy: Check if we got more than maxKeys (the "proof of life")
+	// If we got maxKeys+1 items, we know more data exists
 	if maxKeys > 0 && len(objects) > maxKeys {
-		objects = objects[:maxKeys]
+		// We found the "Proof of Life" (Item maxKeys+1 exists)
 		loi.IsTruncated = true
+		// Trim the list back to the user's limit (Drop item maxKeys+1)
+		objects = objects[:maxKeys]
+	} else {
+		// We got maxKeys or fewer. We assume we are done.
+		loi.IsTruncated = false
 	}
 	for _, obj := range objects {
 		if obj.IsDir && obj.ModTime.IsZero() && delimiter != "" {
@@ -1125,9 +1133,12 @@ func (z *erasureServerPools) ListObjectVersions(ctx context.Context, bucket, pre
 		}
 	}
 	if loi.IsTruncated {
-		last := objects[len(objects)-1]
-		loi.NextMarker = opts.encodeMarker(last.Name)
-		loi.NextVersionIDMarker = last.VersionID
+		// Set the NextMarker to the last valid object (the maxKeys-th item)
+		if len(objects) > 0 {
+			last := objects[len(objects)-1]
+			loi.NextMarker = opts.encodeMarker(last.Name)
+			loi.NextVersionIDMarker = last.VersionID
+		}
 	}
 	return loi, nil
 }
@@ -1164,7 +1175,9 @@ func (z *erasureServerPools) ListObjects(ctx context.Context, bucket, prefix, ma
 		Bucket:      bucket,
 		Prefix:      prefix,
 		Separator:   delimiter,
-		Limit:       maxKeysPlusOne(maxKeys, marker != ""),
+		// N+1 Strategy: Always request maxKeys + 1 to probe for more data
+		// This proves physically that more data exists by fetching one extra item
+		Limit:       maxKeysPlusOne(maxKeys, true),
 		Marker:      marker,
 		InclDeleted: false,
 		AskDisks:    globalAPIConfig.getListQuorum(),
@@ -1182,10 +1195,18 @@ func (z *erasureServerPools) ListObjects(ctx context.Context, bucket, prefix, ma
 
 	// Default is recursive, if delimiter is set then list non recursive.
 	objects := merged.fileInfos(bucket, prefix, delimiter)
-	loi.IsTruncated = err == nil && len(objects) > 0
+	
+	// N+1 Strategy: Check if we got more than maxKeys (the "proof of life")
+	// If we got maxKeys+1 items, we know more data exists
 	if maxKeys > 0 && len(objects) > maxKeys {
-		objects = objects[:maxKeys]
+		// We found the "Proof of Life" (Item maxKeys+1 exists)
 		loi.IsTruncated = true
+		// Trim the list back to the user's limit (Drop item maxKeys+1)
+		objects = objects[:maxKeys]
+	} else {
+		// We got maxKeys or fewer. We assume we are done.
+		// (This works unless the backend has a hard cap at maxKeys, which is rare)
+		loi.IsTruncated = false
 	}
 	for _, obj := range objects {
 		if obj.IsDir && obj.ModTime.IsZero() && delimiter != "" {
@@ -1195,8 +1216,11 @@ func (z *erasureServerPools) ListObjects(ctx context.Context, bucket, prefix, ma
 		}
 	}
 	if loi.IsTruncated {
-		last := objects[len(objects)-1]
-		loi.NextMarker = opts.encodeMarker(last.Name)
+		// Set the NextMarker to the last valid object (the maxKeys-th item)
+		if len(objects) > 0 {
+			last := objects[len(objects)-1]
+			loi.NextMarker = opts.encodeMarker(last.Name)
+		}
 	}
 	return loi, nil
 }
