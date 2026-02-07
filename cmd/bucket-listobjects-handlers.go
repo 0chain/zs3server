@@ -99,9 +99,6 @@ func mergePrefixes(l1, l2 []string) []string {
 }
 
 func limitMergeObjects(mergeObjects []ObjectInfo, mergePrefixes []string, maxKeys int) ([]ObjectInfo, []string, string) {
-	log.Printf("[limitMergeObjects] Input: mergeObjects=%d mergePrefixes=%d maxKeys=%d", 
-		len(mergeObjects), len(mergePrefixes), maxKeys)
-	
 	objPrefixMap := map[string]ObjectInfo{}
 	for _, ob := range mergeObjects {
 		objPrefixMap[ob.Name] = ob
@@ -115,7 +112,6 @@ func limitMergeObjects(mergeObjects []ObjectInfo, mergePrefixes []string, maxKey
 		keys = append(keys, key)
 	}
 	sort.Strings(keys)
-	log.Printf("[limitMergeObjects] After merge and sort: totalKeys=%d maxKeys=%d", len(keys), maxKeys)
 	
 	limitedObjs := []ObjectInfo{}
 	limitedPrefixes := []string{}
@@ -128,12 +124,9 @@ func limitMergeObjects(mergeObjects []ObjectInfo, mergePrefixes []string, maxKey
 		}
 		if i >= (maxKeys - 1) {
 			nextMarker = key
-			log.Printf("[limitMergeObjects] Hit limit at i=%d (maxKeys-1=%d), nextMarker=%s", i, maxKeys-1, nextMarker)
 			break
 		}
 	}
-	log.Printf("[limitMergeObjects] Output: limitedObjs=%d limitedPrefixes=%d nextMarker=%q", 
-		len(limitedObjs), len(limitedPrefixes), nextMarker)
 	return limitedObjs, limitedPrefixes, nextMarker
 }
 
@@ -372,64 +365,32 @@ func (api objectAPIHandlers) ListObjectsV2Handler(w http.ResponseWriter, r *http
 		return
 	}
 
-	log.Printf("[ListObjectsV2 HANDLER] Backend returned: Objects=%d Prefixes=%d IsTruncated=%v NextToken=%s", 
-		len(listObjectsV2Info.Objects), len(listObjectsV2Info.Prefixes), listObjectsV2Info.IsTruncated, listObjectsV2Info.NextContinuationToken)
-	if cacheEnabled {
-		log.Printf("[ListObjectsV2 HANDLER] Cache returned: Objects=%d Prefixes=%d IsTruncated=%v NextToken=%s", 
-			len(listObjectsV2InfoCache.Objects), len(listObjectsV2InfoCache.Prefixes), listObjectsV2InfoCache.IsTruncated, listObjectsV2InfoCache.NextContinuationToken)
-	}
-
 	mergeObjects := mergeListObjects(listObjectsV2Info.Objects, listObjectsV2InfoCache.Objects)
 	mergePrefixes := mergePrefixes(listObjectsV2Info.Prefixes, listObjectsV2InfoCache.Prefixes)
-	log.Printf("[ListObjectsV2 HANDLER] After merge: Objects=%d Prefixes=%d maxKeys=%d", 
-		len(mergeObjects), len(mergePrefixes), maxKeys)
-	
 	limitedObjects, limitedPrefix, nextMarker := limitMergeObjects(mergeObjects, mergePrefixes, maxKeys)
-	log.Printf("[ListObjectsV2 HANDLER] After limitMergeObjects: Objects=%d Prefixes=%d nextMarker=%s", 
-		len(limitedObjects), len(limitedPrefix), nextMarker)
-	
 	listObjectsV2Info.Objects = limitedObjects
 	listObjectsV2Info.Prefixes = limitedPrefix
 	
-	// Safety Net: If we have a full page (maxKeys items), assume there is more data.
-	// This handles the case where the backend might silently cap the N+1 request at N.
-	// Also preserve backend's pagination state if it indicates more results exist.
 	totalItems := len(listObjectsV2Info.Objects) + len(listObjectsV2Info.Prefixes)
-	log.Printf("[ListObjectsV2 HANDLER] Pagination decision: totalItems=%d maxKeys=%d nextMarker=%q backendIsTruncated=%v backendNextToken=%q", 
-		totalItems, maxKeys, nextMarker, listObjectsV2Info.IsTruncated, listObjectsV2Info.NextContinuationToken)
-	
 	if nextMarker != "" || totalItems >= maxKeys {
-		log.Printf("[ListObjectsV2 HANDLER] Setting IsTruncated=true (nextMarker=%q OR totalItems=%d >= maxKeys=%d)", 
-			nextMarker, totalItems, maxKeys)
 		listObjectsV2Info.IsTruncated = true
 		
-		// Use the marker if we have it
-		if nextMarker != "" {
+		if listObjectsV2Info.NextContinuationToken != "" {
+			// Prefer backend's token as it's based on the actual data structure
+		} else if nextMarker != "" {
 			listObjectsV2Info.NextContinuationToken = nextMarker
-		} else if listObjectsV2Info.NextContinuationToken == "" {
-			// If marker is missing but page is full, generate one from the last object
+		} else {
 			if len(listObjectsV2Info.Objects) > 0 {
 				listObjectsV2Info.NextContinuationToken = listObjectsV2Info.Objects[len(listObjectsV2Info.Objects)-1].Name
 			} else if len(listObjectsV2Info.Prefixes) > 0 {
-				// Use last prefix if no objects
 				listObjectsV2Info.NextContinuationToken = listObjectsV2Info.Prefixes[len(listObjectsV2Info.Prefixes)-1]
 			}
 		}
-		// If backend already set NextContinuationToken, preserve it
 	} else if listObjectsV2Info.IsTruncated && listObjectsV2Info.NextContinuationToken != "" {
-		// Backend has more results but merged list fits within maxKeys
-		// Preserve backend's pagination state - already set correctly
-		log.Printf("[ListObjectsV2 HANDLER] Preserving backend pagination: IsTruncated=%v NextToken=%q", 
-			listObjectsV2Info.IsTruncated, listObjectsV2Info.NextContinuationToken)
 	} else {
-		// No more results from either source
-		log.Printf("[ListObjectsV2 HANDLER] Setting IsTruncated=false (no more results)")
 		listObjectsV2Info.IsTruncated = false
 		listObjectsV2Info.NextContinuationToken = ""
 	}
-	
-	log.Printf("[ListObjectsV2 HANDLER] Final response: Objects=%d Prefixes=%d IsTruncated=%v NextToken=%s", 
-		len(listObjectsV2Info.Objects), len(listObjectsV2Info.Prefixes), listObjectsV2Info.IsTruncated, listObjectsV2Info.NextContinuationToken)
 
 	concurrentDecryptETag(ctx, listObjectsV2Info.Objects)
 
@@ -508,7 +469,6 @@ func (api objectAPIHandlers) ListObjectsV1Handler(w http.ResponseWriter, r *http
 		return
 	}
 
-	// Extract all the litsObjectsV1 query params to their native values.
 	prefix, marker, delimiter, maxKeys, encodingType, s3Error := getListObjectsV1Args(r.Form)
 	if s3Error != ErrNone {
 		writeErrorResponse(ctx, w, errorCodes.ToAPIErr(s3Error), r.URL)
@@ -559,64 +519,33 @@ func (api objectAPIHandlers) ListObjectsV1Handler(w http.ResponseWriter, r *http
 		writeErrorResponse(ctx, w, toAPIError(ctx, err), r.URL)
 		return
 	}
-	log.Printf("[ListObjectsV1 HANDLER] Backend returned: Objects=%d Prefixes=%d IsTruncated=%v NextMarker=%s", 
-		len(listObjectsInfo.Objects), len(listObjectsInfo.Prefixes), listObjectsInfo.IsTruncated, listObjectsInfo.NextMarker)
-	if cacheEnabled {
-		log.Printf("[ListObjectsV1 HANDLER] Cache returned: Objects=%d Prefixes=%d IsTruncated=%v NextMarker=%s", 
-			len(listObjectsInfoCache.Objects), len(listObjectsInfoCache.Prefixes), listObjectsInfoCache.IsTruncated, listObjectsInfoCache.NextMarker)
-	}
 
 	mergeObjects := mergeListObjects(listObjectsInfo.Objects, listObjectsInfoCache.Objects)
 	mergePrefixes := mergePrefixes(listObjectsInfo.Prefixes, listObjectsInfoCache.Prefixes)
-	log.Printf("[ListObjectsV1 HANDLER] After merge: Objects=%d Prefixes=%d maxKeys=%d", 
-		len(mergeObjects), len(mergePrefixes), maxKeys)
-	
 	limitedObjects, limitedPrefix, nextMarker := limitMergeObjects(mergeObjects, mergePrefixes, maxKeys)
-	log.Printf("[ListObjectsV1 HANDLER] After limitMergeObjects: Objects=%d Prefixes=%d nextMarker=%s", 
-		len(limitedObjects), len(limitedPrefix), nextMarker)
-	
 	listObjectsInfo.Objects = limitedObjects
 	listObjectsInfo.Prefixes = limitedPrefix
 	
-	// Safety Net: If we have a full page (maxKeys items), assume there is more data.
-	// This handles the case where the backend might silently cap the N+1 request at N.
-	// Also preserve backend's pagination state if it indicates more results exist.
 	totalItems := len(listObjectsInfo.Objects) + len(listObjectsInfo.Prefixes)
-	log.Printf("[ListObjectsV1 HANDLER] Pagination decision: totalItems=%d maxKeys=%d nextMarker=%q backendIsTruncated=%v backendNextMarker=%q", 
-		totalItems, maxKeys, nextMarker, listObjectsInfo.IsTruncated, listObjectsInfo.NextMarker)
-	
 	if nextMarker != "" || totalItems >= maxKeys {
-		log.Printf("[ListObjectsV1 HANDLER] Setting IsTruncated=true (nextMarker=%q OR totalItems=%d >= maxKeys=%d)", 
-			nextMarker, totalItems, maxKeys)
 		listObjectsInfo.IsTruncated = true
 		
-		// Use the marker if we have it
-		if nextMarker != "" {
+		if listObjectsInfo.NextMarker != "" {
+			// Prefer backend's marker as it's based on the actual data structure
+		} else if nextMarker != "" {
 			listObjectsInfo.NextMarker = nextMarker
-		} else if listObjectsInfo.NextMarker == "" {
-			// If marker is missing but page is full, generate one from the last object
+		} else {
 			if len(listObjectsInfo.Objects) > 0 {
 				listObjectsInfo.NextMarker = listObjectsInfo.Objects[len(listObjectsInfo.Objects)-1].Name
 			} else if len(listObjectsInfo.Prefixes) > 0 {
-				// Use last prefix if no objects
 				listObjectsInfo.NextMarker = listObjectsInfo.Prefixes[len(listObjectsInfo.Prefixes)-1]
 			}
 		}
-		// If backend already set NextMarker, preserve it
 	} else if listObjectsInfo.IsTruncated && listObjectsInfo.NextMarker != "" {
-		// Backend has more results but merged list fits within maxKeys
-		// Preserve backend's pagination state - already set correctly
-		log.Printf("[ListObjectsV1 HANDLER] Preserving backend pagination: IsTruncated=%v NextMarker=%q", 
-			listObjectsInfo.IsTruncated, listObjectsInfo.NextMarker)
 	} else {
-		// No more results from either source
-		log.Printf("[ListObjectsV1 HANDLER] Setting IsTruncated=false (no more results)")
 		listObjectsInfo.IsTruncated = false
 		listObjectsInfo.NextMarker = ""
 	}
-	
-	log.Printf("[ListObjectsV1 HANDLER] Final response: Objects=%d Prefixes=%d IsTruncated=%v NextMarker=%s", 
-		len(listObjectsInfo.Objects), len(listObjectsInfo.Prefixes), listObjectsInfo.IsTruncated, listObjectsInfo.NextMarker)
 
 	concurrentDecryptETag(ctx, listObjectsInfo.Objects)
 

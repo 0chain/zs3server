@@ -443,14 +443,17 @@ func (zob *zcnObjects) ListObjectsV2(ctx context.Context, bucket, prefix, contin
 
 // ListObjects Lists files of directories as objects
 func (zob *zcnObjects) ListObjects(ctx context.Context, bucket, prefix, marker, delimiter string, maxKeys int) (result minio.ListObjectsInfo, err error) {
-	// objFileType For root path list objects should only provide file and not dirs.
-	// Dirs under root path are presented as buckets as well
 	var remotePath, objFileType string
 	if bucket == rootBucketName {
 		remotePath = filepath.Join(rootPath, prefix)
 		objFileType = fileType
 	} else {
 		remotePath = filepath.Join(rootPath, bucket, prefix)
+	}
+	
+	adjustedMarker := marker
+	if marker != "" && prefix != "" && strings.HasPrefix(marker, prefix) {
+		adjustedMarker = strings.TrimPrefix(marker, prefix)
 	}
 
 	var ref *sdk.ORef
@@ -525,7 +528,7 @@ func (zob *zcnObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 	} else {
 		objFileType = fileType
 	}
-	refs, isTruncated, nextMarker, prefixes, err := listRegularRefs(zob.alloc, remotePath, marker, objFileType, maxKeys, isDelimited)
+	refs, isTruncated, nextMarker, prefixes, err := listRegularRefs(zob.alloc, remotePath, adjustedMarker, objFileType, maxKeys, isDelimited)
 	if err != nil {
 		if remotePath == rootPath && isPathNoExistError(err) {
 			return minio.ListObjectsInfo{}, nil
@@ -541,9 +544,13 @@ func (zob *zcnObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 		if ref.CustomMeta != "" {
 			_ = json.Unmarshal([]byte(ref.CustomMeta), &userDefined)
 		}
+		objectName := ref.Name
+		if objectName == "" {
+			objectName = getRelativePathOfObj(ref.Path, bucket)
+		}
 		objects = append(objects, minio.ObjectInfo{
 			Bucket:       bucket,
-			Name:         getRelativePathOfObj(ref.Path, bucket),
+			Name:         objectName,
 			ModTime:      ref.UpdatedAt.ToTime(),
 			Size:         ref.ActualFileSize,
 			IsDir:        false,
@@ -552,6 +559,17 @@ func (zob *zcnObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 			StorageClass: "STANDARD",
 			UserDefined:  userDefined,
 		})
+	}
+
+	if isTruncated && nextMarker != "" && prefix != "" {
+		prefixToUse := strings.TrimSuffix(prefix, "/")
+		if !strings.HasPrefix(nextMarker, prefixToUse) {
+			if !strings.HasSuffix(prefix, "/") {
+				nextMarker = prefix + "/" + nextMarker
+			} else {
+				nextMarker = prefix + nextMarker
+			}
+		}
 	}
 
 	result.IsTruncated = isTruncated

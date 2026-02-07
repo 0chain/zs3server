@@ -109,6 +109,12 @@ func listRegularRefs(alloc *sdk.Allocation, remotePath, marker, fileType string,
 	heap.Push(&directories, remotePath)
 	var currentRemotePath string
 	listPageLimit := pageLimit
+	
+	requestedLimit := maxRefs
+	if maxRefs > 0 {
+		requestedLimit = maxRefs + 1
+	}
+	
 	for len(directories) > 0 && !isTruncated {
 		currentRemotePath = directories[0]
 		heap.Pop(&directories)
@@ -118,9 +124,11 @@ func listRegularRefs(alloc *sdk.Allocation, remotePath, marker, fileType string,
 			offsetPath = filepath.Join(currentRemotePath, marker)
 			marker = ""
 		}
+		listPageLimit = pageLimit
+		initialOffsetPath := offsetPath
 		for {
-			if len(refs)+listPageLimit > maxRefs {
-				listPageLimit = maxRefs - len(refs)
+			if len(refs)+listPageLimit > requestedLimit {
+				listPageLimit = requestedLimit - len(refs)
 			}
 			oResult, err := getRegularRefs(alloc, currentRemotePath, offsetPath, fileType, listPageLimit)
 			if err != nil {
@@ -150,21 +158,76 @@ func listRegularRefs(alloc *sdk.Allocation, remotePath, marker, fileType string,
 				ref.Name = filepath.Join(commonPrefix, trimmedPath)
 
 				refs = append(refs, ref)
-				if maxRefs != 0 && len(refs) >= maxRefs {
-					markedPath = ref.Path
+				if maxRefs > 0 && len(refs) > maxRefs {
+					markedRef := refs[maxRefs-1]
+					markedPath = markedRef.Name
+					if markedPath == "" {
+						markedPath = markedRef.Path
+					}
 					isTruncated = true
+					refs = refs[:maxRefs]
 					goto breakLoop
 				}
 			}
 			offsetPath = oResult.OffsetPath
+			
+			if maxRefs > 0 && len(refs) >= requestedLimit {
+				isTruncated = true
+				if len(refs) > maxRefs {
+					markedPath = refs[maxRefs].Name
+					if markedPath == "" {
+						markedPath = refs[maxRefs].Path
+					}
+					refs = refs[:maxRefs]
+				} else {
+					markedPath = refs[len(refs)-1].Name
+					if markedPath == "" {
+						markedPath = refs[len(refs)-1].Path
+					}
+				}
+				goto breakLoop
+			}
+			
 			if len(oResult.Refs) < listPageLimit {
+				if maxRefs > 0 && len(refs) == maxRefs {
+					hasMoreDirectories := len(directories) > 0
+					offsetChanged := offsetPath != "" && offsetPath != initialOffsetPath && offsetPath != currentRemotePath
+					if hasMoreDirectories || offsetChanged {
+						markedPath = refs[len(refs)-1].Name
+						if markedPath == "" {
+							markedPath = refs[len(refs)-1].Path
+						}
+						isTruncated = true
+						goto breakLoop
+					}
+				}
 				break
 			}
+		}
+		
+		if maxRefs > 0 && len(refs) == maxRefs && len(directories) > 0 {
+			markedPath = refs[len(refs)-1].Name
+			if markedPath == "" {
+				markedPath = refs[len(refs)-1].Path
+			}
+			isTruncated = true
+			goto breakLoop
 		}
 	}
 breakLoop:
 	if isTruncated {
-		marker = strings.TrimPrefix(markedPath, remotePath+"/")
+		if strings.HasPrefix(markedPath, remotePath+"/") {
+			marker = strings.TrimPrefix(markedPath, remotePath+"/")
+		} else {
+			commonPrefix := getCommonPrefix(remotePath)
+			if strings.HasPrefix(markedPath, commonPrefix+"/") {
+				marker = strings.TrimPrefix(markedPath, commonPrefix+"/")
+			} else if markedPath == commonPrefix {
+				marker = ""
+			} else {
+				marker = markedPath
+			}
+		}
 	} else {
 		marker = ""
 	}
