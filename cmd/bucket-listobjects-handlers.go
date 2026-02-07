@@ -99,6 +99,9 @@ func mergePrefixes(l1, l2 []string) []string {
 }
 
 func limitMergeObjects(mergeObjects []ObjectInfo, mergePrefixes []string, maxKeys int) ([]ObjectInfo, []string, string) {
+	log.Printf("[limitMergeObjects] Input: mergeObjects=%d mergePrefixes=%d maxKeys=%d", 
+		len(mergeObjects), len(mergePrefixes), maxKeys)
+	
 	objPrefixMap := map[string]ObjectInfo{}
 	for _, ob := range mergeObjects {
 		objPrefixMap[ob.Name] = ob
@@ -112,6 +115,8 @@ func limitMergeObjects(mergeObjects []ObjectInfo, mergePrefixes []string, maxKey
 		keys = append(keys, key)
 	}
 	sort.Strings(keys)
+	log.Printf("[limitMergeObjects] After merge and sort: totalKeys=%d maxKeys=%d", len(keys), maxKeys)
+	
 	limitedObjs := []ObjectInfo{}
 	limitedPrefixes := []string{}
 	nextMarker := ""
@@ -123,9 +128,12 @@ func limitMergeObjects(mergeObjects []ObjectInfo, mergePrefixes []string, maxKey
 		}
 		if i >= (maxKeys - 1) {
 			nextMarker = key
+			log.Printf("[limitMergeObjects] Hit limit at i=%d (maxKeys-1=%d), nextMarker=%s", i, maxKeys-1, nextMarker)
 			break
 		}
 	}
+	log.Printf("[limitMergeObjects] Output: limitedObjs=%d limitedPrefixes=%d nextMarker=%q", 
+		len(limitedObjs), len(limitedPrefixes), nextMarker)
 	return limitedObjs, limitedPrefixes, nextMarker
 }
 
@@ -364,9 +372,22 @@ func (api objectAPIHandlers) ListObjectsV2Handler(w http.ResponseWriter, r *http
 		return
 	}
 
+	log.Printf("[ListObjectsV2 HANDLER] Backend returned: Objects=%d Prefixes=%d IsTruncated=%v NextToken=%s", 
+		len(listObjectsV2Info.Objects), len(listObjectsV2Info.Prefixes), listObjectsV2Info.IsTruncated, listObjectsV2Info.NextContinuationToken)
+	if cacheEnabled {
+		log.Printf("[ListObjectsV2 HANDLER] Cache returned: Objects=%d Prefixes=%d IsTruncated=%v NextToken=%s", 
+			len(listObjectsV2InfoCache.Objects), len(listObjectsV2InfoCache.Prefixes), listObjectsV2InfoCache.IsTruncated, listObjectsV2InfoCache.NextContinuationToken)
+	}
+
 	mergeObjects := mergeListObjects(listObjectsV2Info.Objects, listObjectsV2InfoCache.Objects)
 	mergePrefixes := mergePrefixes(listObjectsV2Info.Prefixes, listObjectsV2InfoCache.Prefixes)
+	log.Printf("[ListObjectsV2 HANDLER] After merge: Objects=%d Prefixes=%d maxKeys=%d", 
+		len(mergeObjects), len(mergePrefixes), maxKeys)
+	
 	limitedObjects, limitedPrefix, nextMarker := limitMergeObjects(mergeObjects, mergePrefixes, maxKeys)
+	log.Printf("[ListObjectsV2 HANDLER] After limitMergeObjects: Objects=%d Prefixes=%d nextMarker=%s", 
+		len(limitedObjects), len(limitedPrefix), nextMarker)
+	
 	listObjectsV2Info.Objects = limitedObjects
 	listObjectsV2Info.Prefixes = limitedPrefix
 	
@@ -374,7 +395,12 @@ func (api objectAPIHandlers) ListObjectsV2Handler(w http.ResponseWriter, r *http
 	// This handles the case where the backend might silently cap the N+1 request at N.
 	// Also preserve backend's pagination state if it indicates more results exist.
 	totalItems := len(listObjectsV2Info.Objects) + len(listObjectsV2Info.Prefixes)
+	log.Printf("[ListObjectsV2 HANDLER] Pagination decision: totalItems=%d maxKeys=%d nextMarker=%q backendIsTruncated=%v backendNextToken=%q", 
+		totalItems, maxKeys, nextMarker, listObjectsV2Info.IsTruncated, listObjectsV2Info.NextContinuationToken)
+	
 	if nextMarker != "" || totalItems >= maxKeys {
+		log.Printf("[ListObjectsV2 HANDLER] Setting IsTruncated=true (nextMarker=%q OR totalItems=%d >= maxKeys=%d)", 
+			nextMarker, totalItems, maxKeys)
 		listObjectsV2Info.IsTruncated = true
 		
 		// Use the marker if we have it
@@ -393,11 +419,17 @@ func (api objectAPIHandlers) ListObjectsV2Handler(w http.ResponseWriter, r *http
 	} else if listObjectsV2Info.IsTruncated && listObjectsV2Info.NextContinuationToken != "" {
 		// Backend has more results but merged list fits within maxKeys
 		// Preserve backend's pagination state - already set correctly
+		log.Printf("[ListObjectsV2 HANDLER] Preserving backend pagination: IsTruncated=%v NextToken=%q", 
+			listObjectsV2Info.IsTruncated, listObjectsV2Info.NextContinuationToken)
 	} else {
 		// No more results from either source
+		log.Printf("[ListObjectsV2 HANDLER] Setting IsTruncated=false (no more results)")
 		listObjectsV2Info.IsTruncated = false
 		listObjectsV2Info.NextContinuationToken = ""
 	}
+	
+	log.Printf("[ListObjectsV2 HANDLER] Final response: Objects=%d Prefixes=%d IsTruncated=%v NextToken=%s", 
+		len(listObjectsV2Info.Objects), len(listObjectsV2Info.Prefixes), listObjectsV2Info.IsTruncated, listObjectsV2Info.NextContinuationToken)
 
 	concurrentDecryptETag(ctx, listObjectsV2Info.Objects)
 
@@ -527,9 +559,22 @@ func (api objectAPIHandlers) ListObjectsV1Handler(w http.ResponseWriter, r *http
 		writeErrorResponse(ctx, w, toAPIError(ctx, err), r.URL)
 		return
 	}
+	log.Printf("[ListObjectsV1 HANDLER] Backend returned: Objects=%d Prefixes=%d IsTruncated=%v NextMarker=%s", 
+		len(listObjectsInfo.Objects), len(listObjectsInfo.Prefixes), listObjectsInfo.IsTruncated, listObjectsInfo.NextMarker)
+	if cacheEnabled {
+		log.Printf("[ListObjectsV1 HANDLER] Cache returned: Objects=%d Prefixes=%d IsTruncated=%v NextMarker=%s", 
+			len(listObjectsInfoCache.Objects), len(listObjectsInfoCache.Prefixes), listObjectsInfoCache.IsTruncated, listObjectsInfoCache.NextMarker)
+	}
+
 	mergeObjects := mergeListObjects(listObjectsInfo.Objects, listObjectsInfoCache.Objects)
 	mergePrefixes := mergePrefixes(listObjectsInfo.Prefixes, listObjectsInfoCache.Prefixes)
+	log.Printf("[ListObjectsV1 HANDLER] After merge: Objects=%d Prefixes=%d maxKeys=%d", 
+		len(mergeObjects), len(mergePrefixes), maxKeys)
+	
 	limitedObjects, limitedPrefix, nextMarker := limitMergeObjects(mergeObjects, mergePrefixes, maxKeys)
+	log.Printf("[ListObjectsV1 HANDLER] After limitMergeObjects: Objects=%d Prefixes=%d nextMarker=%s", 
+		len(limitedObjects), len(limitedPrefix), nextMarker)
+	
 	listObjectsInfo.Objects = limitedObjects
 	listObjectsInfo.Prefixes = limitedPrefix
 	
@@ -537,7 +582,12 @@ func (api objectAPIHandlers) ListObjectsV1Handler(w http.ResponseWriter, r *http
 	// This handles the case where the backend might silently cap the N+1 request at N.
 	// Also preserve backend's pagination state if it indicates more results exist.
 	totalItems := len(listObjectsInfo.Objects) + len(listObjectsInfo.Prefixes)
+	log.Printf("[ListObjectsV1 HANDLER] Pagination decision: totalItems=%d maxKeys=%d nextMarker=%q backendIsTruncated=%v backendNextMarker=%q", 
+		totalItems, maxKeys, nextMarker, listObjectsInfo.IsTruncated, listObjectsInfo.NextMarker)
+	
 	if nextMarker != "" || totalItems >= maxKeys {
+		log.Printf("[ListObjectsV1 HANDLER] Setting IsTruncated=true (nextMarker=%q OR totalItems=%d >= maxKeys=%d)", 
+			nextMarker, totalItems, maxKeys)
 		listObjectsInfo.IsTruncated = true
 		
 		// Use the marker if we have it
@@ -556,11 +606,17 @@ func (api objectAPIHandlers) ListObjectsV1Handler(w http.ResponseWriter, r *http
 	} else if listObjectsInfo.IsTruncated && listObjectsInfo.NextMarker != "" {
 		// Backend has more results but merged list fits within maxKeys
 		// Preserve backend's pagination state - already set correctly
+		log.Printf("[ListObjectsV1 HANDLER] Preserving backend pagination: IsTruncated=%v NextMarker=%q", 
+			listObjectsInfo.IsTruncated, listObjectsInfo.NextMarker)
 	} else {
 		// No more results from either source
+		log.Printf("[ListObjectsV1 HANDLER] Setting IsTruncated=false (no more results)")
 		listObjectsInfo.IsTruncated = false
 		listObjectsInfo.NextMarker = ""
 	}
+	
+	log.Printf("[ListObjectsV1 HANDLER] Final response: Objects=%d Prefixes=%d IsTruncated=%v NextMarker=%s", 
+		len(listObjectsInfo.Objects), len(listObjectsInfo.Prefixes), listObjectsInfo.IsTruncated, listObjectsInfo.NextMarker)
 
 	concurrentDecryptETag(ctx, listObjectsInfo.Objects)
 

@@ -18,6 +18,7 @@ services:
   logsearchapi:
     build: ../logsearchapi
     container_name: logsearchapi
+    restart: always
     depends_on:
       - postgres-db
     ports:
@@ -37,6 +38,7 @@ services:
       context: ../
       dockerfile: Dockerfile
     container_name: minioserver
+    restart: always
     ports:
       - 9000:9000
     command: ["minio", "gateway", "zcn"]
@@ -55,13 +57,14 @@ services:
     links:
       - logsearchapi:logsearchapi
     volumes:
-      - ~/.zcn:/root/.zcn
+      - /home/ubuntu/.zcn:/root/.zcn
     networks:
       zs_network:
 
   minioclient:
     build: ../client-api
     container_name: minioclient
+    restart: always
     depends_on:
       - minioserver
     ports:
@@ -72,8 +75,9 @@ services:
       zs_network:
 
   etcd:
-    image: 'bitnami/etcd:latest'
+    image: 'bitnamilegacy/etcd:latest'
     container_name: etcd
+    restart: always
     environment:
       - ALLOW_NONE_AUTHENTICATION=yes
       - ETCD_ADVERTISE_CLIENT_URLS=http://etcd:2379

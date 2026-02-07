@@ -1062,6 +1062,9 @@ func (z *erasureServerPools) CopyObject(ctx context.Context, srcBucket, srcObjec
 }
 
 func (z *erasureServerPools) ListObjectsV2(ctx context.Context, bucket, prefix, continuationToken, delimiter string, maxKeys int, fetchOwner bool, startAfter string) (ListObjectsV2Info, error) {
+	log.Printf("[ListObjectsV2 BACKEND] Entry: bucket=%s prefix=%s continuationToken=%s startAfter=%s maxKeys=%d", 
+		bucket, prefix, continuationToken, startAfter, maxKeys)
+	
 	marker := continuationToken
 	if marker == "" {
 		marker = startAfter
@@ -1079,6 +1082,8 @@ func (z *erasureServerPools) ListObjectsV2(ctx context.Context, bucket, prefix, 
 		Objects:               loi.Objects,
 		Prefixes:              loi.Prefixes,
 	}
+	log.Printf("[ListObjectsV2 BACKEND] Returning: Objects=%d Prefixes=%d IsTruncated=%v NextToken=%s", 
+		len(listObjectsV2Info.Objects), len(listObjectsV2Info.Prefixes), listObjectsV2Info.IsTruncated, listObjectsV2Info.NextContinuationToken)
 	return listObjectsV2Info, err
 }
 
@@ -1171,13 +1176,16 @@ func (z *erasureServerPools) ListObjects(ctx context.Context, bucket, prefix, ma
 		}
 	}
 
+	requestedLimit := maxKeysPlusOne(maxKeys, true)
+	log.Printf("[ListObjects BACKEND] bucket=%s prefix=%s marker=%s maxKeys=%d requestedLimit=%d", bucket, prefix, marker, maxKeys, requestedLimit)
+	
 	opts := listPathOptions{
 		Bucket:      bucket,
 		Prefix:      prefix,
 		Separator:   delimiter,
 		// N+1 Strategy: Always request maxKeys + 1 to probe for more data
 		// This proves physically that more data exists by fetching one extra item
-		Limit:       maxKeysPlusOne(maxKeys, true),
+		Limit:       requestedLimit,
 		Marker:      marker,
 		InclDeleted: false,
 		AskDisks:    globalAPIConfig.getListQuorum(),
@@ -1193,19 +1201,24 @@ func (z *erasureServerPools) ListObjects(ctx context.Context, bucket, prefix, ma
 	merged.forwardPast(opts.Marker)
 	defer merged.truncate(0) // Release when returning
 
+	log.Printf("[ListObjects BACKEND] After listPath and forwardPast: mergedEntriesCount=%d requestedLimit=%d", merged.len(), requestedLimit)
+
 	// Default is recursive, if delimiter is set then list non recursive.
 	objects := merged.fileInfos(bucket, prefix, delimiter)
+	log.Printf("[ListObjects BACKEND] After fileInfos: rawObjectsCount=%d maxKeys=%d", len(objects), maxKeys)
 	
 	// N+1 Strategy: Check if we got more than maxKeys (the "proof of life")
 	// If we got maxKeys+1 items, we know more data exists
 	if maxKeys > 0 && len(objects) > maxKeys {
 		// We found the "Proof of Life" (Item maxKeys+1 exists)
+		log.Printf("[ListObjects BACKEND] Found more than maxKeys: len=%d > maxKeys=%d, setting IsTruncated=true", len(objects), maxKeys)
 		loi.IsTruncated = true
 		// Trim the list back to the user's limit (Drop item maxKeys+1)
 		objects = objects[:maxKeys]
 	} else {
 		// We got maxKeys or fewer. We assume we are done.
 		// (This works unless the backend has a hard cap at maxKeys, which is rare)
+		log.Printf("[ListObjects BACKEND] Got maxKeys or fewer: len=%d <= maxKeys=%d, setting IsTruncated=false", len(objects), maxKeys)
 		loi.IsTruncated = false
 	}
 	for _, obj := range objects {
@@ -1220,8 +1233,11 @@ func (z *erasureServerPools) ListObjects(ctx context.Context, bucket, prefix, ma
 		if len(objects) > 0 {
 			last := objects[len(objects)-1]
 			loi.NextMarker = opts.encodeMarker(last.Name)
+			log.Printf("[ListObjects BACKEND] IsTruncated=true, set NextMarker=%s", loi.NextMarker)
 		}
 	}
+	log.Printf("[ListObjects BACKEND] Returning: Objects=%d Prefixes=%d IsTruncated=%v NextMarker=%s", 
+		len(loi.Objects), len(loi.Prefixes), loi.IsTruncated, loi.NextMarker)
 	return loi, nil
 }
 
