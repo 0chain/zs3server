@@ -277,6 +277,6 @@ require (
 	sigs.k8s.io/yaml v1.2.0 // indirect
 )
 
-// replace github.com/0chain/gosdk => ../gosdk
+replace github.com/0chain/gosdk => github.com/0chain/gosdk v1.17.12-0.20260102182829-a68d61fe5711
 
 //replace github.com/herumi/bls-go-binary => github.com/boddumanohar/bls-go-binary v1.30.7

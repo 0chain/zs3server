@@ -1157,13 +1157,6 @@ func (z *erasureServerPools) ListObjects(ctx context.Context, bucket, prefix, ma
 	var loi ListObjectsInfo
 
 	if len(prefix) > 0 && maxKeys == 1 && delimiter == "" && marker == "" {
-		// Optimization for certain applications like
-		// - Cohesity
-		// - Actifio, Splunk etc.
-		// which send ListObjects requests where the actual object
-		// itself is the prefix and max-keys=1 in such scenarios
-		// we can simply verify locally if such an object exists
-		// to avoid the need for ListObjects().
 		objInfo, err := z.GetObjectInfo(ctx, bucket, prefix, ObjectOptions{NoLock: true})
 		if err == nil {
 			loi.Objects = append(loi.Objects, objInfo)
@@ -1171,13 +1164,13 @@ func (z *erasureServerPools) ListObjects(ctx context.Context, bucket, prefix, ma
 		}
 	}
 
+	requestedLimit := maxKeysPlusOne(maxKeys, true)
+	
 	opts := listPathOptions{
 		Bucket:      bucket,
 		Prefix:      prefix,
 		Separator:   delimiter,
-		// N+1 Strategy: Always request maxKeys + 1 to probe for more data
-		// This proves physically that more data exists by fetching one extra item
-		Limit:       maxKeysPlusOne(maxKeys, true),
+		Limit:       requestedLimit,
 		Marker:      marker,
 		InclDeleted: false,
 		AskDisks:    globalAPIConfig.getListQuorum(),
@@ -1191,21 +1184,18 @@ func (z *erasureServerPools) ListObjects(ctx context.Context, bucket, prefix, ma
 	}
 
 	merged.forwardPast(opts.Marker)
-	defer merged.truncate(0) // Release when returning
+	defer merged.truncate(0)
 
-	// Default is recursive, if delimiter is set then list non recursive.
+	mergedCount := merged.len()
 	objects := merged.fileInfos(bucket, prefix, delimiter)
+	rawObjectsCount := len(objects)
 	
-	// N+1 Strategy: Check if we got more than maxKeys (the "proof of life")
-	// If we got maxKeys+1 items, we know more data exists
-	if maxKeys > 0 && len(objects) > maxKeys {
-		// We found the "Proof of Life" (Item maxKeys+1 exists)
+	if maxKeys > 0 && rawObjectsCount > maxKeys {
 		loi.IsTruncated = true
-		// Trim the list back to the user's limit (Drop item maxKeys+1)
 		objects = objects[:maxKeys]
+	} else if maxKeys > 0 && rawObjectsCount == maxKeys && mergedCount >= requestedLimit {
+		loi.IsTruncated = true
 	} else {
-		// We got maxKeys or fewer. We assume we are done.
-		// (This works unless the backend has a hard cap at maxKeys, which is rare)
 		loi.IsTruncated = false
 	}
 	for _, obj := range objects {
@@ -1216,7 +1206,6 @@ func (z *erasureServerPools) ListObjects(ctx context.Context, bucket, prefix, ma
 		}
 	}
 	if loi.IsTruncated {
-		// Set the NextMarker to the last valid object (the maxKeys-th item)
 		if len(objects) > 0 {
 			last := objects[len(objects)-1]
 			loi.NextMarker = opts.encodeMarker(last.Name)

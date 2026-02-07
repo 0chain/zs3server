@@ -112,6 +112,7 @@ func limitMergeObjects(mergeObjects []ObjectInfo, mergePrefixes []string, maxKey
 		keys = append(keys, key)
 	}
 	sort.Strings(keys)
+	
 	limitedObjs := []ObjectInfo{}
 	limitedPrefixes := []string{}
 	nextMarker := ""
@@ -370,31 +371,23 @@ func (api objectAPIHandlers) ListObjectsV2Handler(w http.ResponseWriter, r *http
 	listObjectsV2Info.Objects = limitedObjects
 	listObjectsV2Info.Prefixes = limitedPrefix
 	
-	// Safety Net: If we have a full page (maxKeys items), assume there is more data.
-	// This handles the case where the backend might silently cap the N+1 request at N.
-	// Also preserve backend's pagination state if it indicates more results exist.
 	totalItems := len(listObjectsV2Info.Objects) + len(listObjectsV2Info.Prefixes)
 	if nextMarker != "" || totalItems >= maxKeys {
 		listObjectsV2Info.IsTruncated = true
 		
-		// Use the marker if we have it
-		if nextMarker != "" {
+		if listObjectsV2Info.NextContinuationToken != "" {
+			// Prefer backend's token as it's based on the actual data structure
+		} else if nextMarker != "" {
 			listObjectsV2Info.NextContinuationToken = nextMarker
-		} else if listObjectsV2Info.NextContinuationToken == "" {
-			// If marker is missing but page is full, generate one from the last object
+		} else {
 			if len(listObjectsV2Info.Objects) > 0 {
 				listObjectsV2Info.NextContinuationToken = listObjectsV2Info.Objects[len(listObjectsV2Info.Objects)-1].Name
 			} else if len(listObjectsV2Info.Prefixes) > 0 {
-				// Use last prefix if no objects
 				listObjectsV2Info.NextContinuationToken = listObjectsV2Info.Prefixes[len(listObjectsV2Info.Prefixes)-1]
 			}
 		}
-		// If backend already set NextContinuationToken, preserve it
 	} else if listObjectsV2Info.IsTruncated && listObjectsV2Info.NextContinuationToken != "" {
-		// Backend has more results but merged list fits within maxKeys
-		// Preserve backend's pagination state - already set correctly
 	} else {
-		// No more results from either source
 		listObjectsV2Info.IsTruncated = false
 		listObjectsV2Info.NextContinuationToken = ""
 	}
@@ -476,7 +469,6 @@ func (api objectAPIHandlers) ListObjectsV1Handler(w http.ResponseWriter, r *http
 		return
 	}
 
-	// Extract all the litsObjectsV1 query params to their native values.
 	prefix, marker, delimiter, maxKeys, encodingType, s3Error := getListObjectsV1Args(r.Form)
 	if s3Error != ErrNone {
 		writeErrorResponse(ctx, w, errorCodes.ToAPIErr(s3Error), r.URL)
@@ -527,37 +519,30 @@ func (api objectAPIHandlers) ListObjectsV1Handler(w http.ResponseWriter, r *http
 		writeErrorResponse(ctx, w, toAPIError(ctx, err), r.URL)
 		return
 	}
+
 	mergeObjects := mergeListObjects(listObjectsInfo.Objects, listObjectsInfoCache.Objects)
 	mergePrefixes := mergePrefixes(listObjectsInfo.Prefixes, listObjectsInfoCache.Prefixes)
 	limitedObjects, limitedPrefix, nextMarker := limitMergeObjects(mergeObjects, mergePrefixes, maxKeys)
 	listObjectsInfo.Objects = limitedObjects
 	listObjectsInfo.Prefixes = limitedPrefix
 	
-	// Safety Net: If we have a full page (maxKeys items), assume there is more data.
-	// This handles the case where the backend might silently cap the N+1 request at N.
-	// Also preserve backend's pagination state if it indicates more results exist.
 	totalItems := len(listObjectsInfo.Objects) + len(listObjectsInfo.Prefixes)
 	if nextMarker != "" || totalItems >= maxKeys {
 		listObjectsInfo.IsTruncated = true
 		
-		// Use the marker if we have it
-		if nextMarker != "" {
+		if listObjectsInfo.NextMarker != "" {
+			// Prefer backend's marker as it's based on the actual data structure
+		} else if nextMarker != "" {
 			listObjectsInfo.NextMarker = nextMarker
-		} else if listObjectsInfo.NextMarker == "" {
-			// If marker is missing but page is full, generate one from the last object
+		} else {
 			if len(listObjectsInfo.Objects) > 0 {
 				listObjectsInfo.NextMarker = listObjectsInfo.Objects[len(listObjectsInfo.Objects)-1].Name
 			} else if len(listObjectsInfo.Prefixes) > 0 {
-				// Use last prefix if no objects
 				listObjectsInfo.NextMarker = listObjectsInfo.Prefixes[len(listObjectsInfo.Prefixes)-1]
 			}
 		}
-		// If backend already set NextMarker, preserve it
 	} else if listObjectsInfo.IsTruncated && listObjectsInfo.NextMarker != "" {
-		// Backend has more results but merged list fits within maxKeys
-		// Preserve backend's pagination state - already set correctly
 	} else {
-		// No more results from either source
 		listObjectsInfo.IsTruncated = false
 		listObjectsInfo.NextMarker = ""
 	}
