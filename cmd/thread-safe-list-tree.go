@@ -41,7 +41,7 @@ func (t *ThreadSafeListTree) Get(key string) (any, bool) {
 	return t.tree.Get(key)
 }
 
-func (t *ThreadSafeListTree) CheckTimeAndDelete(key string, time time.Time) (any, bool) {
+func (t *ThreadSafeListTree) CheckTimeAndDelete(key string, ts time.Time) (any, bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	value, ok := t.tree.Get(key)
@@ -49,10 +49,10 @@ func (t *ThreadSafeListTree) CheckTimeAndDelete(key string, time time.Time) (any
 		return nil, false
 	}
 	v := value.(ObjectInfo)
-	if v.ModTime.UnixNano() == time.UnixNano() {
+	if v.ModTime.UnixNano() == ts.UnixNano() {
 		return t.tree.Delete(key)
 	} else {
-		log.Println("CheckTimeAndDelete: time not match", v.ModTime.UnixNano, time.UnixNano())
+		log.Println("CheckTimeAndDelete: time not match", v.ModTime.UnixNano(), ts.UnixNano())
 	}
 	return nil, false
 }
