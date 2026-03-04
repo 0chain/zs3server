@@ -7,7 +7,7 @@ toolchain go1.22.11
 require (
 	cloud.google.com/go/storage v1.27.0
 	github.com/0chain/errors v1.0.3
-	github.com/0chain/gosdk v1.17.12-0.20250421075319-e3d0b1d921fd
+	github.com/0chain/gosdk v1.17.0-enterprise-1
 	github.com/Azure/azure-pipeline-go v0.2.2
 	github.com/Azure/azure-storage-blob-go v0.10.0
 	github.com/Shopify/sarama v1.28.0
@@ -277,6 +277,6 @@ require (
 	sigs.k8s.io/yaml v1.2.0 // indirect
 )
 
-replace github.com/0chain/gosdk => github.com/0chain/gosdk v1.17.12-0.20260102182829-a68d61fe5711
+// replace github.com/0chain/gosdk => ../gosdk
 
 //replace github.com/herumi/bls-go-binary => github.com/boddumanohar/bls-go-binary v1.30.7
