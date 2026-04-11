@@ -195,7 +195,72 @@ func (lc *LogCache) Put(bucket, key string, data io.Reader, size int64, mimeType
 
 // --- GET ---
 
-// Get returns the object data from cache. Returns nil,false if not cached.
+// GetReader returns an io.ReadCloser for the cached object.
+// Opens a new file descriptor positioned at the data offset — enables OS-level
+// sendfile optimization when Go's io.Copy detects the underlying *os.File.
+func (lc *LogCache) GetReader(bucket, key string) (io.ReadCloser, *lcIndexEntry, bool) {
+	lc.totalGet.Add(1)
+
+	lc.indexMu.RLock()
+	entry, found := lc.index[bucket+"/"+key]
+	lc.indexMu.RUnlock()
+
+	if !found || entry.Status == lcDeleted {
+		lc.totalMiss.Add(1)
+		return nil, nil, false
+	}
+
+	// Open new fd for this GET — allows concurrent reads + sendfile
+	cachePath := filepath.Join(lc.dir, logCacheFileName)
+	f, err := os.Open(cachePath)
+	if err != nil {
+		lc.totalMiss.Add(1)
+		return nil, nil, false
+	}
+	if _, err := f.Seek(entry.DataOffset, io.SeekStart); err != nil {
+		f.Close()
+		lc.totalMiss.Add(1)
+		return nil, nil, false
+	}
+
+	lc.totalHit.Add(1)
+	return &limitedFileReader{file: f, remaining: entry.DataLen}, entry, true
+}
+
+// limitedFileReader wraps an *os.File with a byte limit.
+// Preserves the *os.File type for sendfile detection by Go's io.Copy.
+type limitedFileReader struct {
+	file      *os.File
+	remaining int64
+}
+
+func (r *limitedFileReader) Read(p []byte) (int, error) {
+	if r.remaining <= 0 {
+		return 0, io.EOF
+	}
+	if int64(len(p)) > r.remaining {
+		p = p[:r.remaining]
+	}
+	n, err := r.file.Read(p)
+	r.remaining -= int64(n)
+	if r.remaining <= 0 && err == nil {
+		err = io.EOF
+	}
+	return n, err
+}
+
+func (r *limitedFileReader) Close() error { return r.file.Close() }
+
+// WriteTo implements io.WriterTo for sendfile optimization.
+// When Go's io.Copy sees this, it can use splice/sendfile on Linux.
+func (r *limitedFileReader) WriteTo(w io.Writer) (int64, error) {
+	// Use io.CopyN which preserves the *os.File → sendfile path
+	n, err := io.CopyN(w, r.file, r.remaining)
+	r.remaining -= n
+	return n, err
+}
+
+// Get returns the object data as bytes from cache. Returns nil,false if not cached.
 func (lc *LogCache) Get(bucket, key string) ([]byte, *lcIndexEntry, bool) {
 	lc.totalGet.Add(1)
 
@@ -208,7 +273,6 @@ func (lc *LogCache) Get(bucket, key string) ([]byte, *lcIndexEntry, bool) {
 		return nil, nil, false
 	}
 
-	// pread from cache file at entry's offset
 	buf := make([]byte, entry.DataLen)
 	_, err := lc.file.ReadAt(buf, entry.DataOffset)
 	if err != nil {

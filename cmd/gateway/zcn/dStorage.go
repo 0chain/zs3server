@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -412,32 +411,29 @@ func putFile(ctx context.Context, alloc *sdk.Allocation, remotePath, contentType
 	}
 
 	if isStreamUpload {
+		// Stream: size unknown, go direct to blobbers
 		err = alloc.DoMultiOperation([]sdk.OperationRequest{opRequest})
 		if err != nil && !isSameRootError(err) {
 			logger.Error(err.Error())
 			return
 		}
 		err = nil
+	} else if logCache != nil && logCache.ShouldCache(size) {
+		// Small/medium files (≤1MB): LogCache for ACID + fast GET serving
+		parts := strings.SplitN(strings.TrimPrefix(remotePath, "/"), "/", 2)
+		if len(parts) == 2 {
+			err = logCache.Put(parts[0], parts[1], r, size, contentType)
+		} else {
+			err = logCache.Put("", strings.TrimPrefix(remotePath, "/"), r, size, contentType)
+		}
 	} else {
-		// Standard batch upload path (writeback cache handles data, WAL records intent)
+		// Large files (>1MB) or no cache: direct to blobbers via batch upload
 		opCtx, opCancelCause := context.WithCancelCause(ctx)
 		opRequest.CancelCauseFunc = opCancelCause
 		batchUploadChan <- opRequest
-
 		<-opCtx.Done()
 		if context.Cause(opCtx) != context.Canceled {
 			err = context.Cause(opCtx)
-		}
-
-		// Record WAL intent AFTER writeback cache accepted the PUT
-		// This ensures crash recovery can find the object in /mcache
-		if err == nil && walWriter != nil && walWriter.ShouldUseWAL(size) {
-			parts := strings.SplitN(strings.TrimPrefix(remotePath, "/"), "/", 2)
-			if len(parts) == 2 {
-				if walErr := walWriter.RecordIntent(parts[0], parts[1], size); walErr != nil {
-					log.Printf("WAL intent failed (non-fatal): %v", walErr)
-				}
-			}
 		}
 	}
 	return
