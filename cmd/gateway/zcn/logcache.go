@@ -15,6 +15,7 @@ package zcn
 // Crash recovery: replay cache file, rebuild index
 
 import (
+	"bytes"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
@@ -77,12 +78,13 @@ type lcWriteReq struct {
 
 // LogCache manages the log-structured cache
 type LogCache struct {
-	mu     sync.Mutex
-	file   *os.File
-	fileFd int
-	fileOff int64 // current write offset
-	dir    string
-	alloc  *sdk.Allocation
+	mu      sync.Mutex
+	file    *os.File
+	readFd  *os.File // separate read-only fd for concurrent pread (no open/close per GET)
+	fileFd  int
+	fileOff int64
+	dir     string
+	alloc   *sdk.Allocation
 
 	writeCh  chan lcWriteReq
 	pending  chan *lcIndexEntry
@@ -92,10 +94,17 @@ type LogCache struct {
 	index   map[string]*lcIndexEntry
 	indexMu sync.RWMutex
 
+	// Hot cache: in-memory LRU for recently-written objects (eliminates disk I/O for GET)
+	hotData   map[string][]byte
+	hotOrder  []string // insertion order for LRU eviction
+	hotMu     sync.RWMutex
+	hotMax    int // max entries in hot cache
+
 	// Stats
 	totalPut    atomic.Int64
 	totalGet    atomic.Int64
 	totalHit    atomic.Int64
+	totalHotHit atomic.Int64
 	totalMiss   atomic.Int64
 	totalCommit atomic.Int64
 }
@@ -115,8 +124,16 @@ func NewLogCache(dir string, alloc *sdk.Allocation, commitWorkers int) (*LogCach
 	stat, _ := f.Stat()
 	off := stat.Size()
 
+	// Open separate read-only fd for concurrent pread (avoids os.Open per GET)
+	readFd, err := os.Open(cachePath)
+	if err != nil {
+		f.Close()
+		return nil, fmt.Errorf("logcache: open read fd: %w", err)
+	}
+
 	lc := &LogCache{
 		file:    f,
+		readFd:  readFd,
 		fileFd:  int(f.Fd()),
 		fileOff: off,
 		dir:     dir,
@@ -124,6 +141,8 @@ func NewLogCache(dir string, alloc *sdk.Allocation, commitWorkers int) (*LogCach
 		writeCh: make(chan lcWriteReq, 10000),
 		pending: make(chan *lcIndexEntry, 100000),
 		index:   make(map[string]*lcIndexEntry),
+		hotData: make(map[string][]byte),
+		hotMax:  20000, // cache up to 20K recent objects in memory
 	}
 
 	go lc.groupCommitWriter()
@@ -184,9 +203,30 @@ func (lc *LogCache) Put(bucket, key string, data io.Reader, size int64, mimeType
 		return err
 	}
 
+	objKey := entry.objectKey()
+
 	lc.indexMu.Lock()
-	lc.index[entry.objectKey()] = entry
+	lc.index[objKey] = entry
 	lc.indexMu.Unlock()
+
+	// Store in hot cache (in-memory) for fast GET
+	lc.hotMu.Lock()
+	if len(lc.hotData) >= lc.hotMax {
+		// Evict oldest entries
+		evictCount := lc.hotMax / 10 // evict 10% at a time
+		if evictCount > len(lc.hotOrder) {
+			evictCount = len(lc.hotOrder)
+		}
+		for i := 0; i < evictCount; i++ {
+			delete(lc.hotData, lc.hotOrder[i])
+		}
+		lc.hotOrder = lc.hotOrder[evictCount:]
+	}
+	dataCopy := make([]byte, len(buf))
+	copy(dataCopy, buf)
+	lc.hotData[objKey] = dataCopy
+	lc.hotOrder = append(lc.hotOrder, objKey)
+	lc.hotMu.Unlock()
 
 	lc.pending <- entry
 	lc.totalPut.Add(1)
@@ -196,13 +236,14 @@ func (lc *LogCache) Put(bucket, key string, data io.Reader, size int64, mimeType
 // --- GET ---
 
 // GetReader returns an io.ReadCloser for the cached object.
-// Opens a new file descriptor positioned at the data offset — enables OS-level
-// sendfile optimization when Go's io.Copy detects the underlying *os.File.
+// Fast path: serves from in-memory hot cache (~0.01ms).
+// Slow path: pread from shared fd (~0.1ms, no os.Open per GET).
 func (lc *LogCache) GetReader(bucket, key string) (io.ReadCloser, *lcIndexEntry, bool) {
 	lc.totalGet.Add(1)
+	objKey := bucket + "/" + key
 
 	lc.indexMu.RLock()
-	entry, found := lc.index[bucket+"/"+key]
+	entry, found := lc.index[objKey]
 	lc.indexMu.RUnlock()
 
 	if !found || entry.Status == lcDeleted {
@@ -210,55 +251,30 @@ func (lc *LogCache) GetReader(bucket, key string) (io.ReadCloser, *lcIndexEntry,
 		return nil, nil, false
 	}
 
-	// Open new fd for this GET — allows concurrent reads + sendfile
-	cachePath := filepath.Join(lc.dir, logCacheFileName)
-	f, err := os.Open(cachePath)
-	if err != nil {
-		lc.totalMiss.Add(1)
-		return nil, nil, false
+	// Fast path: check in-memory hot cache first
+	lc.hotMu.RLock()
+	hotBuf, hotFound := lc.hotData[objKey]
+	lc.hotMu.RUnlock()
+
+	if hotFound {
+		lc.totalHotHit.Add(1)
+		lc.totalHit.Add(1)
+		return io.NopCloser(bytes.NewReader(hotBuf)), entry, true
 	}
-	if _, err := f.Seek(entry.DataOffset, io.SeekStart); err != nil {
-		f.Close()
+
+	// Slow path: pread from shared read fd (no os.Open/Close per GET)
+	buf := make([]byte, entry.DataLen)
+	_, err := lc.readFd.ReadAt(buf, entry.DataOffset)
+	if err != nil {
 		lc.totalMiss.Add(1)
 		return nil, nil, false
 	}
 
 	lc.totalHit.Add(1)
-	return &limitedFileReader{file: f, remaining: entry.DataLen}, entry, true
+	return io.NopCloser(bytes.NewReader(buf)), entry, true
 }
 
-// limitedFileReader wraps an *os.File with a byte limit.
-// Preserves the *os.File type for sendfile detection by Go's io.Copy.
-type limitedFileReader struct {
-	file      *os.File
-	remaining int64
-}
-
-func (r *limitedFileReader) Read(p []byte) (int, error) {
-	if r.remaining <= 0 {
-		return 0, io.EOF
-	}
-	if int64(len(p)) > r.remaining {
-		p = p[:r.remaining]
-	}
-	n, err := r.file.Read(p)
-	r.remaining -= int64(n)
-	if r.remaining <= 0 && err == nil {
-		err = io.EOF
-	}
-	return n, err
-}
-
-func (r *limitedFileReader) Close() error { return r.file.Close() }
-
-// WriteTo implements io.WriterTo for sendfile optimization.
-// When Go's io.Copy sees this, it can use splice/sendfile on Linux.
-func (r *limitedFileReader) WriteTo(w io.Writer) (int64, error) {
-	// Use io.CopyN which preserves the *os.File → sendfile path
-	n, err := io.CopyN(w, r.file, r.remaining)
-	r.remaining -= n
-	return n, err
-}
+// (limitedFileReader removed — hot cache + pread replaces file-per-GET)
 
 // Get returns the object data as bytes from cache. Returns nil,false if not cached.
 func (lc *LogCache) Get(bucket, key string) ([]byte, *lcIndexEntry, bool) {
@@ -319,13 +335,19 @@ func (lc *LogCache) List(bucket, prefix string) []*lcIndexEntry {
 // --- DELETE ---
 
 func (lc *LogCache) Delete(bucket, key string) bool {
+	objKey := bucket + "/" + key
 	lc.indexMu.Lock()
-	entry, found := lc.index[bucket+"/"+key]
+	entry, found := lc.index[objKey]
 	if found {
 		entry.Status = lcDeleted
-		delete(lc.index, bucket+"/"+key)
+		delete(lc.index, objKey)
 	}
 	lc.indexMu.Unlock()
+
+	// Also remove from hot cache
+	lc.hotMu.Lock()
+	delete(lc.hotData, objKey)
+	lc.hotMu.Unlock()
 	return found
 }
 
@@ -571,6 +593,7 @@ func (lc *LogCache) Close() error {
 	close(lc.writeCh)
 	close(lc.pending)
 	lc.commitWG.Wait()
+	lc.readFd.Close()
 	return lc.file.Close()
 }
 
