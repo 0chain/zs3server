@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -418,6 +419,7 @@ func putFile(ctx context.Context, alloc *sdk.Allocation, remotePath, contentType
 		}
 		err = nil
 	} else {
+		// Standard batch upload path (writeback cache handles data, WAL records intent)
 		opCtx, opCancelCause := context.WithCancelCause(ctx)
 		opRequest.CancelCauseFunc = opCancelCause
 		batchUploadChan <- opRequest
@@ -425,6 +427,17 @@ func putFile(ctx context.Context, alloc *sdk.Allocation, remotePath, contentType
 		<-opCtx.Done()
 		if context.Cause(opCtx) != context.Canceled {
 			err = context.Cause(opCtx)
+		}
+
+		// Record WAL intent AFTER writeback cache accepted the PUT
+		// This ensures crash recovery can find the object in /mcache
+		if err == nil && walWriter != nil && walWriter.ShouldUseWAL(size) {
+			parts := strings.SplitN(strings.TrimPrefix(remotePath, "/"), "/", 2)
+			if len(parts) == 2 {
+				if walErr := walWriter.RecordIntent(parts[0], parts[1], size); walErr != nil {
+					log.Printf("WAL intent failed (non-fatal): %v", walErr)
+				}
+			}
 		}
 	}
 	return

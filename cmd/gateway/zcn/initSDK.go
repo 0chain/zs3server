@@ -25,6 +25,11 @@ type serverOptions struct {
 	UploadWorkers         int  `json:"upload_workers"`
 	DownloadWorkers       int  `json:"download_workers"`
 	MaxConcurrentRequests int  `json:"max_concurrent_requests"`
+	SDKBatchSize          int  `json:"sdk_batch_size"`
+	LockedBlobbersCap     int  `json:"locked_blobbers_cap"`
+	EnableWAL             bool `json:"enable_wal"`
+	WALDir                string `json:"wal_dir"`
+	WALCommitWorkers      int  `json:"wal_commit_workers"`
 }
 
 func initializeSDK(configDir, allocid string, nonce int64) error {
@@ -73,6 +78,9 @@ func initializeSDK(configDir, allocid string, nonce int64) error {
 		serverConfig.BatchWorkers = 5
 	} else if serverConfig.BatchWaitTime == 0 {
 		serverConfig.BatchWaitTime = 500
+	}
+	if serverConfig.LockedBlobbersCap == 0 {
+		serverConfig.LockedBlobbersCap = serverConfig.BatchWorkers
 	}
 	if serverConfig.MaxConcurrentRequests == 0 {
 		serverConfig.MaxConcurrentRequests = serverConfig.MaxBatchSize

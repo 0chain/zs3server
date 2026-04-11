@@ -41,6 +41,7 @@ var (
 	compress     bool
 	workDir      string
 	serverConfig serverOptions
+	walWriter    *WALWriter // WAL for ACID PUT with local-SSD latency
 )
 
 var zFlags = []cli.Flag{
@@ -157,8 +158,35 @@ func (z *ZCN) NewGatewayLayer(creds madmin.Credentials) (minio.ObjectLayer, erro
 	ctx, cancel := context.WithCancel(context.Background())
 	zob.ctxCancel = cancel
 	IntiBatchUploadWorkers(ctx, allocation, serverConfig.BatchWaitTime, serverConfig.MaxBatchSize, serverConfig.BatchWorkers)
-	sdk.BatchSize = serverConfig.MaxConcurrentRequests
+	if serverConfig.SDKBatchSize > 0 {
+		sdk.BatchSize = serverConfig.SDKBatchSize
+	} else {
+		sdk.BatchSize = serverConfig.MaxConcurrentRequests
+	}
+	if serverConfig.LockedBlobbersCap > 0 {
+		sdk.LockedBlobbersCap = serverConfig.LockedBlobbersCap
+	}
 	sdk.SetMultiOpBatchSize(serverConfig.MaxBatchSize)
+
+	// Initialize WAL if enabled
+	if serverConfig.EnableWAL {
+		walDir := serverConfig.WALDir
+		if walDir == "" {
+			walDir = filepath.Join(workDir, ".zcn", "wal")
+		}
+		walWorkers := serverConfig.WALCommitWorkers
+		if walWorkers == 0 {
+			walWorkers = 5
+		}
+		var walErr error
+		walWriter, walErr = NewWALWriter(walDir, allocation, walWorkers)
+		if walErr != nil {
+			log.Printf("WAL init failed (falling back to sync mode): %v", walErr)
+		} else {
+			log.Printf("WAL enabled at %s with %d commit workers", walDir, walWorkers)
+		}
+	}
+
 	return zob, nil
 }
 
@@ -216,6 +244,11 @@ func (zob *zcnObjects) DeleteBucket(ctx context.Context, bucketName string, opts
 }
 
 func (zob *zcnObjects) DeleteObject(ctx context.Context, bucket, object string, opts minio.ObjectOptions) (oInfo minio.ObjectInfo, err error) {
+	// Mark WAL intent as deleted (prevents crash recovery from re-committing a deleted object)
+	if walWriter != nil {
+		walWriter.Delete(bucket, object)
+	}
+
 	var remotePath string
 	if bucket == rootBucketName {
 		remotePath = filepath.Join(rootPath, object)
@@ -226,6 +259,10 @@ func (zob *zcnObjects) DeleteObject(ctx context.Context, bucket, object string, 
 	var ref *sdk.ORef
 	ref, err = getSingleRegularRef(zob.alloc, remotePath)
 	if err != nil {
+		// If not on blobber, that's OK — it was in WAL and we deleted it
+		if isPathNoExistError(err) && walWriter != nil {
+			return minio.ObjectInfo{Bucket: bucket, Name: object, ModTime: time.Now()}, nil
+		}
 		return
 	}
 
@@ -308,6 +345,8 @@ func (zob *zcnObjects) GetBucketInfo(ctx context.Context, bucket string) (bi min
 
 // GetObjectInfo Get file meta data and respond it as minio.ObjectInfo
 func (zob *zcnObjects) GetObjectInfo(ctx context.Context, bucket, object string, opts minio.ObjectOptions) (objInfo minio.ObjectInfo, err error) {
+	// With writeback cache: MinIO serves cached objects directly.
+	// WAL intent log only tracks metadata for crash recovery.
 	var remotePath string
 	if bucket == rootBucketName {
 		remotePath = filepath.Join(rootPath, object)
@@ -353,6 +392,8 @@ func (zob *zcnObjects) GetObjectInfo(ctx context.Context, bucket, object string,
 
 // GetObjectNInfo Provides reader with read cursor placed at offset upto some length
 func (zob *zcnObjects) GetObjectNInfo(ctx context.Context, bucket, object string, rs *minio.HTTPRangeSpec, h http.Header, lockType minio.LockType, opts minio.ObjectOptions) (gr *minio.GetObjectReader, err error) {
+	// With writeback cache: MinIO's cache layer serves cached objects via sendfile.
+	// No WAL check needed here — cache handles GET.
 	var remotePath string
 	if bucket == rootBucketName {
 		remotePath = filepath.Join(rootPath, object)
@@ -554,6 +595,8 @@ func (zob *zcnObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 		})
 	}
 
+	// With writeback cache: MinIO includes cached (uncommitted) objects in listing.
+	// No WAL merge needed.
 	result.IsTruncated = isTruncated
 	result.NextMarker = nextMarker
 	result.Objects = objects
@@ -759,6 +802,8 @@ func (zob *zcnObjects) PutMultipleObjects(
 	return objectInfo, nil
 }
 func (zob *zcnObjects) CopyObject(ctx context.Context, srcBucket, srcObject, destBucket, destObject string, srcInfo minio.ObjectInfo, srcOpts, dstOpts minio.ObjectOptions) (objInfo minio.ObjectInfo, err error) {
+	// With writeback cache: MinIO serves source from cache if available.
+	// CopyObject is handled by MinIO's cache layer — no WAL involvement needed.
 	var srcRemotePath, dstRemotePath string
 	if srcBucket == rootBucketName {
 		srcRemotePath = filepath.Join(rootPath, srcObject)
