@@ -187,6 +187,17 @@ func (z *ZCN) NewGatewayLayer(creds madmin.Credentials) (minio.ObjectLayer, erro
 		}
 	}
 
+	// Start NFS gateway (NFSv3 on port 2049) for filesystem access to same blobber data
+	if serverConfig.EnableNFS {
+		nfsPort := serverConfig.NFSPort
+		if nfsPort == 0 {
+			nfsPort = 2049
+		}
+		if err := StartNFSServer(nfsPort, allocation, serverConfig.NFSCacheDir); err != nil {
+			log.Printf("[NFS] Failed to start NFS server: %v", err)
+		}
+	}
+
 	return zob, nil
 }
 

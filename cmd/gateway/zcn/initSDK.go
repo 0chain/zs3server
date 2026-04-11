@@ -27,9 +27,12 @@ type serverOptions struct {
 	MaxConcurrentRequests int  `json:"max_concurrent_requests"`
 	SDKBatchSize          int  `json:"sdk_batch_size"`
 	LockedBlobbersCap     int  `json:"locked_blobbers_cap"`
-	EnableWAL             bool `json:"enable_wal"`
+	EnableWAL             bool   `json:"enable_wal"`
 	WALDir                string `json:"wal_dir"`
-	WALCommitWorkers      int  `json:"wal_commit_workers"`
+	WALCommitWorkers      int    `json:"wal_commit_workers"`
+	EnableNFS             bool   `json:"enable_nfs"`
+	NFSPort               int    `json:"nfs_port"`
+	NFSCacheDir           string `json:"nfs_cache_dir"`
 }
 
 func initializeSDK(configDir, allocid string, nonce int64) error {
