@@ -41,8 +41,7 @@ var (
 	compress     bool
 	workDir      string
 	serverConfig serverOptions
-	walWriter    *WALWriter  // WAL intent log (lightweight crash recovery)
-	logCache     *LogCache   // Log-structured ACID cache (main cache layer)
+	walWriter    *WALWriter  // WAL intent log for writeback cache crash recovery
 )
 
 var zFlags = []cli.Flag{
@@ -169,22 +168,22 @@ func (z *ZCN) NewGatewayLayer(creds madmin.Credentials) (minio.ObjectLayer, erro
 	}
 	sdk.SetMultiOpBatchSize(serverConfig.MaxBatchSize)
 
-	// Initialize LogCache (log-structured ACID cache) if enabled
+	// Initialize WAL intent log for writeback cache crash recovery
 	if serverConfig.EnableWAL {
-		cacheDir := serverConfig.WALDir
-		if cacheDir == "" {
-			cacheDir = filepath.Join(workDir, ".zcn", "logcache")
+		walDir := serverConfig.WALDir
+		if walDir == "" {
+			walDir = filepath.Join(workDir, ".zcn", "wal")
 		}
-		cacheWorkers := serverConfig.WALCommitWorkers
-		if cacheWorkers == 0 {
-			cacheWorkers = 5
+		walWorkers := serverConfig.WALCommitWorkers
+		if walWorkers == 0 {
+			walWorkers = 5
 		}
-		var lcErr error
-		logCache, lcErr = NewLogCache(cacheDir, allocation, cacheWorkers)
-		if lcErr != nil {
-			log.Printf("LogCache init failed (falling back to sync mode): %v", lcErr)
+		var walErr error
+		walWriter, walErr = NewWALWriter(walDir, allocation, walWorkers)
+		if walErr != nil {
+			log.Printf("WAL init failed (writeback cache still works, no crash recovery): %v", walErr)
 		} else {
-			log.Printf("LogCache enabled at %s with %d commit workers", cacheDir, cacheWorkers)
+			log.Printf("WAL intent log enabled at %s", walDir)
 		}
 	}
 
@@ -245,9 +244,9 @@ func (zob *zcnObjects) DeleteBucket(ctx context.Context, bucketName string, opts
 }
 
 func (zob *zcnObjects) DeleteObject(ctx context.Context, bucket, object string, opts minio.ObjectOptions) (oInfo minio.ObjectInfo, err error) {
-	// Mark deleted in LogCache (evicts from cache, prevents re-commit on crash recovery)
-	if logCache != nil {
-		logCache.Delete(bucket, object)
+	// Mark WAL intent as deleted (prevents crash recovery re-commit)
+	if walWriter != nil {
+		walWriter.Delete(bucket, object)
 	}
 
 	var remotePath string
@@ -346,19 +345,7 @@ func (zob *zcnObjects) GetBucketInfo(ctx context.Context, bucket string) (bi min
 
 // GetObjectInfo Get file meta data and respond it as minio.ObjectInfo
 func (zob *zcnObjects) GetObjectInfo(ctx context.Context, bucket, object string, opts minio.ObjectOptions) (objInfo minio.ObjectInfo, err error) {
-	// Check LogCache — object may be cached (pending or committed)
-	if logCache != nil {
-		if entry, found := logCache.Head(bucket, object); found {
-			return minio.ObjectInfo{
-				Bucket:      bucket,
-				Name:        object,
-				ModTime:     time.Unix(0, entry.Timestamp),
-				Size:        entry.Size,
-				ContentType: entry.MimeType,
-			}, nil
-		}
-	}
-
+	// MinIO writeback cache serves metadata for cached objects.
 	var remotePath string
 	if bucket == rootBucketName {
 		remotePath = filepath.Join(rootPath, object)
@@ -404,20 +391,7 @@ func (zob *zcnObjects) GetObjectInfo(ctx context.Context, bucket, object string,
 
 // GetObjectNInfo Provides reader with read cursor placed at offset upto some length
 func (zob *zcnObjects) GetObjectNInfo(ctx context.Context, bucket, object string, rs *minio.HTTPRangeSpec, h http.Header, lockType minio.LockType, opts minio.ObjectOptions) (gr *minio.GetObjectReader, err error) {
-	// Check LogCache — serve from cache file via file-backed reader (sendfile-capable)
-	if logCache != nil && rs == nil { // full object reads only (range requests go to blobber)
-		if reader, entry, found := logCache.GetReader(bucket, object); found {
-			info := minio.ObjectInfo{
-				Bucket:      bucket,
-				Name:        object,
-				ModTime:     time.Unix(0, entry.Timestamp),
-				Size:        entry.Size,
-				ContentType: entry.MimeType,
-			}
-			return minio.NewGetObjectReaderFromReader(reader, info, opts, func() { reader.Close() })
-		}
-	}
-
+	// MinIO writeback cache serves data via optimized sendfile path.
 	var remotePath string
 	if bucket == rootBucketName {
 		remotePath = filepath.Join(rootPath, object)
@@ -619,28 +593,7 @@ func (zob *zcnObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 		})
 	}
 
-	// Merge LogCache entries into listing (objects may not be on blobbers yet)
-	if logCache != nil {
-		cachedEntries := logCache.List(bucket, prefix)
-		if len(cachedEntries) > 0 {
-			existing := make(map[string]bool, len(objects))
-			for _, obj := range objects {
-				existing[obj.Name] = true
-			}
-			for _, ce := range cachedEntries {
-				if !existing[ce.Key] {
-					objects = append(objects, minio.ObjectInfo{
-						Bucket:      bucket,
-						Name:        ce.Key,
-						ModTime:     time.Unix(0, ce.Timestamp),
-						Size:        ce.Size,
-						ContentType: ce.MimeType,
-					})
-				}
-			}
-		}
-	}
-
+	// MinIO writeback cache includes uncommitted cached objects in listing.
 	result.IsTruncated = isTruncated
 	result.NextMarker = nextMarker
 	result.Objects = objects
@@ -846,29 +799,7 @@ func (zob *zcnObjects) PutMultipleObjects(
 	return objectInfo, nil
 }
 func (zob *zcnObjects) CopyObject(ctx context.Context, srcBucket, srcObject, destBucket, destObject string, srcInfo minio.ObjectInfo, srcOpts, dstOpts minio.ObjectOptions) (objInfo minio.ObjectInfo, err error) {
-	// If source is in LogCache, read from cache and PUT dest through cache
-	if logCache != nil {
-		if srcReader, srcEntry, found := logCache.GetReader(srcBucket, srcObject); found {
-			defer srcReader.Close()
-			if logCache.ShouldCache(srcEntry.Size) {
-				err = logCache.Put(destBucket, destObject, srcReader, srcEntry.Size, srcEntry.MimeType)
-			} else {
-				err = putFile(ctx, zob.alloc, filepath.Join("/", destBucket, destObject),
-					srcEntry.MimeType, srcReader, srcEntry.Size, false, nil)
-			}
-			if err != nil {
-				return
-			}
-			return minio.ObjectInfo{
-				Bucket:      destBucket,
-				Name:        destObject,
-				ModTime:     time.Now(),
-				Size:        srcEntry.Size,
-				ContentType: srcEntry.MimeType,
-			}, nil
-		}
-	}
-
+	// MinIO writeback cache handles copy from cache automatically.
 	var srcRemotePath, dstRemotePath string
 	if srcBucket == rootBucketName {
 		srcRemotePath = filepath.Join(rootPath, srcObject)
