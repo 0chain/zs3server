@@ -193,7 +193,7 @@ func (z *ZCN) NewGatewayLayer(creds madmin.Credentials) (minio.ObjectLayer, erro
 	if serverConfig.NFSGaneshaExportDir != "" {
 		workers := serverConfig.NFSSyncWorkers
 		if workers == 0 {
-			workers = 4
+			workers = 8
 		}
 		evict := true
 		if !serverConfig.NFSCacheEvict {
