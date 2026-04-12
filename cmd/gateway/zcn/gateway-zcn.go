@@ -195,7 +195,11 @@ func (z *ZCN) NewGatewayLayer(creds madmin.Credentials) (minio.ObjectLayer, erro
 		if workers == 0 {
 			workers = 4
 		}
-		if _, err := StartBlobberSync(serverConfig.NFSGaneshaExportDir, allocation, workers); err != nil {
+		evict := true // default: delete from tmpfs after blobber commit
+		if !serverConfig.NFSCacheEvict {
+			evict = serverConfig.NFSCacheEvict
+		}
+		if _, err := StartBlobberSync(serverConfig.NFSGaneshaExportDir, allocation, workers, serverConfig.NFSSpilloverDir, evict); err != nil {
 			log.Printf("[NFS-Ganesha] Failed to start blobber sync: %v", err)
 		}
 	}

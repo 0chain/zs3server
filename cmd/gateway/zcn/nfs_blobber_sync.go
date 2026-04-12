@@ -3,69 +3,85 @@ package zcn
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
+	"syscall"
 	"time"
 
-	"github.com/fsnotify/fsnotify"
 	"github.com/0chain/gosdk/zboxcore/sdk"
+	"github.com/fsnotify/fsnotify"
 )
 
 // BlobberSync watches the NFS export directory for changes and syncs them
-// to blobbers via putFile(). This makes NFS-Ganesha ACID:
+// to blobbers via putFile(). This makes NFS-Ganesha eventually ACID:
 //
-//   NFS write → local NVMe (instant) → inotify → putFile → blobbers (async)
-//   NFS read  → local NVMe (instant, or fetch from blobbers on cache miss)
+//	NFS write → tmpfs (instant) → inotify → putFile → blobbers (async)
+//	After blobber commit → delete from tmpfs (frees space)
 //
-// Crash recovery: on startup, scan export dir for files not yet committed
-// to blobbers (compare with blobber refs) and re-sync.
+// Spillover: when tmpfs is >80% full, new data spills to NVMe directory.
+// Cache eviction: committed files are deleted from tmpfs to bound usage.
+//
+// Durability model (same as S3 writeback cache):
+//   - Data in tmpfs/RAM survives process restart but NOT power loss
+//   - Blobber commit makes it durable (erasure-coded across blobbers)
+//   - Crash window: ~500ms between write and blobber commit start
 type BlobberSync struct {
-	exportDir string
-	alloc     *sdk.Allocation
-	watcher   *fsnotify.Watcher
+	exportDir   string // primary staging (tmpfs)
+	spilloverDir string // secondary staging (NVMe), empty = disabled
+	alloc       *sdk.Allocation
+	watcher     *fsnotify.Watcher
+	evictAfterCommit bool
 
-	// pending tracks files that need blobber commit.
-	// Key: relative path (e.g., "bucket/file.txt"), Value: mod time.
 	pendingMu sync.Mutex
 	pending   map[string]time.Time
 
-	// committed tracks files already synced to avoid double-commit.
 	committedMu sync.RWMutex
 	committed   map[string]bool
+
+	// stats
+	totalCommitted atomic.Int64
+	totalEvicted   atomic.Int64
+	totalSpilled   atomic.Int64
 
 	stopCh chan struct{}
 }
 
-// StartBlobberSync creates a BlobberSync watcher on the export directory.
-// It watches for file creates/writes and syncs them to blobbers asynchronously.
-func StartBlobberSync(exportDir string, alloc *sdk.Allocation, workers int) (*BlobberSync, error) {
+// StartBlobberSync creates a BlobberSync watcher.
+func StartBlobberSync(exportDir string, alloc *sdk.Allocation, workers int, spilloverDir string, evictAfterCommit bool) (*BlobberSync, error) {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		return nil, err
 	}
 
-	bs := &BlobberSync{
-		exportDir: exportDir,
-		alloc:     alloc,
-		watcher:   watcher,
-		pending:   make(map[string]time.Time),
-		committed: make(map[string]bool),
-		stopCh:    make(chan struct{}),
+	if spilloverDir != "" {
+		if err := os.MkdirAll(spilloverDir, 0755); err != nil {
+			return nil, fmt.Errorf("spillover dir: %w", err)
+		}
 	}
 
-	// Watch the export dir and all subdirs (buckets)
+	bs := &BlobberSync{
+		exportDir:        exportDir,
+		spilloverDir:     spilloverDir,
+		alloc:            alloc,
+		watcher:          watcher,
+		evictAfterCommit: evictAfterCommit,
+		pending:          make(map[string]time.Time),
+		committed:        make(map[string]bool),
+		stopCh:           make(chan struct{}),
+	}
+
 	if err := bs.watchRecursive(exportDir); err != nil {
 		watcher.Close()
 		return nil, err
 	}
 
-	// Start event processor
 	go bs.processEvents()
 
-	// Start commit workers
 	if workers <= 0 {
 		workers = 4
 	}
@@ -73,17 +89,21 @@ func StartBlobberSync(exportDir string, alloc *sdk.Allocation, workers int) (*Bl
 		go bs.commitWorker()
 	}
 
-	// Initial scan: find files not yet committed
 	go bs.initialScan()
 
-	log.Printf("[NFS-Sync] Watching %s for blobber sync (%d workers)", exportDir, workers)
+	if spilloverDir != "" {
+		go bs.spilloverMonitor()
+	}
+
+	log.Printf("[NFS-Sync] Watching %s (spillover=%s, evict=%v, workers=%d)",
+		exportDir, spilloverDir, evictAfterCommit, workers)
 	return bs, nil
 }
 
 func (bs *BlobberSync) watchRecursive(dir string) error {
 	return filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			return nil // skip errors
+			return nil
 		}
 		if info.IsDir() {
 			return bs.watcher.Add(path)
@@ -101,33 +121,24 @@ func (bs *BlobberSync) processEvents() {
 			if !ok {
 				return
 			}
-			// Only care about creates and writes
 			if event.Op&(fsnotify.Create|fsnotify.Write) == 0 {
 				continue
 			}
-
 			info, err := os.Stat(event.Name)
 			if err != nil {
 				continue
 			}
-
 			if info.IsDir() {
-				// New directory (bucket) — watch it
 				bs.watcher.Add(event.Name)
 				continue
 			}
-
-			// Regular file changed — mark for blobber commit
 			relPath, err := filepath.Rel(bs.exportDir, event.Name)
 			if err != nil {
 				continue
 			}
-
-			// Skip hidden files and temp files
 			if strings.HasPrefix(filepath.Base(relPath), ".") {
 				continue
 			}
-
 			bs.pendingMu.Lock()
 			bs.pending[relPath] = time.Now()
 			bs.pendingMu.Unlock()
@@ -141,11 +152,9 @@ func (bs *BlobberSync) processEvents() {
 	}
 }
 
-// commitWorker picks pending files and commits them to blobbers.
 func (bs *BlobberSync) commitWorker() {
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
-
 	for {
 		select {
 		case <-bs.stopCh:
@@ -157,10 +166,7 @@ func (bs *BlobberSync) commitWorker() {
 }
 
 func (bs *BlobberSync) commitPending() {
-	// Grab files that have been stable for at least 500ms
-	// (avoids committing partial writes)
 	cutoff := time.Now().Add(-500 * time.Millisecond)
-
 	bs.pendingMu.Lock()
 	var ready []string
 	for path, modTime := range bs.pending {
@@ -175,15 +181,13 @@ func (bs *BlobberSync) commitPending() {
 
 	for _, relPath := range ready {
 		bs.committedMu.RLock()
-		alreadyDone := bs.committed[relPath]
+		done := bs.committed[relPath]
 		bs.committedMu.RUnlock()
-		if alreadyDone {
+		if done {
 			continue
 		}
-
 		if err := bs.commitFile(relPath); err != nil {
-			log.Printf("[NFS-Sync] commit %s failed: %v", relPath, err)
-			// Re-queue for retry
+			log.Printf("[NFS-Sync] commit %s: %v", relPath, err)
 			bs.pendingMu.Lock()
 			bs.pending[relPath] = time.Now()
 			bs.pendingMu.Unlock()
@@ -191,6 +195,14 @@ func (bs *BlobberSync) commitPending() {
 			bs.committedMu.Lock()
 			bs.committed[relPath] = true
 			bs.committedMu.Unlock()
+			bs.totalCommitted.Add(1)
+
+			// Evict from tmpfs after successful blobber commit
+			if bs.evictAfterCommit {
+				fullPath := filepath.Join(bs.exportDir, relPath)
+				os.Remove(fullPath)
+				bs.totalEvicted.Add(1)
+			}
 		}
 	}
 }
@@ -213,26 +225,104 @@ func (bs *BlobberSync) commitFile(relPath string) error {
 		return err
 	}
 
-	// Record WAL intent
+	// WAL intent
 	parts := strings.SplitN(strings.TrimPrefix(remotePath, "/"), "/", 2)
 	if len(parts) == 2 && walWriter != nil {
 		walWriter.RecordIntent(parts[0], parts[1], int64(len(data)))
 	}
-
 	return nil
 }
 
-// initialScan finds all files in the export dir and queues them for commit.
+// spilloverMonitor checks tmpfs usage and moves files to NVMe when >80% full.
+func (bs *BlobberSync) spilloverMonitor() {
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-bs.stopCh:
+			return
+		case <-ticker.C:
+			pct := bs.tmpfsUsagePct()
+			if pct > 80 {
+				bs.spillOldestFiles(pct)
+			}
+		}
+	}
+}
+
+// tmpfsUsagePct returns the percentage of tmpfs used.
+func (bs *BlobberSync) tmpfsUsagePct() float64 {
+	var stat syscall.Statfs_t
+	if err := syscall.Statfs(bs.exportDir, &stat); err != nil {
+		return 0
+	}
+	total := stat.Blocks * uint64(stat.Bsize)
+	free := stat.Bfree * uint64(stat.Bsize)
+	if total == 0 {
+		return 0
+	}
+	return float64(total-free) / float64(total) * 100
+}
+
+// spillOldestFiles moves the oldest committed files from tmpfs to spillover NVMe.
+func (bs *BlobberSync) spillOldestFiles(currentPct float64) {
+	if bs.spilloverDir == "" {
+		return
+	}
+
+	// Walk export dir and find files to move
+	var candidates []string
+	filepath.Walk(bs.exportDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() {
+			return nil
+		}
+		relPath, _ := filepath.Rel(bs.exportDir, path)
+		if relPath == "" || strings.HasPrefix(filepath.Base(relPath), ".") {
+			return nil
+		}
+		// Prefer spilling committed files (already in blobbers)
+		bs.committedMu.RLock()
+		isCommitted := bs.committed[relPath]
+		bs.committedMu.RUnlock()
+		if isCommitted {
+			candidates = append(candidates, relPath)
+		}
+		return nil
+	})
+
+	// Move files until usage drops below 70%
+	moved := 0
+	for _, relPath := range candidates {
+		if bs.tmpfsUsagePct() < 70 {
+			break
+		}
+		src := filepath.Join(bs.exportDir, relPath)
+		dst := filepath.Join(bs.spilloverDir, relPath)
+		os.MkdirAll(filepath.Dir(dst), 0755)
+		data, err := os.ReadFile(src)
+		if err != nil {
+			continue
+		}
+		if err := os.WriteFile(dst, data, 0644); err != nil {
+			continue
+		}
+		os.Remove(src)
+		moved++
+		bs.totalSpilled.Add(1)
+	}
+
+	if moved > 0 {
+		log.Printf("[NFS-Sync] Spilled %d files to %s (tmpfs was %.0f%% full)", moved, bs.spilloverDir, currentPct)
+	}
+}
+
 func (bs *BlobberSync) initialScan() {
 	filepath.Walk(bs.exportDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil || info.IsDir() {
 			return nil
 		}
 		relPath, err := filepath.Rel(bs.exportDir, path)
-		if err != nil {
-			return nil
-		}
-		if strings.HasPrefix(filepath.Base(relPath), ".") {
+		if err != nil || strings.HasPrefix(filepath.Base(relPath), ".") {
 			return nil
 		}
 		bs.pendingMu.Lock()
@@ -242,7 +332,6 @@ func (bs *BlobberSync) initialScan() {
 	})
 }
 
-// Stop gracefully shuts down the sync.
 func (bs *BlobberSync) Stop() {
 	close(bs.stopCh)
 	bs.watcher.Close()

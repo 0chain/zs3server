@@ -36,6 +36,8 @@ type serverOptions struct {
 	NFSCacheMode          string `json:"nfs_cache_mode"`    // "disk" (default, ACID via /mcache) or "memory" (fastest, no crash recovery)
 	NFSGaneshaExportDir   string `json:"nfs_ganesha_export_dir"` // if set, enables NFS-Ganesha mode with blobber sync on this directory
 	NFSSyncWorkers        int    `json:"nfs_sync_workers"`       // number of blobber sync workers (default 4)
+	NFSSpilloverDir       string `json:"nfs_spillover_dir"`      // NVMe directory for spillover when tmpfs is full (default: none)
+	NFSCacheEvict         bool   `json:"nfs_cache_evict"`        // delete files from export dir after blobber commit (default: true)
 }
 
 func initializeSDK(configDir, allocid string, nonce int64) error {
