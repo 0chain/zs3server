@@ -33,11 +33,13 @@ type serverOptions struct {
 	EnableNFS             bool   `json:"enable_nfs"`
 	NFSPort               int    `json:"nfs_port"`
 	NFSCacheDir           string `json:"nfs_cache_dir"`
-	NFSCacheMode          string `json:"nfs_cache_mode"`    // "disk" (default, ACID via /mcache) or "memory" (fastest, no crash recovery)
-	NFSGaneshaExportDir   string `json:"nfs_ganesha_export_dir"` // if set, enables NFS-Ganesha mode with blobber sync on this directory
-	NFSSyncWorkers        int    `json:"nfs_sync_workers"`       // number of blobber sync workers (default 4)
-	NFSSpilloverDir       string `json:"nfs_spillover_dir"`      // NVMe directory for spillover when tmpfs is full (default: none)
-	NFSCacheEvict         bool   `json:"nfs_cache_evict"`        // delete files from export dir after blobber commit (default: true)
+	NFSCacheMode          string `json:"nfs_cache_mode"`          // "tmpfs" (fastest), "nvme" (crash-safe), "direct" (sync blobber, slowest)
+	NFSGaneshaExportDir   string `json:"nfs_ganesha_export_dir"` // NFS-Ganesha export directory
+	NFSSyncWorkers        int    `json:"nfs_sync_workers"`       // blobber sync workers (default 8)
+	NFSSpilloverDir       string `json:"nfs_spillover_dir"`      // NVMe spillover when tmpfs full
+	NFSCacheEvict         bool   `json:"nfs_cache_evict"`        // delete from cache after blobber commit (default: true)
+	NFSDirectThreshold    int64  `json:"nfs_direct_threshold"`   // files above this size (bytes) bypass cache, write direct to blobber (default: 2MB, 0=disabled)
+	S3DirectThreshold     int64  `json:"s3_direct_threshold"`    // same for S3 path (default: 0=disabled, all go through cache)
 }
 
 func initializeSDK(configDir, allocid string, nonce int64) error {

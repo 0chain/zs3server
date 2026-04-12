@@ -417,9 +417,17 @@ func putFile(ctx context.Context, alloc *sdk.Allocation, remotePath, contentType
 			return
 		}
 		err = nil
+	} else if serverConfig.S3DirectThreshold > 0 && size >= serverConfig.S3DirectThreshold {
+		// Large file: bypass batch channel, upload directly to blobbers.
+		// Avoids filling cache with multi-MB data.
+		err = alloc.DoMultiOperation([]sdk.OperationRequest{opRequest})
+		if err != nil && !isSameRootError(err) {
+			logger.Error(err.Error())
+			return
+		}
+		err = nil
 	} else {
 		// Standard path: MinIO writeback cache handles data storage + async blobber commit.
-		// WAL intent log records metadata for crash recovery.
 		opCtx, opCancelCause := context.WithCancelCause(ctx)
 		opRequest.CancelCauseFunc = opCancelCause
 		batchUploadChan <- opRequest
@@ -429,7 +437,6 @@ func putFile(ctx context.Context, alloc *sdk.Allocation, remotePath, contentType
 		}
 
 		// Record WAL intent AFTER writeback cache accepts the PUT.
-		// On crash: replay WAL, match against /mcache, re-commit to blobbers.
 		if err == nil && walWriter != nil {
 			parts := strings.SplitN(strings.TrimPrefix(remotePath, "/"), "/", 2)
 			if len(parts) == 2 {

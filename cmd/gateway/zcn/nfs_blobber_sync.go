@@ -31,11 +31,12 @@ import (
 //   - Blobber commit makes it durable (erasure-coded across blobbers)
 //   - Crash window: ~500ms between write and blobber commit start
 type BlobberSync struct {
-	exportDir   string // primary staging (tmpfs)
-	spilloverDir string // secondary staging (NVMe), empty = disabled
-	alloc       *sdk.Allocation
-	watcher     *fsnotify.Watcher
+	exportDir        string // primary staging (tmpfs or NVMe)
+	spilloverDir     string // secondary staging (NVMe), empty = disabled
+	alloc            *sdk.Allocation
+	watcher          *fsnotify.Watcher
 	evictAfterCommit bool
+	directThreshold  int64 // files above this size commit immediately (0 = disabled)
 
 	pendingMu sync.Mutex
 	pending   map[string]time.Time
@@ -47,12 +48,13 @@ type BlobberSync struct {
 	totalCommitted atomic.Int64
 	totalEvicted   atomic.Int64
 	totalSpilled   atomic.Int64
+	totalDirect    atomic.Int64
 
 	stopCh chan struct{}
 }
 
 // StartBlobberSync creates a BlobberSync watcher.
-func StartBlobberSync(exportDir string, alloc *sdk.Allocation, workers int, spilloverDir string, evictAfterCommit bool) (*BlobberSync, error) {
+func StartBlobberSync(exportDir string, alloc *sdk.Allocation, workers int, spilloverDir string, evictAfterCommit bool, directThreshold int64) (*BlobberSync, error) {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		return nil, err
@@ -70,6 +72,7 @@ func StartBlobberSync(exportDir string, alloc *sdk.Allocation, workers int, spil
 		alloc:            alloc,
 		watcher:          watcher,
 		evictAfterCommit: evictAfterCommit,
+		directThreshold:  directThreshold,
 		pending:          make(map[string]time.Time),
 		committed:        make(map[string]bool),
 		stopCh:           make(chan struct{}),
@@ -139,6 +142,22 @@ func (bs *BlobberSync) processEvents() {
 			if strings.HasPrefix(filepath.Base(relPath), ".") {
 				continue
 			}
+
+			// Large files: commit directly to blobbers, skip cache staging
+			if bs.directThreshold > 0 && info.Size() >= bs.directThreshold {
+				go func(rp string) {
+					if err := bs.commitFile(rp); err != nil {
+						log.Printf("[NFS-Sync] direct commit %s: %v", rp, err)
+					} else {
+						bs.totalDirect.Add(1)
+						if bs.evictAfterCommit {
+							os.Remove(filepath.Join(bs.exportDir, rp))
+						}
+					}
+				}(relPath)
+				continue
+			}
+
 			bs.pendingMu.Lock()
 			bs.pending[relPath] = time.Now()
 			bs.pendingMu.Unlock()
