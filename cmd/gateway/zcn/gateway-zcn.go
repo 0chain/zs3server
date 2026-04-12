@@ -187,8 +187,21 @@ func (z *ZCN) NewGatewayLayer(creds madmin.Credentials) (minio.ObjectLayer, erro
 		}
 	}
 
-	// Start NFS gateway (NFSv3 on port 2049) for filesystem access to same blobber data
-	if serverConfig.EnableNFS {
+	// NFS-Ganesha mode: sync export directory to blobbers via inotify.
+	// NFS-Ganesha runs externally (apt install nfs-ganesha nfs-ganesha-vfs).
+	// This watcher makes it ACID by committing changes to blobbers async.
+	if serverConfig.NFSGaneshaExportDir != "" {
+		workers := serverConfig.NFSSyncWorkers
+		if workers == 0 {
+			workers = 4
+		}
+		if _, err := StartBlobberSync(serverConfig.NFSGaneshaExportDir, allocation, workers); err != nil {
+			log.Printf("[NFS-Ganesha] Failed to start blobber sync: %v", err)
+		}
+	}
+
+	// Start go-nfs gateway (fallback, NFSv3 on port 2049)
+	if serverConfig.EnableNFS && serverConfig.NFSGaneshaExportDir == "" {
 		nfsPort := serverConfig.NFSPort
 		if nfsPort == 0 {
 			nfsPort = 2049
