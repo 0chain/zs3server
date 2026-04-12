@@ -33,6 +33,7 @@ type serverOptions struct {
 	EnableNFS             bool   `json:"enable_nfs"`
 	NFSPort               int    `json:"nfs_port"`
 	NFSCacheDir           string `json:"nfs_cache_dir"`
+	NFSCacheMode          string `json:"nfs_cache_mode"` // "disk" (default, ACID via /mcache) or "memory" (fastest, no crash recovery)
 }
 
 func initializeSDK(configDir, allocid string, nonce int64) error {

@@ -193,7 +193,7 @@ func (z *ZCN) NewGatewayLayer(creds madmin.Credentials) (minio.ObjectLayer, erro
 		if nfsPort == 0 {
 			nfsPort = 2049
 		}
-		if err := StartNFSServer(nfsPort, allocation, serverConfig.NFSCacheDir); err != nil {
+		if err := StartNFSServer(nfsPort, allocation, serverConfig.NFSCacheDir, serverConfig.NFSCacheMode); err != nil {
 			log.Printf("[NFS] Failed to start NFS server: %v", err)
 		}
 	}

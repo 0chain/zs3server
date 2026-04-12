@@ -13,9 +13,15 @@ import (
 )
 
 // StartNFSServer starts an NFSv3 server exposing the Züs allocation as a
-// POSIX filesystem. Reads/writes go through MinIO's in-process ObjectLayer
-// (writeback cache on /mcache) — same performance as S3, no HTTP overhead.
-func StartNFSServer(port int, alloc *sdk.Allocation, cacheDir string) error {
+// POSIX filesystem.
+//
+// Cache modes:
+//
+//	"disk"   (default) — writes go through MinIO CacheObjectLayer → /mcache NVMe.
+//	                     ACID: crash-safe (data persists on NVMe + WAL).
+//	"memory" — writes go to in-memory map, async commit to blobbers via putFile.
+//	           Fastest (~0.1ms/write), but NO crash recovery.
+func StartNFSServer(port int, alloc *sdk.Allocation, cacheDir, cacheMode string) error {
 	if cacheDir == "" {
 		cacheDir = filepath.Join(os.TempDir(), "zs3-nfs-cache")
 	}
@@ -23,7 +29,8 @@ func StartNFSServer(port int, alloc *sdk.Allocation, cacheDir string) error {
 		return fmt.Errorf("nfs: create cache dir: %w", err)
 	}
 
-	fs := NewZcnFS(alloc, cacheDir)
+	useMemoryMode := cacheMode == "memory"
+	fs := NewZcnFS(alloc, cacheDir, useMemoryMode)
 
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
@@ -33,7 +40,11 @@ func StartNFSServer(port int, alloc *sdk.Allocation, cacheDir string) error {
 	handler := nfshelper.NewNullAuthHandler(fs)
 	cacheHandler := nfshelper.NewCachingHandler(handler, 8192)
 
-	log.Printf("[NFS] Server listening on port %d (NFSv3, in-process cache API, cache=%s)", port, cacheDir)
+	modeStr := "disk (ACID, in-process cache API)"
+	if useMemoryMode {
+		modeStr = "memory (fastest, no crash recovery)"
+	}
+	log.Printf("[NFS] Server listening on port %d (NFSv3, mode=%s, cache=%s)", port, modeStr, cacheDir)
 
 	go func() {
 		if err := nfs.Serve(listener, cacheHandler); err != nil {

@@ -17,24 +17,39 @@ import (
 )
 
 // ZcnFS implements billy.Filesystem backed by Züs blobbers.
-// NFS reads/writes go through MinIO's ObjectLayer API in-process (no HTTP).
+//
+// Two cache modes:
+//
+//	disk mode (default): writes go through MinIO CacheObjectLayer → /mcache NVMe.
+//	  ACID: crash-safe. Reads served from /mcache (sendfile, sub-ms).
+//
+//	memory mode: writes stored in in-memory map, async commit to blobbers.
+//	  Fastest (~0.1ms/write). Reads served from memory. No crash recovery.
 type ZcnFS struct {
-	alloc    *sdk.Allocation
-	cacheDir string
-	mu       sync.RWMutex
+	alloc      *sdk.Allocation
+	cacheDir   string
+	memoryMode bool // true = in-memory cache, false = disk cache via ObjectLayer
+	mu         sync.RWMutex
 
 	// statCache: short-lived cache for file metadata after writes.
 	statMu    sync.RWMutex
 	statCache map[string]*zcnFileInfo
+
+	// memCache: in-memory file data (memory mode only).
+	// Holds file content until blobber commit, serves reads instantly.
+	memCacheMu sync.RWMutex
+	memCache   map[string][]byte
 }
 
 var _ billy.Filesystem = (*ZcnFS)(nil)
 
-func NewZcnFS(alloc *sdk.Allocation, cacheDir string) *ZcnFS {
+func NewZcnFS(alloc *sdk.Allocation, cacheDir string, memoryMode bool) *ZcnFS {
 	return &ZcnFS{
-		alloc:     alloc,
-		cacheDir:  cacheDir,
-		statCache: make(map[string]*zcnFileInfo),
+		alloc:      alloc,
+		cacheDir:   cacheDir,
+		memoryMode: memoryMode,
+		statCache:  make(map[string]*zcnFileInfo),
+		memCache:   make(map[string][]byte),
 	}
 }
 
@@ -85,7 +100,23 @@ func (fs *ZcnFS) OpenFile(filename string, flag int, perm os.FileMode) (billy.Fi
 	}
 
 	if !isCreate {
-		if cached := fs.getCachedStat(filename); cached != nil {
+		// Check memory cache first (memory mode)
+		if fs.memoryMode {
+			fs.memCacheMu.RLock()
+			data, inMem := fs.memCache[filename]
+			fs.memCacheMu.RUnlock()
+			if inMem {
+				f.size = int64(len(data))
+			} else if cached := fs.getCachedStat(filename); cached != nil {
+				f.size = cached.size
+			} else {
+				ref, err := getSingleRegularRef(fs.alloc, filename)
+				if err != nil || ref == nil {
+					return nil, os.ErrNotExist
+				}
+				f.size = ref.Size
+			}
+		} else if cached := fs.getCachedStat(filename); cached != nil {
 			f.size = cached.size
 		} else if nfsObjAPI.ready() {
 			bucket, key := splitBucketObject(filename)
@@ -174,6 +205,16 @@ func (fs *ZcnFS) Stat(filename string) (os.FileInfo, error) {
 		return cached, nil
 	}
 
+	// Memory mode: check memCache
+	if fs.memoryMode {
+		fs.memCacheMu.RLock()
+		data, ok := fs.memCache[filename]
+		fs.memCacheMu.RUnlock()
+		if ok {
+			return &zcnFileInfo{name: path.Base(filename), size: int64(len(data)), modTime: time.Now(), mode: 0644}, nil
+		}
+	}
+
 	bucket, key := splitBucketObject(filename)
 
 	if nfsObjAPI.ready() {
@@ -213,6 +254,13 @@ func (fs *ZcnFS) Remove(filename string) error {
 	filename = cleanPath(filename)
 	bucket, key := splitBucketObject(filename)
 
+	// Remove from memory cache
+	if fs.memoryMode {
+		fs.memCacheMu.Lock()
+		delete(fs.memCache, filename)
+		fs.memCacheMu.Unlock()
+	}
+
 	if nfsObjAPI.ready() && key != "" {
 		ctx, cancel := nfsCtx()
 		defer cancel()
@@ -233,6 +281,11 @@ func (fs *ZcnFS) Join(elem ...string) string { return path.Join(elem...) }
 
 func (fs *ZcnFS) ReadDir(dir string) ([]os.FileInfo, error) {
 	dir = cleanPath(dir)
+
+	// Memory mode: build listing from memCache + blobbers
+	if fs.memoryMode {
+		return fs.readDirMemory(dir)
+	}
 
 	if nfsObjAPI.ready() {
 		ctx, cancel := nfsCtx()
@@ -331,6 +384,17 @@ func (fs *ZcnFS) Chroot(dir string) (billy.Filesystem, error)   { return nil, fm
 // --- internal helpers ---
 
 func (fs *ZcnFS) downloadToBuffer(remotePath string, buf *bytes.Buffer) error {
+	// Memory mode: serve from in-memory cache if available
+	if fs.memoryMode {
+		fs.memCacheMu.RLock()
+		data, ok := fs.memCache[remotePath]
+		fs.memCacheMu.RUnlock()
+		if ok {
+			buf.Write(data)
+			return nil
+		}
+	}
+
 	bucket, object := splitBucketObject(remotePath)
 
 	if nfsObjAPI.ready() {
@@ -362,6 +426,17 @@ func (fs *ZcnFS) downloadToBuffer(remotePath string, buf *bytes.Buffer) error {
 }
 
 func (fs *ZcnFS) downloadToFile(remotePath string, dst *os.File) error {
+	// Memory mode: serve from memCache
+	if fs.memoryMode {
+		fs.memCacheMu.RLock()
+		data, ok := fs.memCache[remotePath]
+		fs.memCacheMu.RUnlock()
+		if ok {
+			_, err := dst.Write(data)
+			return err
+		}
+	}
+
 	bucket, object := splitBucketObject(remotePath)
 
 	if nfsObjAPI.ready() {
@@ -390,41 +465,113 @@ func (fs *ZcnFS) downloadToFile(remotePath string, dst *os.File) error {
 }
 
 func (fs *ZcnFS) uploadFromReader(remotePath string, r io.Reader, size int64) error {
-	bucket, key := splitBucketObject(remotePath)
+	// Read data into memory (needed for both modes)
+	var data []byte
+	if size > 0 && size <= smallFileThreshold {
+		data = make([]byte, size)
+		if _, err := io.ReadFull(r, data); err != nil {
+			return fmt.Errorf("nfs: read data: %w", err)
+		}
+	} else {
+		var buf bytes.Buffer
+		if _, err := io.Copy(&buf, r); err != nil {
+			return fmt.Errorf("nfs: read data: %w", err)
+		}
+		data = buf.Bytes()
+	}
 
+	// Memory mode: store in memCache, async commit to blobbers
+	if fs.memoryMode {
+		fs.memCacheMu.Lock()
+		fs.memCache[remotePath] = data
+		fs.memCacheMu.Unlock()
+
+		// Async commit to blobbers via putFile (fire-and-forget)
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+			defer cancel()
+			err := putFile(ctx, fs.alloc, remotePath, "application/octet-stream",
+				bytes.NewReader(data), int64(len(data)), false, nil)
+			if err != nil {
+				log.Printf("[NFS memory] async commit failed for %s: %v", remotePath, err)
+			}
+		}()
+		return nil
+	}
+
+	// Disk mode: write through in-process ObjectLayer → /mcache
+	bucket, key := splitBucketObject(remotePath)
 	if nfsObjAPI.ready() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 		defer cancel()
-		// Read into bytes for the ObjectLayer API
-		var data []byte
-		if size > 0 && size <= smallFileThreshold {
-			data = make([]byte, size)
-			if _, err := io.ReadFull(r, data); err != nil {
-				return fmt.Errorf("nfs: read data: %w", err)
-			}
-		} else {
-			var buf bytes.Buffer
-			if _, err := io.Copy(&buf, r); err != nil {
-				return fmt.Errorf("nfs: read data: %w", err)
-			}
-			data = buf.Bytes()
-		}
 		return nfsObjAPI.put(ctx, bucket, key, data)
 	}
 
-	// Fallback
+	// Fallback: direct blobber upload
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
-	err := putFile(ctx, fs.alloc, remotePath, "application/octet-stream", r, size, false, nil)
+	err := putFile(ctx, fs.alloc, remotePath, "application/octet-stream",
+		bytes.NewReader(data), int64(len(data)), false, nil)
 	if err != nil {
 		return fmt.Errorf("nfs: upload %s: %w", remotePath, err)
 	}
-	if walWriter != nil && walWriter.ShouldUseWAL(size) {
-		if walErr := walWriter.RecordIntent(bucket, key, size); walErr != nil {
+	if walWriter != nil && walWriter.ShouldUseWAL(int64(len(data))) {
+		if walErr := walWriter.RecordIntent(bucket, key, int64(len(data))); walErr != nil {
 			log.Printf("[NFS] WAL intent failed for %s: %v", remotePath, walErr)
 		}
 	}
 	return nil
+}
+
+// readDirMemory builds a directory listing from memCache entries + blobber refs.
+func (fs *ZcnFS) readDirMemory(dir string) ([]os.FileInfo, error) {
+	seen := make(map[string]bool)
+	var entries []os.FileInfo
+
+	// Scan memCache for files under this directory
+	prefix := dir + "/"
+	if dir == "/" {
+		prefix = "/"
+	}
+	fs.memCacheMu.RLock()
+	for fullPath, data := range fs.memCache {
+		if !strings.HasPrefix(fullPath, prefix) {
+			continue
+		}
+		rel := strings.TrimPrefix(fullPath, prefix)
+		// Only immediate children (no nested paths)
+		if strings.Contains(rel, "/") {
+			continue
+		}
+		if rel == "" {
+			continue
+		}
+		seen[rel] = true
+		entries = append(entries, &zcnFileInfo{name: rel, size: int64(len(data)), modTime: time.Now(), mode: 0644})
+	}
+	fs.memCacheMu.RUnlock()
+
+	// Also get blobber refs for files not in memCache
+	result, err := getRegularRefs(fs.alloc, dir, "", "", 500)
+	if err == nil && result != nil {
+		for i := range result.Refs {
+			ref := &result.Refs[i]
+			if ref.Path == dir {
+				continue
+			}
+			name := path.Base(ref.Path)
+			if seen[name] {
+				continue
+			}
+			entries = append(entries, refToFileInfo(ref))
+		}
+	}
+
+	if len(entries) == 0 && dir == "/" {
+		// Return empty root
+		return nil, nil
+	}
+	return entries, nil
 }
 
 func splitBucketObject(remotePath string) (bucket, object string) {

@@ -94,16 +94,30 @@ NFS READ RPCs (32KB chunks)
 
 Test environment: test2 (12 cores, 3 enterprise blobbers 2+1, chain stopped)
 
-### NFS vs S3 -- In-Process Cache API (current implementation)
+### NFS vs S3 -- Disk mode + nconnect=16 (current best)
 
-| Size | NFS PUT obj/s | S3 PUT obj/s | NFS/S3 | NFS GET obj/s | S3 GET obj/s | NFS/S3 |
-|------|---------------|--------------|--------|---------------|--------------|--------|
-| 1 KiB | 48 | 357 | 13% | 103 | 506 | 20% |
-| 10 KiB | 65 | 364 | 18% | 111 | 498 | 22% |
-| 100 KiB | 63 | 324 | 19% | 113 | 482 | 23% |
-| 1 MiB | 47 | 177 | 27% | 74 | 535 | 14% |
+| Size | NFS PUT obj/s | S3 PUT obj/s | NFS/S3 PUT | NFS GET obj/s | S3 GET obj/s | NFS/S3 GET |
+|------|---------------|--------------|------------|---------------|--------------|------------|
+| 1 KiB | 61 | 355 | 17% | 312 | 493 | 63% |
+| 10 KiB | 93 | 360 | 26% | 303 | 509 | 60% |
+| 100 KiB | 88 | 335 | 26% | 300 | 497 | 60% |
+| 1 MiB | 63 | 207 | 30% | 239 | 379 | 63% |
 
 Both benchmarks use Python clients (boto3 for S3, os.open for NFS). S3 numbers would be 5-10x higher with Go-native warp tool (previously measured 2516 PUT, 6257 GET for 1KB).
+
+NFS mount must use `nconnect=16` for maximum throughput:
+```bash
+mount -t nfs -o vers=3,tcp,nolock,nconnect=16 <host>:/ /mnt/zs3
+```
+
+### NFS cache modes
+
+| Mode | PUT latency | Crash recovery | Config |
+|------|-------------|----------------|--------|
+| `disk` (default) | ~0.5ms | Yes (ACID via /mcache + WAL) | `"nfs_cache_mode": "disk"` |
+| `memory` | ~0.2ms | No (data in RAM only) | `"nfs_cache_mode": "memory"` |
+
+Memory mode is faster per-file but does NOT improve concurrent throughput -- the bottleneck is go-nfs NFSv3 RPC dispatch, not backend storage.
 
 ### Improvement journey
 
@@ -112,16 +126,40 @@ Both benchmarks use Python clients (boto3 for S3, os.open for NFS). S3 numbers w
 | v1: Direct blobber (sync WM lock+commit) | 9 | 44 | Baseline -- each Close() blocks on 3 blobber round-trips |
 | v2: HTTP S3 loopback (minio-go) | 32 | 95 | +3.5x PUT -- writeback cache via HTTP, ~5ms overhead/file |
 | v3: In-process ObjectLayer API | 48 | 103 | +5.3x PUT -- zero HTTP overhead, direct cache write ~0.5ms |
+| v4: nconnect=16 (mount option) | 61 | 312 | +6.8x PUT, +7.1x GET -- 16 parallel TCP connections |
 
 ### Why NFS is still slower than S3
 
-The remaining gap (48 vs 357 obj/s for 1KB PUT) is **NFSv3 protocol overhead**:
+The remaining gap (61 vs 355 PUT, 312 vs 493 GET) is **go-nfs server overhead**:
 
-1. **Multiple RPCs per file**: Each write = LOOKUP + CREATE + WRITE + CLOSE + GETATTR = 5 RPCs
-2. **Single TCP connection**: NFS mount uses one TCP connection; all RPCs serialize on it
-3. **No compound operations**: NFSv3 cannot batch multiple operations into one round-trip
+1. **Multiple RPCs per file write**: Each write = LOOKUP + CREATE + WRITE + CLOSE + GETATTR = 5 RPCs
+2. **go-nfs sequential RPC dispatch**: processes RPCs one at a time per TCP connection
+3. **No compound operations**: NFSv3 cannot batch multiple ops into one round-trip
 4. **32KB chunk size**: 1MB file = ~32 WRITE RPCs + ~32 READ RPCs (vs 1 HTTP PUT/GET)
-5. **go-nfs concurrency**: The library processes RPCs somewhat sequentially per connection
+
+`nconnect=16` solves the client-side concurrency (16 parallel TCP connections), but go-nfs still processes each connection's RPCs sequentially. GET benefits more because read RPCs are independent across files. PUT benefits less because CREATE->WRITE->CLOSE for each file must execute in order on the same connection.
+
+### Path to S3 parity for NFS
+
+**Option A: NFS-Ganesha (recommended for production)**
+- Industry-standard C userspace NFS server (used by CephFS, GlusterFS)
+- Custom FSAL (Filesystem Abstraction Layer) plugin: ~20 C callbacks
+- FSAL calls into Go code via CGo for blobber operations
+- Expected: 5,000-15,000 ops/s (10-100x current)
+- Supports NFSv3/v4/v4.1/v4.2, pNFS, Kerberos
+- Trade-off: C dependency, CGo bridge complexity
+
+**Option B: Patch go-nfs for concurrent RPC dispatch**
+- Modify willscott/go-nfs serve loop to dispatch each RPC to a goroutine pool
+- ~50 line change to conn.go
+- Expected: 2-4x current (200-400 PUT obj/s with nconnect=16)
+- Stay pure Go, minimal risk
+
+**Option C: NFSv4.1 via kuleuven/nfs4go**
+- Compound operations: 5 RPCs -> 1-3
+- Sessions with multiple slots
+- Expected: 2-3x current (realistic, not 5x)
+- Pure Go, new library integration
 
 **NFSv4.1 addresses points 1, 2, 3**: compound operations batch LOOKUP+OPEN+WRITE+CLOSE into a single RPC, sessions allow multiple concurrent connections, and pNFS enables parallel data access.
 
