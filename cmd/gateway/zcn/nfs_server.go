@@ -13,10 +13,8 @@ import (
 )
 
 // StartNFSServer starts an NFSv3 server exposing the Züs allocation as a
-// POSIX filesystem. It shares the same blobber data as the S3 gateway —
-// writes go through the WAL + writeback cache, reads come from cache or blobbers.
-//
-// Mount with: mount -t nfs -o vers=3,tcp,nolock <host>:<port>:/ /mnt/zs3
+// POSIX filesystem. Reads/writes go through MinIO's in-process ObjectLayer
+// (writeback cache on /mcache) — same performance as S3, no HTTP overhead.
 func StartNFSServer(port int, alloc *sdk.Allocation, cacheDir string) error {
 	if cacheDir == "" {
 		cacheDir = filepath.Join(os.TempDir(), "zs3-nfs-cache")
@@ -33,9 +31,9 @@ func StartNFSServer(port int, alloc *sdk.Allocation, cacheDir string) error {
 	}
 
 	handler := nfshelper.NewNullAuthHandler(fs)
-	cacheHandler := nfshelper.NewCachingHandler(handler, 4096)
+	cacheHandler := nfshelper.NewCachingHandler(handler, 8192)
 
-	log.Printf("[NFS] Server listening on port %d (NFSv3, cache=%s)", port, cacheDir)
+	log.Printf("[NFS] Server listening on port %d (NFSv3, in-process cache API, cache=%s)", port, cacheDir)
 
 	go func() {
 		if err := nfs.Serve(listener, cacheHandler); err != nil {
