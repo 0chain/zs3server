@@ -2,6 +2,7 @@ package zcn
 
 import (
 	"log"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -225,6 +226,102 @@ func (ct *CacheTracker) evictOldest() {
 
 	if evicted > 0 {
 		log.Printf("[CacheManager] Evicted %d files (usage: %.0f%%)", evicted, ct.UsagePct())
+	}
+}
+
+// --- File size tracking & adaptive config ---
+
+const fileSizeRingCap = 1000
+
+// FileSizeTracker keeps a ring buffer of recent file sizes for adaptive tuning.
+type FileSizeTracker struct {
+	mu    sync.Mutex
+	buf   [fileSizeRingCap]int64
+	pos   int
+	count int
+}
+
+var fileSizeTracker FileSizeTracker
+
+// trackFileSize records a file size into the ring buffer.
+func trackFileSize(size int64) {
+	if size <= 0 {
+		return
+	}
+	fileSizeTracker.mu.Lock()
+	fileSizeTracker.buf[fileSizeTracker.pos] = size
+	fileSizeTracker.pos = (fileSizeTracker.pos + 1) % fileSizeRingCap
+	if fileSizeTracker.count < fileSizeRingCap {
+		fileSizeTracker.count++
+	}
+	fileSizeTracker.mu.Unlock()
+}
+
+// getMedianFileSize returns the median of tracked file sizes, or 0 if none.
+func getMedianFileSize() int64 {
+	fileSizeTracker.mu.Lock()
+	n := fileSizeTracker.count
+	if n == 0 {
+		fileSizeTracker.mu.Unlock()
+		return 0
+	}
+	tmp := make([]int64, n)
+	copy(tmp, fileSizeTracker.buf[:n])
+	fileSizeTracker.mu.Unlock()
+
+	sort.Slice(tmp, func(i, j int) bool { return tmp[i] < tmp[j] })
+	return tmp[n/2]
+}
+
+// activeConfig stores the current AdaptiveConfig (loaded via atomic.Value).
+var activeConfig atomic.Value
+
+// GetAdaptiveConfig returns the current adaptive config.
+// Falls back to medium-file defaults if not yet initialized.
+func GetAdaptiveConfig() AdaptiveConfig {
+	if v := activeConfig.Load(); v != nil {
+		return v.(AdaptiveConfig)
+	}
+	return ConfigForFileSize(512 * 1024) // default: medium
+}
+
+// StartAdaptiveLoop launches a goroutine that recalculates config every 30s
+// based on the median of recently observed file sizes.
+func StartAdaptiveLoop() {
+	// Store initial config
+	activeConfig.Store(ConfigForFileSize(512 * 1024))
+
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+
+		lastCategory := sizeCategory(512 * 1024)
+		for range ticker.C {
+			median := getMedianFileSize()
+			if median == 0 {
+				continue
+			}
+			cat := sizeCategory(median)
+			if cat != lastCategory {
+				cfg := ConfigForFileSize(median)
+				activeConfig.Store(cfg)
+				lastCategory = cat
+				log.Printf("[AdaptiveConfig] median=%dKB category=%s batch=%d workers=%d upload_workers=%d",
+					median/1024, cat, cfg.BatchSize, cfg.BatchWorkers, cfg.UploadWorkers)
+			}
+		}
+	}()
+}
+
+// sizeCategory returns a string label for the file size bucket.
+func sizeCategory(size int64) string {
+	switch {
+	case size <= 100*1024:
+		return "small"
+	case size <= 2*1024*1024:
+		return "medium"
+	default:
+		return "large"
 	}
 }
 

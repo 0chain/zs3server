@@ -187,6 +187,10 @@ func (z *ZCN) NewGatewayLayer(creds madmin.Credentials) (minio.ObjectLayer, erro
 		}
 	}
 
+	// Start adaptive config loop — periodically tunes batch/worker settings
+	// based on median file size observed in recent operations.
+	StartAdaptiveLoop()
+
 	// NFS-Ganesha mode: sync export directory to blobbers via inotify.
 	// NFS-Ganesha runs externally (apt install nfs-ganesha nfs-ganesha-vfs).
 	// This watcher makes it ACID by committing changes to blobbers async.
@@ -452,6 +456,13 @@ func (zob *zcnObjects) GetObjectNInfo(ctx context.Context, bucket, object string
 			rangeStart = rs.Start
 			rangeEnd = rs.End
 		}
+	}
+
+	// Check local caches (NFS export, MinIO writeback) before blobber download.
+	if cached := TryCacheRead(bucket, object, rangeStart, rangeEnd); cached != nil {
+		closer := cached.Reader.Close
+		gr, err = minio.NewGetObjectReaderFromReader(cached.Reader, *cached.ObjectInfo, opts, closer)
+		return
 	}
 
 	f, objectInfo, fCloser, _, err := getFileReader(ctx, zob.alloc, bucket, object, remotePath, rangeStart, rangeEnd)

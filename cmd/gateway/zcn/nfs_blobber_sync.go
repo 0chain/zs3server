@@ -146,6 +146,7 @@ func (bs *BlobberSync) processEvents() {
 				bs.watcher.Add(event.Name)
 				continue
 			}
+			trackFileSize(info.Size())
 			relPath, err := filepath.Rel(bs.exportDir, event.Name)
 			if err != nil || strings.HasPrefix(filepath.Base(relPath), ".") {
 				continue

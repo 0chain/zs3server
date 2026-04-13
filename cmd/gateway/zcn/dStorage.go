@@ -377,6 +377,7 @@ func getFileReader(ctx context.Context,
 }
 
 func putFile(ctx context.Context, alloc *sdk.Allocation, remotePath, contentType string, r io.Reader, size int64, _ bool, userDefined map[string]string) (err error) {
+	trackFileSize(size)
 	fileName := filepath.Base(remotePath)
 	var customMeta string
 	if len(userDefined) > 0 {
