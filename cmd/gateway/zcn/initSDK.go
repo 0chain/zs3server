@@ -41,14 +41,11 @@ type serverOptions struct {
 	NFSDirectThreshold    int64  `json:"nfs_direct_threshold"`   // files above this size (bytes) bypass cache, write direct to blobber (default: 2MB, 0=disabled)
 	S3DirectThreshold     int64  `json:"s3_direct_threshold"`    // same for S3 path (default: 0=disabled, all go through cache)
 
-	// S3-upstream fallback (fetch missing objects from external S3, cache-back to Zus)
-	FallbackS3Enabled   bool              `json:"fallback_s3_enabled"`
-	FallbackS3Endpoint  string            `json:"fallback_s3_endpoint"`
-	FallbackS3Region    string            `json:"fallback_s3_region"`
-	FallbackS3AccessKey string            `json:"fallback_s3_access_key"`
-	FallbackS3SecretKey string            `json:"fallback_s3_secret_key"`
-	FallbackS3UseSSL    bool              `json:"fallback_s3_use_ssl"`
-	FallbackBucketMap   map[string]string `json:"fallback_bucket_map"`
+	// External S3 origin — Router function: fetch from AWS S3 if not in Züs
+	ExternalS3Endpoint    string `json:"external_s3_endpoint"`   // e.g. "https://s3.amazonaws.com" (empty = disabled)
+	ExternalS3Region      string `json:"external_s3_region"`     // e.g. "us-east-1"
+	ExternalS3AccessKey   string `json:"external_s3_access_key"` // AWS access key (or use IAM role)
+	ExternalS3SecretKey   string `json:"external_s3_secret_key"` // AWS secret key
 }
 
 func initializeSDK(configDir, allocid string, nonce int64) error {

@@ -195,9 +195,11 @@ func (z *ZCN) NewGatewayLayer(creds madmin.Credentials) (minio.ObjectLayer, erro
 		}
 	}
 
-	// Start adaptive config loop — periodically tunes batch/worker settings
-	// based on median file size observed in recent operations.
+	// Start adaptive config loop
 	StartAdaptiveLoop()
+
+	// Initialize external S3 client (Router function: fetch from AWS if not in Züs)
+	InitExternalS3()
 
 	// NFS-Ganesha mode: sync export directory to blobbers via inotify.
 	// NFS-Ganesha runs externally (apt install nfs-ganesha nfs-ganesha-vfs).
@@ -468,7 +470,9 @@ func (zob *zcnObjects) GetObjectNInfo(ctx context.Context, bucket, object string
 		}
 	}
 
-	// Check local caches (NFS export, MinIO writeback) before blobber download.
+	// Unified cache lookup: /nfs_export → blobbers → external S3
+	//
+	// 1. Check /nfs_export (NFS local cache — fastest, serves both S3 and NFS)
 	if cached := TryCacheRead(bucket, object, rangeStart, rangeEnd); cached != nil {
 		closer := cached.Reader.Close
 		cleanup := func() { _ = closer() }
@@ -476,35 +480,33 @@ func (zob *zcnObjects) GetObjectNInfo(ctx context.Context, bucket, object string
 		return
 	}
 
+	// 2. Check blobbers (Züs persistent storage)
 	f, objectInfo, fCloser, _, err := getFileReader(ctx, zob.alloc, bucket, object, remotePath, rangeStart, rangeEnd)
-	if err != nil {
-		// S3-upstream fallback: if Zus says not-found and fallback is enabled,
-		// fetch from external S3 and concurrently cache-back to Zus.
-		if isPathNoExistError(err) && serverConfig.FallbackS3Enabled {
-			rc, upInfo, fbErr := fallbackFetchSingleflight(ctx, zob.alloc, bucket, object)
-			if fbErr == nil && rc != nil && upInfo != nil {
-				oi := minio.ObjectInfo{
-					Bucket:      bucket,
-					Name:        object,
-					Size:        upInfo.Size,
-					ModTime:     upInfo.LastModified,
-					ETag:        upInfo.ETag,
-					ContentType: upInfo.ContentType,
-				}
-				cleanup := func() { _ = rc.Close() }
-				gr, err = minio.NewGetObjectReaderFromReader(rc, oi, opts, cleanup)
-				return
-			}
-			if fbErr != nil && fbErr != ErrFallbackDisabled && fbErr != ErrFallbackNotFound {
-				log.Printf("fallback_s3: error bucket=%s key=%s: %v", bucket, object, fbErr)
-			}
-			return nil, minio.ObjectNotFound{Bucket: bucket, Object: object}
-		}
-		return nil, err
+	if err == nil {
+		gr, err = minio.NewGetObjectReaderFromReader(f, *objectInfo, opts, fCloser)
+		return
 	}
 
-	gr, err = minio.NewGetObjectReaderFromReader(f, *objectInfo, opts, fCloser)
-	return
+	// 3. Router function: not in Züs → fetch from external S3 → store in Züs
+	if IsExternalS3Configured() && isPathNoExistError(err) {
+		extReader, extSize, extErr := FetchFromExternalS3(bucket, object)
+		if extErr == nil {
+			extInfo := minio.ObjectInfo{
+				Bucket:      bucket,
+				Name:        object,
+				Size:        extSize,
+				ContentType: "application/octet-stream",
+			}
+			gr, err = minio.NewGetObjectReaderFromReader(extReader, extInfo, opts, func() {
+				extReader.Close()
+			})
+			return
+		}
+		logger.Error("external S3 fetch failed:", extErr.Error())
+	}
+
+	// All sources exhausted
+	return nil, err
 }
 
 // ListBuckets Lists directories of root path(/) and root path itself as buckets.
@@ -769,6 +771,24 @@ func (zob *zcnObjects) PutObject(ctx context.Context, bucket, object string, r *
 				ETag:        s3ContentHash,
 				UserDefined: opts.UserDefined,
 			}, nil
+		}
+	}
+
+	// Write to /nfs_export (unified cache) so both NFS and S3 reads see it.
+	// The blobber sync (inotify) will commit to blobbers async.
+	nfsDir := serverConfig.NFSGaneshaExportDir
+	if nfsDir != "" {
+		localPath := filepath.Join(nfsDir, bucket, object)
+		os.MkdirAll(filepath.Dir(localPath), 0755)
+		if f, createErr := os.Create(localPath); createErr == nil {
+			io.Copy(f, r)
+			f.Close()
+			// Data is now in /nfs_export — blobber sync picks it up.
+			// Also go through putFile for immediate blobber commit via batch channel.
+		}
+		// Reset reader for putFile (if the reader supports seeking)
+		if seeker, ok := r.Reader.(io.Seeker); ok {
+			seeker.Seek(0, io.SeekStart)
 		}
 	}
 
