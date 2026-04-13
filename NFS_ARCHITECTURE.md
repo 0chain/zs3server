@@ -1,42 +1,103 @@
-# NFS Gateway Architecture — Zus S3 + NFS Dual Access
+# Züs Storage Architecture — Multi-Level Cache + S3 + NFS Dual Access
 
 ## Overview
 
-The NFS gateway provides NFSv3 filesystem access to the same blobber data served by the S3 API. Both protocols share the same allocation, writeback cache, WAL, and batch upload workers. Any data written through S3 is visible via NFS, and vice versa.
+Züs provides a multi-level cache architecture for high-performance storage, with
+both S3 and NFS access to the same blobber data. The Router (/router repo) sits
+on compute nodes as a read-through cache. zs3server sits on storage nodes with
+NFS-Ganesha for POSIX access and MinIO for S3 access.
 
 ```
-                     +-----------------------------------------------+
-                     |              ZS3 Server Process               |
-                     |                                               |
-  NFS Clients -TCP-> |  +------------+                               |
-  (mount -t nfs)     |  | NFS Server |-->  billy.Filesystem (ZcnFS)  |
-  port 2049          |  | (go-nfs)   |         |                     |
-                     |  +------------+         |                     |
-                     |                         v                     |
-                     |              +---------------------+          |
-                     |              | In-Process Cache API |          |
-  S3 Clients -HTTP-> |  +--------+  | ObjectLayer.PutObj() |          |
-  (aws s3, mc)       |  | MinIO  |->| ObjectLayer.GetObj() |          |
-  port 9000          |  | Gateway|  | (no HTTP overhead)   |          |
-                     |  +--------+  +--------+------------+          |
-                     |                       |                       |
-                     |              +--------v------------+          |
-                     |              | /mcache (NVMe SSD)  |          |
-                     |              | MinIO writeback cache|          |
-                     |              +--------+------------+          |
-                     |                       | async (5s)            |
-                     |              +--------v------------+          |
-                     |              | WAL Intent Log      |          |
-                     |              | (fdatasync, crash    |          |
-                     |              |  recovery metadata)  |          |
-                     |              +--------+------------+          |
-                     |                       |                       |
-                     |              +--------v------------+          |
-                     |              | Zus Blobbers        |          |
-                     |              | (erasure-coded,     |          |
-                     |              |  blockchain-verified)|          |
-                     |              +---------------------+          |
-                     +-----------------------------------------------+
+  +------------------------------------------------------------------+
+  | COMPUTE NODE                                                     |
+  |                                                                  |
+  |  App (Spark, PuppyGraph, ClickHouse)                             |
+  |    |                                                             |
+  |    v                                                             |
+  |  +---------------------------+                                   |
+  |  | Router (/router repo)     | Level 1: Compute-local cache     |
+  |  | - Local NVMe/tmpfs cache  |                                   |
+  |  | - S3 read-through cache   |                                   |
+  |  | - Async tee pattern       |                                   |
+  |  +---------------------------+                                   |
+  |    | S3 API (cache miss)                                         |
+  +------------------------------------------------------------------+
+       |
+       | S3 GET/PUT over network
+       v
+  +------------------------------------------------------------------+
+  | STORAGE NODE (zs3server)                                         |
+  |                                                                  |
+  |  +---------------------+    +--------------------+               |
+  |  | MinIO S3 Gateway    |    | NFS-Ganesha        | Level 2       |
+  |  | port 9000           |    | port 2049 (NFSv4)  |               |
+  |  +--------+------------+    +--------+-----------+               |
+  |           |                          |                           |
+  |           v                          v                           |
+  |  +---------------------+    +--------------------+               |
+  |  | /mcache (tmpfs 8GB) |    | /nfs_export (tmpfs)|               |
+  |  | MinIO writeback     |    | Ganesha FSAL_VFS   |               |
+  |  | cache               |    |                    |               |
+  |  +--------+------------+    +--------+-----------+               |
+  |           |                          |                           |
+  |           |  +--- CacheRouter -------+                           |
+  |           |  | S3 GET checks /nfs_export first                   |
+  |           |  | (cross-protocol: NFS write -> S3 read)            |
+  |           v  v                                                   |
+  |  +---------------------------------------------+                |
+  |  | BlobberSync (inotify) | Writeback workers    | Level 3       |
+  |  | Batch DoMultiOp       | Async blobber commit |                |
+  |  +---------------------------------------------+                |
+  |           |                                                      |
+  |           v                                                      |
+  |  +---------------------------------------------+                |
+  |  | Züs Blobbers (erasure-coded, blockchain)     |                |
+  |  +---------------------------------------------+                |
+  +------------------------------------------------------------------+
+
+  If object not on Züs:
+    Router pulls from external S3 (AWS/GCP) -> stores in Züs via S3 PUT
+```
+
+### Data flow: App requests S3 object
+
+```
+1. App -> Router: S3 GET /bucket/key
+2. Router checks local NVMe cache
+   HIT -> stream to App (fastest, <1ms)
+   MISS -> continue
+3. Router -> zs3server: S3 GET /bucket/key
+4. zs3server CacheRouter checks /nfs_export/{bucket}/{key}
+   HIT -> stream to Router (NFS-written file, <1ms)
+   MISS -> continue
+5. MinIO cache layer checks /mcache
+   HIT -> sendfile to Router (S3-written file, <1ms)
+   MISS -> continue
+6. getFileReader() -> GoSDK -> blobbers (10ms+)
+7. Response streams back: blobber -> zs3server -> Router -> App
+8. Router async-caches to local NVMe for next request
+```
+
+### Data flow: App writes via NFS
+
+```
+1. App -> NFS mount -> Ganesha -> /nfs_export/{bucket}/{key} (tmpfs, <1ms)
+2. inotify detects new file
+3. BlobberSync batches files (25/batch)
+4. DoMultiOperation -> blobbers (async, 500ms)
+5. After commit: evict from /nfs_export (free tmpfs)
+```
+
+### Data flow: External S3 object not on Züs
+
+```
+1. App -> Router: S3 GET /bucket/key
+2. Router -> zs3server: cache miss
+3. zs3server -> blobbers: not found
+4. Router -> AWS S3: GET /bucket/key
+5. Router streams to App via TeeReader
+6. Background: Router -> zs3server S3 PUT -> /mcache -> blobbers
+7. Next request: served from Router local cache or zs3server cache
 ```
 
 ## ACID Compliance
