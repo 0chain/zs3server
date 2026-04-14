@@ -125,6 +125,13 @@ var (
 	contentLock sync.Mutex
 )
 
+// currentAlloc/currentBS are set by NewGatewayLayer for use by other in-package
+// HTTP handlers (e.g. prewarm).
+var (
+	currentAlloc *sdk.Allocation
+	currentBS    *BlobberSync
+)
+
 // NewGatewayLayer initializes 0chain gosdk and return zcnObjects
 func (z *ZCN) NewGatewayLayer(creds madmin.Credentials) (minio.ObjectLayer, error) {
 	err := initializeSDK(configDir, allocationID, nonce)
@@ -146,6 +153,7 @@ func (z *ZCN) NewGatewayLayer(creds madmin.Credentials) (minio.ObjectLayer, erro
 	sdk.SetSingleClietnMode(true)
 	sdk.SetShouldVerifyHash(false)
 	sdk.SetSaveProgress(false)
+	currentAlloc = allocation
 	zob := &zcnObjects{
 		alloc:   allocation,
 		metrics: minio.NewMetrics(),
@@ -212,8 +220,10 @@ func (z *ZCN) NewGatewayLayer(creds madmin.Credentials) (minio.ObjectLayer, erro
 		}
 		log.Printf("[NFS-Ganesha] cache_mode=%s, direct_threshold=%dMB, evict=%v, spillover=%s",
 			serverConfig.NFSCacheMode, directThreshold/(1024*1024), evict, serverConfig.NFSSpilloverDir)
-		if _, err := StartBlobberSync(serverConfig.NFSGaneshaExportDir, allocation, workers, serverConfig.NFSSpilloverDir, evict, directThreshold); err != nil {
+		if bs, err := StartBlobberSync(serverConfig.NFSGaneshaExportDir, allocation, workers, serverConfig.NFSSpilloverDir, evict, directThreshold); err != nil {
 			log.Printf("[NFS-Ganesha] Failed to start blobber sync: %v", err)
+		} else {
+			currentBS = bs
 		}
 	}
 
@@ -461,12 +471,35 @@ func (zob *zcnObjects) GetObjectNInfo(ctx context.Context, bucket, object string
 	// Check local caches (NFS export, MinIO writeback) before blobber download.
 	if cached := TryCacheRead(bucket, object, rangeStart, rangeEnd); cached != nil {
 		closer := cached.Reader.Close
-		gr, err = minio.NewGetObjectReaderFromReader(cached.Reader, *cached.ObjectInfo, opts, closer)
+		cleanup := func() { _ = closer() }
+		gr, err = minio.NewGetObjectReaderFromReader(cached.Reader, *cached.ObjectInfo, opts, cleanup)
 		return
 	}
 
 	f, objectInfo, fCloser, _, err := getFileReader(ctx, zob.alloc, bucket, object, remotePath, rangeStart, rangeEnd)
 	if err != nil {
+		// S3-upstream fallback: if Zus says not-found and fallback is enabled,
+		// fetch from external S3 and concurrently cache-back to Zus.
+		if isPathNoExistError(err) && serverConfig.FallbackS3Enabled {
+			rc, upInfo, fbErr := fallbackFetchSingleflight(ctx, zob.alloc, bucket, object)
+			if fbErr == nil && rc != nil && upInfo != nil {
+				oi := minio.ObjectInfo{
+					Bucket:      bucket,
+					Name:        object,
+					Size:        upInfo.Size,
+					ModTime:     upInfo.LastModified,
+					ETag:        upInfo.ETag,
+					ContentType: upInfo.ContentType,
+				}
+				cleanup := func() { _ = rc.Close() }
+				gr, err = minio.NewGetObjectReaderFromReader(rc, oi, opts, cleanup)
+				return
+			}
+			if fbErr != nil && fbErr != ErrFallbackDisabled && fbErr != ErrFallbackNotFound {
+				log.Printf("fallback_s3: error bucket=%s key=%s: %v", bucket, object, fbErr)
+			}
+			return nil, minio.ObjectNotFound{Bucket: bucket, Object: object}
+		}
 		return nil, err
 	}
 

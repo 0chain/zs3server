@@ -151,6 +151,12 @@ func (bs *BlobberSync) processEvents() {
 			if err != nil || strings.HasPrefix(filepath.Base(relPath), ".") {
 				continue
 			}
+			// Defense-in-depth: never upload stub files (xattr user.zus.stub set by /internal/list?stub=1)
+			var stubbuf [2]byte
+			if n, _ := syscall.Getxattr(event.Name, "user.zus.stub", stubbuf[:]); n > 0 {
+				log.Printf("[NFS-Sync] skip stub (xattr): %s", relPath)
+				continue
+			}
 			pending[relPath] = time.Now()
 
 		case <-ticker.C:
@@ -382,4 +388,13 @@ func (bs *BlobberSync) initialScan() {
 func (bs *BlobberSync) Stop() {
 	close(bs.stopCh)
 	bs.watcher.Close()
+}
+
+// MarkCommitted records relPath in the committed map so that the next inotify
+// event for this path is suppressed (used by the prewarm endpoint after
+// writing a fetched blob into the export dir).
+func (bs *BlobberSync) MarkCommitted(relPath string) {
+	bs.committedMu.Lock()
+	bs.committed[relPath] = true
+	bs.committedMu.Unlock()
 }

@@ -40,6 +40,15 @@ type serverOptions struct {
 	NFSCacheEvict         bool   `json:"nfs_cache_evict"`        // delete from cache after blobber commit (default: true)
 	NFSDirectThreshold    int64  `json:"nfs_direct_threshold"`   // files above this size (bytes) bypass cache, write direct to blobber (default: 2MB, 0=disabled)
 	S3DirectThreshold     int64  `json:"s3_direct_threshold"`    // same for S3 path (default: 0=disabled, all go through cache)
+
+	// S3-upstream fallback (fetch missing objects from external S3, cache-back to Zus)
+	FallbackS3Enabled   bool              `json:"fallback_s3_enabled"`
+	FallbackS3Endpoint  string            `json:"fallback_s3_endpoint"`
+	FallbackS3Region    string            `json:"fallback_s3_region"`
+	FallbackS3AccessKey string            `json:"fallback_s3_access_key"`
+	FallbackS3SecretKey string            `json:"fallback_s3_secret_key"`
+	FallbackS3UseSSL    bool              `json:"fallback_s3_use_ssl"`
+	FallbackBucketMap   map[string]string `json:"fallback_bucket_map"`
 }
 
 func initializeSDK(configDir, allocid string, nonce int64) error {
@@ -140,6 +149,8 @@ func initializeSDK(configDir, allocid string, nonce int64) error {
 	blockchain.SetMaxTxnQuery(cfg.MaxTxnQuery)
 	blockchain.SetQuerySleepTime(cfg.QuerySleepTime)
 	conf.InitClientConfig(&cfg)
+
+	initFallbackS3()
 
 	if network.IsValid() {
 		sdk.SetNetwork(network.Miners, network.Sharders)
