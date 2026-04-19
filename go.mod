@@ -283,4 +283,6 @@ require (
 
 // replace github.com/0chain/gosdk => ../gosdk
 
+replace github.com/willscott/go-nfs => ../go-nfs
+
 //replace github.com/herumi/bls-go-binary => github.com/boddumanohar/bls-go-binary v1.30.7

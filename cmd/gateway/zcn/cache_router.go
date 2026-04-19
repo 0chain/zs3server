@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	minio "github.com/minio/minio/cmd"
@@ -72,15 +73,30 @@ type CacheRouterResult struct {
 //   2. nil → MinIO cache layer handles /mcache lookup → our handler → blobbers
 func TryCacheRead(bucket, object string, rangeStart, rangeEnd int64) *CacheRouterResult {
 	nfsDir := serverConfig.NFSGaneshaExportDir
-	if nfsDir == "" {
-		return nil // NFS-Ganesha not configured
+	// Tier 1 (tmpfs): gated on NFSTmpfsCacheEnabled. Absent config defaults
+	// to true, but per-tier disable lets us isolate spillover-only runs.
+	if serverConfig.NFSTmpfsCacheEnabled && nfsDir != "" {
+		nfsPath := filepath.Join(nfsDir, bucket, object)
+		result := tryLocalFile(nfsPath, bucket, object, "nfs_export", rangeStart, rangeEnd)
+		if result != nil {
+			cacheStats.NFSHits.Add(1)
+			return result
+		}
 	}
 
-	nfsPath := filepath.Join(nfsDir, bucket, object)
-	result := tryLocalFile(nfsPath, bucket, object, "nfs_export", rangeStart, rangeEnd)
-	if result != nil {
-		cacheStats.NFSHits.Add(1)
-		return result
+	// Tier 2 (NVMe spillover): gated on NFSSpilloverCacheEnabled. Single-cache
+	// writes that got evicted from tmpfs land here as byte-identical copies;
+	// serving from spillover avoids a cold blobber fetch and keeps S3 GET
+	// symmetric with the NFS prewarm spillover-restore path.
+	if serverConfig.NFSSpilloverCacheEnabled {
+		if spillDir := serverConfig.NFSSpilloverDir; spillDir != "" {
+			spillPath := filepath.Join(spillDir, bucket, object)
+			result := tryLocalFile(spillPath, bucket, object, "spillover", rangeStart, rangeEnd)
+			if result != nil {
+				cacheStats.NFSHits.Add(1)
+				return result
+			}
+		}
 	}
 
 	cacheStats.Misses.Add(1)
@@ -88,9 +104,17 @@ func TryCacheRead(bucket, object string, rangeStart, rangeEnd int64) *CacheRoute
 }
 
 // tryLocalFile opens a local file and returns a CacheRouterResult if it exists.
+// Skips sparse stub placeholders (user.zus.stub xattr) — they report the
+// real object size but contain zero bytes; serving them would return EOF.
+// Real content for a stub lives on Züs and must be fetched via the blobber
+// path (or prewarmed first).
 func tryLocalFile(localPath, bucket, object, source string, rangeStart, rangeEnd int64) *CacheRouterResult {
 	fi, err := os.Stat(localPath)
 	if err != nil || fi.IsDir() {
+		return nil
+	}
+	var sbuf [2]byte
+	if n, _ := syscall.Getxattr(localPath, "user.zus.stub", sbuf[:]); n > 0 {
 		return nil
 	}
 
@@ -101,8 +125,10 @@ func tryLocalFile(localPath, bucket, object, source string, rangeStart, rangeEnd
 
 	fileSize := fi.Size()
 
-	// Handle range requests
-	if rangeStart > 0 && rangeStart < fileSize {
+	// Caller convention: rangeStart=1, rangeEnd=0 → "no range, full file"
+	// (see getFileReader). Only seek/limit when we have an actual range.
+	isRangeRequest := rangeEnd >= rangeStart && rangeEnd > 0
+	if isRangeRequest && rangeStart > 0 && rangeStart < fileSize {
 		if _, err := f.Seek(rangeStart, io.SeekStart); err != nil {
 			f.Close()
 			return nil
@@ -111,7 +137,7 @@ func tryLocalFile(localPath, bucket, object, source string, rangeStart, rangeEnd
 
 	var reader io.ReadCloser = f
 	returnSize := fileSize
-	if rangeEnd >= rangeStart && rangeEnd < fileSize {
+	if isRangeRequest && rangeEnd < fileSize {
 		returnSize = rangeEnd - rangeStart + 1
 		reader = &limitedReadCloser{
 			R: io.LimitReader(f, returnSize),

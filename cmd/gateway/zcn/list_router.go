@@ -123,11 +123,16 @@ func listHandler(w http.ResponseWriter, r *http.Request) {
 		if c == nil || c.Name == "" {
 			continue
 		}
+		// Prefer ActualSize (user-facing file size). c.Size is the per-shard
+		// encoded bytes count and is larger than ActualSize — if we used it
+		// as the stub size, os.Truncate would sparse-extend the file tail
+		// beyond the real data, so readers find zeros instead of parquet
+		// magic at the real tail. Only fall back for directories (size == 0).
+		isDir := c.Type == "d"
 		size := c.ActualSize
-		if size == 0 {
+		if size == 0 && isDir {
 			size = c.Size
 		}
-		isDir := c.Type == "d"
 		resp.Entries = append(resp.Entries, listEntry{
 			Name:  c.Name,
 			Size:  size,
@@ -179,6 +184,10 @@ func listHandler(w http.ResponseWriter, r *http.Request) {
 			}
 			if xerr := syscall.Setxattr(target, "user.zus.stub", []byte{'1'}, 0); xerr != nil {
 				logger.LogIf(r.Context(), xerr)
+			}
+			var stX syscall.Stat_t
+			if xerrX := syscall.Lstat(target, &stX); xerrX == nil {
+				inodeRelSet(stX.Ino, rel)
 			}
 		}
 		resp.Stubbed++

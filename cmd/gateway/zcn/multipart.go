@@ -418,6 +418,7 @@ func (zob *zcnObjects) CompleteMultipartUpload(ctx context.Context, bucket, obje
 		return minio.ObjectInfo{}, fmt.Errorf("error cleaning up part files and directories: %v", err)
 	}
 	log.Println("finish uploading: ", multiPartFile.fileSize, " name: ", object)
+	mirrorS3PutToExport(bucket, object, multiPartFile.fileSize)
 	return minio.ObjectInfo{
 		Bucket:  bucket,
 		Name:    object,

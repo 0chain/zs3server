@@ -167,6 +167,33 @@ func (t *teeReadCloser) Close() error {
 	return t.src.Close()
 }
 
+// fallbackStat issues a lightweight HEAD (StatObject) to the upstream so
+// S3 clients that do a HeadObject before GetObject (mc cp, aws s3 cp)
+// get a 200 with object metadata instead of a Züs 404. No bytes streamed;
+// callers should let the subsequent GET trigger tryFallbackFetch which
+// does the tee-to-cache-back.
+func fallbackStat(ctx context.Context, bucket, key string) (*minio.ObjectInfo, error) {
+	if !serverConfig.FallbackS3Enabled {
+		return nil, ErrFallbackDisabled
+	}
+	if minioFallbackClient == nil {
+		initFallbackS3()
+		if minioFallbackClient == nil {
+			return nil, ErrFallbackDisabled
+		}
+	}
+	upBucket := upstreamBucketFor(bucket)
+	info, err := minioFallbackClient.StatObject(ctx, upBucket, key, minio.StatObjectOptions{})
+	if err != nil {
+		errResp := minio.ToErrorResponse(err)
+		if errResp.StatusCode == 404 || errResp.Code == "NoSuchKey" || errResp.Code == "NoSuchBucket" {
+			return nil, ErrFallbackNotFound
+		}
+		return nil, err
+	}
+	return &info, nil
+}
+
 // fallbackFetchSingleflight wraps tryFallbackFetch with singleflight-keyed dedup
 // so two concurrent GETs for the same missing object share one upstream fetch.
 // NOTE: only the winner receives the streaming reader; followers get ErrFallbackDisabled
