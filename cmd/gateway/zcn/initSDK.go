@@ -17,35 +17,35 @@ import (
 )
 
 type serverOptions struct {
-	Encrypt               bool `json:"encrypt"`
-	Compress              bool `json:"compress"`
-	MaxBatchSize          int  `json:"max_batch_size"`
-	BatchWaitTime         int  `json:"batch_wait_time"`
-	BatchWorkers          int  `json:"batch_workers"`
-	UploadWorkers         int  `json:"upload_workers"`
-	DownloadWorkers       int  `json:"download_workers"`
-	MaxConcurrentRequests int  `json:"max_concurrent_requests"`
-	SDKBatchSize          int  `json:"sdk_batch_size"`
-	LockedBlobbersCap     int  `json:"locked_blobbers_cap"`
-	EnableWAL             bool   `json:"enable_wal"`
-	WALDir                string `json:"wal_dir"`
-	WALCommitWorkers      int    `json:"wal_commit_workers"`
-	EnableNFS             bool   `json:"enable_nfs"`
-	NFSPort               int    `json:"nfs_port"`
-	NFSCacheDir           string `json:"nfs_cache_dir"`
-	NFSCacheMode          string `json:"nfs_cache_mode"`          // "tmpfs" (fastest), "nvme" (crash-safe), "direct" (sync blobber, slowest)
-	NFSGaneshaExportDir   string `json:"nfs_ganesha_export_dir"` // NFS-Ganesha export directory
-	NFSSyncWorkers        int    `json:"nfs_sync_workers"`       // blobber sync workers (default 8)
-	NFSSpilloverDir       string `json:"nfs_spillover_dir"`      // NVMe spillover when tmpfs full
-	NFSSpilloverMaxBytes  int64  `json:"nfs_spillover_max_bytes"` // cap on spillover dir size (0 = unlimited). At cap, oldest files evicted.
-	NFSCacheEvict         bool   `json:"nfs_cache_evict"`        // delete from cache after blobber commit (default: true)
-	NFSCacheBackEnabled   bool   `json:"nfs_cacheback_enabled"` // S3 GET read-miss cache-back to /nfs_export (default: false)
-	NFSCacheDisabled      bool   `json:"nfs_cache_disabled"`    // worst-case baseline: skip Fix A + cacheBackFullFetch + cacheBackTee + TryCacheRead; all reads go direct to gosdk (default: false)
-	NFSTmpfsCacheEnabled     bool `json:"nfs_tmpfs_cache_enabled"`     // per-tier gate: tmpfs / NFSGaneshaExportDir (default: true if absent from JSON)
-	NFSSpilloverCacheEnabled bool `json:"nfs_spillover_cache_enabled"` // per-tier gate: spillover / NFSSpilloverDir (default: true if absent from JSON)
-	NFSSyncEnabled           bool `json:"nfs_sync_enabled"`            // gate for inotify NFS-Sync watcher + processEvents/batch workers (default: true if absent from JSON)
-	NFSDirectThreshold    int64  `json:"nfs_direct_threshold"`   // files above this size (bytes) bypass cache, write direct to blobber (default: 2MB, 0=disabled)
-	S3DirectThreshold     int64  `json:"s3_direct_threshold"`    // same for S3 path (default: 0=disabled, all go through cache)
+	Encrypt                  bool   `json:"encrypt"`
+	Compress                 bool   `json:"compress"`
+	MaxBatchSize             int    `json:"max_batch_size"`
+	BatchWaitTime            int    `json:"batch_wait_time"`
+	BatchWorkers             int    `json:"batch_workers"`
+	UploadWorkers            int    `json:"upload_workers"`
+	DownloadWorkers          int    `json:"download_workers"`
+	MaxConcurrentRequests    int    `json:"max_concurrent_requests"`
+	SDKBatchSize             int    `json:"sdk_batch_size"`
+	LockedBlobbersCap        int    `json:"locked_blobbers_cap"`
+	EnableWAL                bool   `json:"enable_wal"`
+	WALDir                   string `json:"wal_dir"`
+	WALCommitWorkers         int    `json:"wal_commit_workers"`
+	EnableNFS                bool   `json:"enable_nfs"`
+	NFSPort                  int    `json:"nfs_port"`
+	NFSCacheDir              string `json:"nfs_cache_dir"`
+	NFSCacheMode             string `json:"nfs_cache_mode"`              // "tmpfs" (fastest), "nvme" (crash-safe), "direct" (sync blobber, slowest)
+	NFSGaneshaExportDir      string `json:"nfs_ganesha_export_dir"`      // NFS-Ganesha export directory
+	NFSSyncWorkers           int    `json:"nfs_sync_workers"`            // blobber sync workers (default 8)
+	NFSSpilloverDir          string `json:"nfs_spillover_dir"`           // NVMe spillover when tmpfs full
+	NFSSpilloverMaxBytes     int64  `json:"nfs_spillover_max_bytes"`     // cap on spillover dir size (0 = unlimited). At cap, oldest files evicted.
+	NFSCacheEvict            bool   `json:"nfs_cache_evict"`             // delete from cache after blobber commit (default: true)
+	NFSCacheBackEnabled      bool   `json:"nfs_cacheback_enabled"`       // S3 GET read-miss cache-back to /nfs_export (default: false)
+	NFSCacheDisabled         bool   `json:"nfs_cache_disabled"`          // worst-case baseline: skip Fix A + cacheBackFullFetch + cacheBackTee + TryCacheRead; all reads go direct to gosdk (default: false)
+	NFSTmpfsCacheEnabled     bool   `json:"nfs_tmpfs_cache_enabled"`     // per-tier gate: tmpfs / NFSGaneshaExportDir (default: true if absent from JSON)
+	NFSSpilloverCacheEnabled bool   `json:"nfs_spillover_cache_enabled"` // per-tier gate: spillover / NFSSpilloverDir (default: true if absent from JSON)
+	NFSSyncEnabled           bool   `json:"nfs_sync_enabled"`            // gate for inotify NFS-Sync watcher + processEvents/batch workers (default: true if absent from JSON)
+	NFSDirectThreshold       int64  `json:"nfs_direct_threshold"`        // files above this size (bytes) bypass cache, write direct to blobber (default: 2MB, 0=disabled)
+	S3DirectThreshold        int64  `json:"s3_direct_threshold"`         // same for S3 path (default: 0=disabled, all go through cache)
 
 	// S3-upstream fallback (fetch missing objects from external S3, cache-back to Zus)
 	FallbackS3Enabled   bool              `json:"fallback_s3_enabled"`
@@ -55,6 +55,20 @@ type serverOptions struct {
 	FallbackS3SecretKey string            `json:"fallback_s3_secret_key"`
 	FallbackS3UseSSL    bool              `json:"fallback_s3_use_ssl"`
 	FallbackBucketMap   map[string]string `json:"fallback_bucket_map"`
+
+	// Write-through / write-back to upstream S3.
+	// When enabled + FallbackS3Enabled: successful Züs PUTs + DELETEs are
+	// replicated to the upstream S3. Modes:
+	//   "async"   — fire-and-forget goroutine after Züs commit; retries a few
+	//               times then logs and moves on. Best-effort eventual.
+	//               (S3 Files' EFS-is-primary, S3-is-async-sync analog.)
+	//   "mirror"  — synchronous: both Züs and upstream must succeed before
+	//               the client gets a PUT reply. Dual-write durability;
+	//               PUT latency = max(zus_commit, upstream_put).
+	//   ""        — write-through disabled (default).
+	FallbackS3WriteThrough string `json:"fallback_s3_write_through"`
+	// Files larger than this skip write-through (0 = all sizes).
+	FallbackS3WriteMaxBytes int64 `json:"fallback_s3_write_max_bytes"`
 }
 
 func initializeSDK(configDir, allocid string, nonce int64) error {

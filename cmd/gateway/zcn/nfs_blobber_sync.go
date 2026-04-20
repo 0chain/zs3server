@@ -203,12 +203,6 @@ func (bs *BlobberSync) processEvents() {
 			if n, _ := syscall.Getxattr(event.Name, "user.zus.committed", stubbuf[:]); n > 0 {
 				continue
 			}
-			// Defense-in-depth: never upload stub files (xattr user.zus.stub set by /internal/list?stub=1)
-			var stubbuf [2]byte
-			if n, _ := syscall.Getxattr(event.Name, "user.zus.stub", stubbuf[:]); n > 0 {
-				log.Printf("[NFS-Sync] skip stub (xattr): %s", relPath)
-				continue
-			}
 			pending[relPath] = time.Now()
 
 		case <-ticker.C:
@@ -360,13 +354,28 @@ func (bs *BlobberSync) commitBatch(files []string) error {
 	}
 	bs.committedMu.Unlock()
 
-	// WAL intents
+	// WAL intents + upstream S3 write-through (NFS-origin writes land here).
+	// The S3 PutObject path has its own hook in gateway-zcn.go; this one
+	// covers files that arrived via the NFS mount → Ganesha → BlobberSync.
+	// We deliberately run write-through AFTER blobber commit succeeds so
+	// Züs remains source-of-truth even if the upstream replication fails.
+	wtMode := writeThroughEnabled()
 	for _, f := range files {
 		remotePath := "/" + f
 		parts := strings.SplitN(strings.TrimPrefix(remotePath, "/"), "/", 2)
-		if len(parts) == 2 && walWriter != nil {
-			data, _ := os.ReadFile(filepath.Join(bs.exportDir, f))
+		if len(parts) != 2 {
+			continue
+		}
+		localPath := filepath.Join(bs.exportDir, f)
+		if walWriter != nil {
+			data, _ := os.ReadFile(localPath)
 			walWriter.RecordIntent(parts[0], parts[1], int64(len(data)))
+		}
+		if wtMode != "" {
+			st, statErr := os.Stat(localPath)
+			if statErr == nil && !st.IsDir() {
+				_ = syncPutStreamToUpstream(context.Background(), parts[0], parts[1], localPath, st.Size(), "")
+			}
 		}
 	}
 
@@ -382,6 +391,17 @@ func (bs *BlobberSync) spilloverMonitor() {
 		case <-bs.stopCh:
 			return
 		case <-ticker.C:
+			// Gate: when the spillover-cache tier is disabled, reads do not
+			// consume from /root/nfs_spillover (TryCacheRead skips it). There
+			// is no point in copying bytes to disk — they'd just rot there.
+			// Under this config the right response to "tmpfs full" is to
+			// delete committed files, not copy them to the disabled tier.
+			// spillCommittedFiles below handles the spillover-enabled case;
+			// the delete-to-free-tmpfs path is EnsureFreeTmpfs, called
+			// on-demand from the S3 PUT / cache-back paths.
+			if !serverConfig.NFSSpilloverCacheEnabled {
+				continue
+			}
 			if bs.tmpfsUsagePct() > 60 {
 				bs.SpillNow()
 			}
@@ -1196,12 +1216,17 @@ func (bs *BlobberSync) commitDeleteBatch(files []string) error {
 		}
 		return fmt.Errorf("DoMultiOperation delete(%d): %w", len(ops), err)
 	}
+	wtMode := writeThroughEnabled()
 	for _, f := range files {
+		parts := strings.SplitN(f, "/", 2)
+		if len(parts) != 2 {
+			continue
+		}
 		if walWriter != nil {
-			parts := strings.SplitN(f, "/", 2)
-			if len(parts) == 2 {
-				walWriter.Delete(parts[0], parts[1])
-			}
+			walWriter.Delete(parts[0], parts[1])
+		}
+		if wtMode != "" {
+			_ = syncDeleteFromUpstream(context.Background(), parts[0], parts[1])
 		}
 	}
 	return nil
