@@ -35,6 +35,11 @@ const (
 	rootBucketName         = "root"
 	s3DirectoryContentType = "application/x-directory; charset=UTF-8"
 	s3ContentHash          = "d41d8cd98f00b204e9800998ecf8427e"
+	// largeObjectCacheSkipBytes: objects at or above this size bypass the
+	// /nfs_export tmpfs write-then-rename path and stream directly to the
+	// blobbers. Prevents ENOSPC on a modest tmpfs when concurrent multi-GiB
+	// PUTs would need 2× their size in tmpfs during the write-then-rename.
+	largeObjectCacheSkipBytes = int64(1) << 30
 )
 
 var (
@@ -45,7 +50,7 @@ var (
 	compress     bool
 	workDir      string
 	serverConfig serverOptions
-	walWriter    *WALWriter  // WAL intent log for writeback cache crash recovery
+	walWriter    *WALWriter // WAL intent log for writeback cache crash recovery
 )
 
 // Per-tier hit counters. Incremented in Fix A (fast local serve) and on
@@ -56,6 +61,12 @@ var (
 	tmpfsHitCount     int64
 	spilloverHitCount int64
 	blobberReadCount  int64
+	// NFS-path counters (bumped from prewarmHandler — FSAL_ZUS's prewarm
+	// call is the single funnel for all NFS read activity through
+	// zs3server, so counting here captures the full NFS data path).
+	nfsTmpfsHitCount     int64
+	nfsSpilloverHitCount int64
+	nfsPrewarmFetchCount int64 // blobber fetches originating from NFS prewarm
 )
 
 var zFlags = []cli.Flag{
@@ -213,6 +224,19 @@ func (z *ZCN) NewGatewayLayer(creds madmin.Credentials) (minio.ObjectLayer, erro
 	// based on median file size observed in recent operations.
 	StartAdaptiveLoop()
 
+	// Sequential prefetch predictor: watches GET patterns per bucket+dir
+	// and pre-spawns cacheBackFullFetch for the next N keys when a sorted
+	// run is detected. Single biggest win on training loops.
+	InitPrefetchPredictor(allocation, cacheBackFullFetch, func() string {
+		switch {
+		case serverConfig.NFSTmpfsCacheEnabled && serverConfig.NFSGaneshaExportDir != "":
+			return serverConfig.NFSGaneshaExportDir
+		case serverConfig.NFSSpilloverCacheEnabled && serverConfig.NFSSpilloverDir != "":
+			return serverConfig.NFSSpilloverDir
+		}
+		return ""
+	})
+
 	// NFS-Ganesha mode: sync export directory to blobbers via inotify.
 	// NFS-Ganesha runs externally (apt install nfs-ganesha nfs-ganesha-vfs).
 	// This watcher makes it ACID by committing changes to blobbers async.
@@ -355,6 +379,14 @@ func (zob *zcnObjects) DeleteObject(ctx context.Context, bucket, object string, 
 		return
 	}
 	mirrorS3DeleteObjectToExport(bucket, object)
+	// Replicate DELETE to upstream S3 (if write-through enabled). Errors in
+	// async mode are logged and swallowed; mirror mode surfaces them.
+	if writeThroughEnabled() != "" {
+		if wtErr := syncDeleteFromUpstream(ctx, bucket, object); wtErr != nil && writeThroughEnabled() == "mirror" {
+			err = wtErr
+			return
+		}
+	}
 	return minio.ObjectInfo{
 		Bucket:  bucket,
 		Name:    ref.Name,
@@ -426,6 +458,12 @@ func (zob *zcnObjects) GetBucketInfo(ctx context.Context, bucket string) (bi min
 
 // GetObjectInfo Get file meta data and respond it as minio.ObjectInfo
 func (zob *zcnObjects) GetObjectInfo(ctx context.Context, bucket, object string, opts minio.ObjectOptions) (objInfo minio.ObjectInfo, err error) {
+	// WAL tombstone gate (same as GetObjectNInfo) so HEAD calls also honour
+	// the recent-delete grace window.
+	if walWriter != nil && walWriter.WasRecentlyDeleted(bucket, object) {
+		return minio.ObjectInfo{}, minio.ObjectNotFound{Bucket: bucket, Object: object}
+	}
+
 	// MinIO writeback cache serves metadata for cached objects.
 	var remotePath string
 	if bucket == rootBucketName {
@@ -488,6 +526,19 @@ func (zob *zcnObjects) GetObjectInfo(ctx context.Context, bucket, object string,
 
 // GetObjectNInfo Provides reader with read cursor placed at offset upto some length
 func (zob *zcnObjects) GetObjectNInfo(ctx context.Context, bucket, object string, rs *minio.HTTPRangeSpec, h http.Header, lockType minio.LockType, opts minio.ObjectOptions) (gr *minio.GetObjectReader, err error) {
+	// WAL tombstone gate: a recently-DELETEd key must not serve content
+	// even if a lagging blobber still has it. Restores S3 read-after-delete
+	// linearizability while the gosdk DELETE multi-blobber propagation is
+	// in flight. See wal.go:WasRecentlyDeleted.
+	if walWriter != nil && walWriter.WasRecentlyDeleted(bucket, object) {
+		return nil, minio.ObjectNotFound{Bucket: bucket, Object: object}
+	}
+
+	// Fire the sequential-access predictor FIRST, before any early return
+	// from Fix A / Fix B / TryCacheRead. This way cache-hit patterns also
+	// trigger prefetch for not-yet-cached future keys in the same run.
+	RecordGet(bucket, object)
+
 	// MinIO writeback cache serves data via optimized sendfile path.
 	var remotePath string
 	if bucket == rootBucketName {
@@ -747,11 +798,16 @@ func (zob *zcnObjects) GetObjectNInfo(ctx context.Context, bucket, object string
 		cacheKey := bucket + "/" + object
 		// Range-read miss: serve this range from blobber (we just did)
 		// AND spawn a background full-file fetch so subsequent range reads
-		// on the same file hit Fix A's local-file fast path. Dedup via
-		// cacheBackInflight so only one background fetch runs per file;
-		// skip if the file was recently evicted (avoids cache-and-evict
-		// loop when dataset > cache).
-		if !skip && !RecentlyEvicted(cacheKey) {
+		// on the same file hit Fix A's local-file fast path.
+		// Admission-gated via ShouldCacheFile: the file must fit free tmpfs
+		// without forcing an eviction AND hit-rate must be >=40% AND the key
+		// must not have been recently evicted. Prevents the 1G-thrash loop
+		// where every miss cached back → evicted an older file → re-missed.
+		var fileSizeForCB int64
+		if objectInfo != nil {
+			fileSizeForCB = objectInfo.Size
+		}
+		if !skip && currentBS != nil && currentBS.ShouldCacheFile(fileSizeForCB, bucket, object) {
 			if _, loaded := cacheBackInflight.LoadOrStore(cacheKey, true); !loaded {
 				go cacheBackFullFetch(zob.alloc, bucket, object, remotePath, cacheDir, cacheKey)
 			}
@@ -767,11 +823,13 @@ func (zob *zcnObjects) GetObjectNInfo(ctx context.Context, bucket, object string
 			}
 		}
 		cacheKey := bucket + "/" + object
-		// 2-min cool-off: do not re-cacheback a file we just evicted from
-		// tmpfs/spillover. Prevents cache-thrash when dataset > cache size
-		// (every miss would otherwise re-fill tmpfs, forcing another evict,
-		// re-miss on the evicted file, ad infinitum).
-		if RecentlyEvicted(cacheKey) {
+		// Use the same 3-part admission gate as the range-miss path above.
+		// Prevents thrashing on full-file GETs when the dataset > cache.
+		var fullFileSize int64
+		if objectInfo != nil {
+			fullFileSize = objectInfo.Size
+		}
+		if currentBS != nil && !currentBS.ShouldCacheFile(fullFileSize, bucket, object) {
 			skip = true
 		}
 		if !skip {
@@ -924,10 +982,8 @@ func cacheBackFullFetch(alloc *sdk.Allocation, bucket, object, remotePath, nfsDi
 	_ = syscall.Setxattr(localPath, "user.zus.committed", []byte{'1'}, 0)
 }
 
-
 // cacheBackInflight deduplicates background cache-back downloads.
 var cacheBackInflight sync.Map
-
 
 // ListBuckets Lists directories of root path(/) and root path itself as buckets.
 func (zob *zcnObjects) ListBuckets(ctx context.Context) (buckets []minio.BucketInfo, err error) {
@@ -1227,6 +1283,66 @@ func (zob *zcnObjects) PutObject(ctx context.Context, bucket, object string, r *
 		pmu = acquirePathLock(rel)
 		defer pmu.Unlock()
 	}
+	// Large-object guard: /nfs_export is a modest tmpfs (typically 8 GiB).
+	// Writing a >=1 GiB tmp file plus renaming to the final name keeps two
+	// copies briefly, and concurrent uploads multiply that. That blew up as
+	// ENOSPC on 1.5 GiB PUTs (obj_00000 / obj_00001 io.Copy → "no space left
+	// on device"), which minio surfaces as a closed connection to the client.
+	// For large objects, spool the body to NFSSpilloverDir (roomy NVMe) and
+	// stream the upload from that file, skipping the tmpfs cache entirely.
+	largeObjUploaded := false
+	if size >= largeObjectCacheSkipBytes && exportDir != "" && rel != "" {
+		spillDir := serverConfig.NFSSpilloverDir
+		if spillDir == "" {
+			spillDir = os.TempDir()
+		}
+		if mkErr := os.MkdirAll(spillDir, 0o755); mkErr != nil {
+			logger.LogIf(ctx, mkErr)
+		}
+		spillPath := filepath.Join(spillDir, fmt.Sprintf("zs3_large.%d.%d", time.Now().UnixNano(), os.Getpid()))
+		sf, sErr := os.Create(spillPath)
+		if sErr != nil {
+			logger.LogIf(ctx, sErr)
+			// Last-resort: direct stream from HTTP body.
+			err = putFile(ctx, zob.alloc, remotePath, contentType, r, size, false, opts.UserDefined)
+		} else {
+			n, cpErr := io.Copy(sf, r)
+			sf.Close()
+			if cpErr != nil {
+				os.Remove(spillPath)
+				err = cpErr
+			} else {
+				sr, oErr := os.Open(spillPath)
+				if oErr != nil {
+					os.Remove(spillPath)
+					err = oErr
+				} else {
+					err = putFile(ctx, zob.alloc, remotePath, contentType, sr, n, false, opts.UserDefined)
+					sr.Close()
+					os.Remove(spillPath)
+				}
+			}
+		}
+		if err != nil {
+			return
+		}
+		largeObjUploaded = true
+		// Skip the tmpfs cache-write block by clearing exportDir; but we
+		// also need to avoid the outer-else fallback that re-calls putFile
+		// with the drained body. The largeObjUploaded flag below handles it.
+		exportDir = ""
+	}
+	if largeObjUploaded {
+		// Large-obj path already uploaded to blobbers; build objInfo and return.
+		objInfo = minio.ObjectInfo{
+			Bucket:      bucket,
+			Name:        object,
+			Size:        size,
+			ModTime:     time.Now(),
+			UserDefined: opts.UserDefined,
+		}
+		return
+	}
 	if exportDir != "" && rel != "" {
 		localPath := filepath.Join(exportDir, rel)
 		if mkErr := os.MkdirAll(filepath.Dir(localPath), 0o755); mkErr != nil {
@@ -1237,7 +1353,15 @@ func (zob *zcnObjects) PutObject(ctx context.Context, bucket, object string, r *
 		if currentBS != nil {
 			currentBS.MarkCommitted(rel)
 		}
-		localF, cErr := os.Create(localPath)
+		// Linearizability: write to a unique per-request tmp file, then
+		// atomically rename into place AFTER the blobber commit succeeds.
+		// os.Create(localPath) directly would truncate in-place and readers
+		// with an open fd would see zero/partial bytes mid-write (Porcupine
+		// caught this as NON-LINEARIZABLE). Rename is atomic on the same
+		// tmpfs, so any reader sees either the old inode or the new one,
+		// never a mix.
+		tmpPath := fmt.Sprintf("%s.tmp.%d.%d", localPath, time.Now().UnixNano(), os.Getpid())
+		localF, cErr := os.Create(tmpPath)
 		if cErr != nil {
 			logger.LogIf(ctx, cErr)
 			// Fall back to direct blobber upload without local cache
@@ -1246,17 +1370,29 @@ func (zob *zcnObjects) PutObject(ctx context.Context, bucket, object string, r *
 			n, cpErr := io.Copy(localF, r)
 			localF.Close()
 			if cpErr != nil {
-				os.Remove(localPath)
+				os.Remove(tmpPath)
 				err = cpErr
 			} else {
 				size = n
-				// Upload from local cache to blobbers
-				localR, oErr := os.Open(localPath)
+				// Upload from tmp cache to blobbers FIRST; rename only on success.
+				localR, oErr := os.Open(tmpPath)
 				if oErr != nil {
+					os.Remove(tmpPath)
 					err = oErr
 				} else {
 					err = putFile(ctx, zob.alloc, remotePath, contentType, localR, n, false, opts.UserDefined)
 					localR.Close()
+					if err == nil {
+						// Atomic replace of the visible name. Any concurrent
+						// reader that had localPath open sees the old inode
+						// until it closes; new opens see the new inode.
+						if rErr := os.Rename(tmpPath, localPath); rErr != nil {
+							os.Remove(tmpPath)
+							err = rErr
+						}
+					} else {
+						os.Remove(tmpPath)
+					}
 				}
 			}
 		}
@@ -1274,6 +1410,28 @@ func (zob *zcnObjects) PutObject(ctx context.Context, bucket, object string, r *
 	if exportDir != "" && rel != "" {
 		localPath := filepath.Join(exportDir, rel)
 		_ = syscall.Setxattr(localPath, "user.zus.committed", []byte{'1'}, 0)
+
+		// A successful PUT resurrects a previously-deleted key: clear any
+		// live tombstone so the next GET returns the new content rather
+		// than continuing to mask it as NoSuchKey.
+		if walWriter != nil {
+			walWriter.ClearTombstone(bucket, object)
+		}
+
+		// Write-through to upstream S3 (if configured). Stream from the
+		// local /nfs_export copy so we don't re-read from blobbers.
+		// doUpstreamPut handles bucket-create-on-first-use + retries.
+		// In "async" mode this returns immediately; in "mirror" mode it
+		// blocks and may return an error that we surface to the client.
+		if writeThroughEnabled() != "" {
+			if wtErr := syncPutStreamToUpstream(ctx, bucket, object, localPath, size, contentType); wtErr != nil {
+				if writeThroughEnabled() == "mirror" {
+					err = wtErr
+					return
+				}
+				// async-mode error is already logged in doUpstreamPut
+			}
+		}
 	}
 
 	objInfo = minio.ObjectInfo{

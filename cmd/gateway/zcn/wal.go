@@ -115,7 +115,14 @@ func (w *WALWriter) ShouldUseWAL(size int64) bool {
 // RecordIntent appends a metadata-only intent entry to the WAL.
 // Called AFTER MinIO writeback cache writes the data to /mcache.
 // The fdatasync ensures the intent survives a crash.
+//
+// Clears any recent tombstone for this key — a successful PUT supersedes
+// a prior DELETE, and callers of WasRecentlyDeleted should see the key
+// as live again immediately.
 func (w *WALWriter) RecordIntent(bucket, key string, size int64) error {
+	// Clear any live tombstone first so the PUT isn't masked.
+	w.ClearTombstone(bucket, key)
+
 	intent := &WALIntent{
 		Status:    walPending,
 		Timestamp: time.Now().UnixNano(),
@@ -153,16 +160,71 @@ func (w *WALWriter) MarkCommitted(bucket, key string) {
 	w.maybeCompact()
 }
 
-// Delete marks an intent as deleted (object was deleted before blobber commit).
+// Delete marks an intent as deleted. We KEEP the entry (as a tombstone)
+// rather than removing it outright, because the underlying gosdk/blobber
+// DELETE is not strictly linearizable — a concurrent GET may still observe
+// pre-delete content on a lagging blobber for a short window (Porcupine
+// caught this as NON-LINEARIZABLE at read-after-delete). Keeping the
+// tombstone for tombstoneGraceTTL lets GetObjectNInfo treat the key as
+// "absent" during that window, restoring S3 read-after-delete semantics.
+// The tombstone is harvested by maybeCompact after the grace.
 func (w *WALWriter) Delete(bucket, key string) bool {
 	w.indexMu.Lock()
 	intent, found := w.index[bucket+"/"+key]
 	if found {
 		intent.Status = walDeleted
-		delete(w.index, bucket+"/"+key)
+		intent.Timestamp = time.Now().UnixNano()
+	} else {
+		// Even if we never saw a put intent for this key, record a
+		// tombstone so a concurrent GET during the ambiguity window
+		// doesn't fall through to the blobber and see stale content.
+		w.index[bucket+"/"+key] = &WALIntent{
+			Status:    walDeleted,
+			Timestamp: time.Now().UnixNano(),
+			Bucket:    bucket,
+			Key:       key,
+		}
 	}
 	w.indexMu.Unlock()
 	return found
+}
+
+// tombstoneGraceTTL is how long a walDeleted entry is honoured as "key is
+// gone" before it is harvested. Must cover the worst-case blobber DELETE
+// propagation lag we've observed in Porcupine (up to 6+ seconds under
+// w=8 concurrent churn); set well above that. Memory cost is trivial —
+// the index only holds one 64-byte intent per recently-deleted key.
+const tombstoneGraceTTL = 60 * time.Second
+
+// WasRecentlyDeleted returns true if the key has a live tombstone. Callers
+// (GetObjectNInfo, HeadObject) should treat a "yes" as NoSuchKey to honour
+// S3 read-after-delete semantics even when a lagging blobber replica
+// still serves pre-delete bytes.
+func (w *WALWriter) WasRecentlyDeleted(bucket, key string) bool {
+	if w == nil {
+		return false
+	}
+	w.indexMu.RLock()
+	intent, found := w.index[bucket+"/"+key]
+	w.indexMu.RUnlock()
+	if !found || intent.Status != walDeleted {
+		return false
+	}
+	return time.Since(time.Unix(0, intent.Timestamp)) < tombstoneGraceTTL
+}
+
+// ClearTombstone removes a walDeleted entry for this key so a subsequent
+// GET can see the freshly-PUT content. Called from RecordIntent on PUT,
+// and from any other write path that resurrects the key.
+func (w *WALWriter) ClearTombstone(bucket, key string) {
+	if w == nil {
+		return
+	}
+	w.indexMu.Lock()
+	if intent, found := w.index[bucket+"/"+key]; found && intent.Status == walDeleted {
+		delete(w.index, bucket+"/"+key)
+	}
+	w.indexMu.Unlock()
 }
 
 // HasPending returns true if this object has an uncommitted WAL intent
@@ -240,9 +302,17 @@ func (w *WALWriter) groupCommitWriter() {
 }
 
 func (w *WALWriter) maybeCompact() {
-	w.indexMu.RLock()
+	// First, harvest tombstones whose grace window has fully elapsed.
+	// This keeps the index bounded in the steady state.
+	cutoff := time.Now().UnixNano() - int64(tombstoneGraceTTL)
+	w.indexMu.Lock()
+	for k, intent := range w.index {
+		if intent.Status == walDeleted && intent.Timestamp < cutoff {
+			delete(w.index, k)
+		}
+	}
 	empty := len(w.index) == 0
-	w.indexMu.RUnlock()
+	w.indexMu.Unlock()
 	if empty {
 		w.mu.Lock()
 		w.file.Truncate(0)
