@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -98,6 +99,7 @@ func prewarmHandler(w http.ResponseWriter, r *http.Request) {
 		return xerr == nil && n > 0
 	}
 	if fi, err := os.Stat(finalPath); err == nil && !fi.IsDir() && !isStub(finalPath) {
+		atomic.AddInt64(&nfsTmpfsHitCount, 1)
 		writeJSON(w, http.StatusOK, prewarmResp{Path: finalPath, Size: fi.Size()})
 		return
 	}
@@ -105,6 +107,7 @@ func prewarmHandler(w http.ResponseWriter, r *http.Request) {
 	v, err, _ := prewarmGroup.Do(relPath, func() (interface{}, error) {
 		// Re-check after singleflight wait.
 		if fi, err := os.Stat(finalPath); err == nil && !fi.IsDir() && !isStub(finalPath) {
+			atomic.AddInt64(&nfsTmpfsHitCount, 1)
 			return prewarmResp{Path: finalPath, Size: fi.Size()}, nil
 		}
 
@@ -133,6 +136,7 @@ func prewarmHandler(w http.ResponseWriter, r *http.Request) {
 							if currentBS != nil {
 								currentBS.MarkCommitted(relPath)
 							}
+							atomic.AddInt64(&nfsSpilloverHitCount, 1)
 							logger.Info("prewarm spillover: restored %s from %s size=%d", finalPath, spillPath, n)
 							return prewarmResp{Path: finalPath, Size: n}, nil
 						}
@@ -192,6 +196,9 @@ func prewarmHandler(w http.ResponseWriter, r *http.Request) {
 		if closer != nil {
 			defer closer()
 		}
+		// NFS-origin blobber (or fallback-S3) fetch succeeded — this is
+		// the miss path that drives real network reads for NFS traffic.
+		atomic.AddInt64(&nfsPrewarmFetchCount, 1)
 
 		if err := os.MkdirAll(filepath.Dir(finalPath), 0o755); err != nil {
 			return nil, err
