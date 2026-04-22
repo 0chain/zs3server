@@ -183,6 +183,9 @@ func initializeSDK(configDir, allocid string, nonce int64) error {
 			Miners:   network.Miners,
 			Sharders: network.Sharders,
 		})
+		// Pre-seed gosdk's node cache before InitStorageSDK so that
+		// InitNetworkDetails can use it as a fallback if 0DNS is unreachable.
+		sdk.SetNetwork(network.Miners, network.Sharders)
 	}
 
 	logger.SyncLoggers([]*logger.Logger{zcncore.GetLogger(), sdk.GetLogger()})
@@ -216,10 +219,6 @@ func initializeSDK(configDir, allocid string, nonce int64) error {
 	conf.InitClientConfig(&cfg)
 
 	initFallbackS3()
-
-	if network.IsValid() {
-		sdk.SetNetwork(network.Miners, network.Sharders)
-	}
 
 	sdk.SetNumBlockDownloads(10)
 	return nil

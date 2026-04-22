@@ -444,6 +444,11 @@ func (zob *zcnObjects) GetBucketInfo(ctx context.Context, bucket string) (bi min
 			if remotePath == rootPath {
 				return minio.BucketInfo{Name: rootBucketName}, nil
 			}
+			// Implicit dir: no explicit mkdir record but files may exist (rclone uploads).
+			// ListDir traverses the allocation tree and can find it.
+			if _, lerr := zob.alloc.ListDir(remotePath); lerr == nil {
+				return minio.BucketInfo{Name: bucket, Created: time.Now()}, nil
+			}
 			return bi, minio.BucketNotFound{Bucket: bucket}
 		}
 		return
@@ -986,35 +991,31 @@ func cacheBackFullFetch(alloc *sdk.Allocation, bucket, object, remotePath, nfsDi
 var cacheBackInflight sync.Map
 
 // ListBuckets Lists directories of root path(/) and root path itself as buckets.
+// Uses ListDir (blobber /v1/file/list/) instead of GetRefs (blobber /v1/file/refs)
+// so that directories created implicitly by rclone uploads are discovered.
 func (zob *zcnObjects) ListBuckets(ctx context.Context) (buckets []minio.BucketInfo, err error) {
-	rootRef, err := getSingleRegularRef(zob.alloc, rootPath)
+	listResult, err := zob.alloc.ListDir(rootPath)
 	if err != nil {
-		if isPathNoExistError(err) {
-			buckets = append(buckets, minio.BucketInfo{
-				Name:    rootBucketName,
-				Created: time.Now().Add(-time.Hour * 30),
-			})
-			return buckets, nil
-		}
-		return nil, err
+		// Root not yet written (fresh allocation) — serve default root bucket
+		buckets = append(buckets, minio.BucketInfo{
+			Name:    rootBucketName,
+			Created: time.Now().Add(-time.Hour * 30),
+		})
+		return buckets, nil
 	}
 
-	dirRefs, err := listRootDir(zob.alloc, "d")
-	if err != nil {
-		return nil, err
-	}
-
-	// Consider root path as bucket as well.
 	buckets = append(buckets, minio.BucketInfo{
 		Name:    rootBucketName,
-		Created: rootRef.CreatedAt.ToTime(),
+		Created: listResult.CreatedAt.ToTime(),
 	})
 
-	for _, dirRef := range dirRefs {
-		buckets = append(buckets, minio.BucketInfo{
-			Name:    dirRef.Name,
-			Created: dirRef.CreatedAt.ToTime(),
-		})
+	for _, child := range listResult.Children {
+		if child.Type == dirType {
+			buckets = append(buckets, minio.BucketInfo{
+				Name:    child.Name,
+				Created: child.CreatedAt.ToTime(),
+			})
+		}
 	}
 	return
 }
@@ -1054,13 +1055,13 @@ func (zob *zcnObjects) ListObjects(ctx context.Context, bucket, prefix, marker, 
 	var ref *sdk.ORef
 	ref, err = getSingleRegularRef(zob.alloc, remotePath)
 	if err != nil {
-		if isPathNoExistError(err) {
-			return result, nil
+		if !isPathNoExistError(err) {
+			return
 		}
-		return
-	}
-
-	if ref.Type == fileType {
+		// Implicit dir (rclone uploads without explicit mkdir): no directory
+		// record exists but files do. Fall through to listRegularRefs.
+		err = nil
+	} else if ref.Type == fileType {
 		if strings.HasSuffix(prefix, "/") {
 			return minio.ListObjectsInfo{
 					IsTruncated: false,

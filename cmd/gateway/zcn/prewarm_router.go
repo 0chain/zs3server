@@ -332,9 +332,8 @@ func prewarmHandler(w http.ResponseWriter, r *http.Request) {
 		if oi != nil && oi.Size > 0 {
 			expected = oi.Size
 		}
-		if n == 0 || (expected > 0 && n != expected) {
-			// Short/empty download. Restore the stub so the next read
-			// retries prewarm and Spark does not observe partial bytes.
+		if n == 0 {
+			// Genuinely empty download — restore stub so next read retries.
 			if useSpilloverDirect {
 				os.Remove(openPath)
 			} else {
@@ -345,9 +344,17 @@ func prewarmHandler(w http.ResponseWriter, r *http.Request) {
 					_ = os.Truncate(openPath, originalStubSize)
 				}
 			}
-			logger.Info("prewarm short-read: %s n=%d expected=%d — preserving stub",
+			logger.Info("prewarm empty-read: %s expected=%d — preserving stub",
+				finalPath, expected)
+			return nil, fmt.Errorf("prewarm empty-read: expected=%d", expected)
+		}
+		if expected > 0 && n != expected {
+			// io.Copy succeeded (cerr==nil, n>0) but metadata disagrees with
+			// actual bytes written — this happens when the best-effort fallback
+			// ref in filerefsworker returns a ref with stale ActualFileSize.
+			// Trust n (actual bytes on disk); do NOT restore the stub.
+			logger.Info("prewarm size-mismatch (metadata): %s n=%d expected=%d — accepting actual bytes",
 				finalPath, n, expected)
-			return nil, fmt.Errorf("prewarm short-read: n=%d expected=%d", n, expected)
 		}
 
 		// Spillover-direct path: set xattr on temp BEFORE rename so it
