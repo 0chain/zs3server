@@ -15,7 +15,7 @@ var (
 )
 
 func IntiBatchUploadWorkers(ctx context.Context, alloc *sdk.Allocation, waitTime, maxOperations, maxWorkers int) {
-
+	log.Println("initializing batch upload workers: ", maxWorkers, maxOperations, waitTime)
 	batchUploadChan = make(chan sdk.OperationRequest, maxOperations*maxWorkers)
 	workerChan = make(chan []sdk.OperationRequest, maxWorkers)
 
@@ -68,7 +68,7 @@ func batchUploadWorker(ctx context.Context, alloc *sdk.Allocation, opsChan chan 
 			return
 		case ops := <-opsChan:
 			// process the batch upload or wait for more operations
-			log.Println("processing batch upload: ", len(ops))
+			now := time.Now()
 			err := alloc.DoMultiOperation(ops)
 			if err != nil {
 				if !isSameRootError(err) {
@@ -80,6 +80,7 @@ func batchUploadWorker(ctx context.Context, alloc *sdk.Allocation, opsChan chan 
 			for _, op := range ops {
 				op.CancelCauseFunc(err)
 			}
+			log.Println("processing batch upload: ", len(ops), " time: ", time.Since(now).Milliseconds())
 		}
 	}
 }

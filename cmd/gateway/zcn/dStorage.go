@@ -377,6 +377,7 @@ func getFileReader(ctx context.Context,
 }
 
 func putFile(ctx context.Context, alloc *sdk.Allocation, remotePath, contentType string, r io.Reader, size int64, _ bool, userDefined map[string]string) (err error) {
+	trackFileSize(size)
 	fileName := filepath.Base(remotePath)
 	var customMeta string
 	if len(userDefined) > 0 {
@@ -417,14 +418,31 @@ func putFile(ctx context.Context, alloc *sdk.Allocation, remotePath, contentType
 			return
 		}
 		err = nil
+	} else if serverConfig.S3DirectThreshold > 0 && size >= serverConfig.S3DirectThreshold {
+		// Large file: bypass batch channel, upload directly to blobbers.
+		// Avoids filling cache with multi-MB data.
+		err = alloc.DoMultiOperation([]sdk.OperationRequest{opRequest})
+		if err != nil && !isSameRootError(err) {
+			logger.Error(err.Error())
+			return
+		}
+		err = nil
 	} else {
+		// Standard path: MinIO writeback cache handles data storage + async blobber commit.
 		opCtx, opCancelCause := context.WithCancelCause(ctx)
 		opRequest.CancelCauseFunc = opCancelCause
 		batchUploadChan <- opRequest
-
 		<-opCtx.Done()
 		if context.Cause(opCtx) != context.Canceled {
 			err = context.Cause(opCtx)
+		}
+
+		// Record WAL intent AFTER writeback cache accepts the PUT.
+		if err == nil && walWriter != nil {
+			parts := strings.SplitN(strings.TrimPrefix(remotePath, "/"), "/", 2)
+			if len(parts) == 2 {
+				walWriter.RecordIntent(parts[0], parts[1], size)
+			}
 		}
 	}
 	return

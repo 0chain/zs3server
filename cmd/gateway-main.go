@@ -97,6 +97,9 @@ func (l *GatewayLocker) Walk(ctx context.Context, bucket, prefix string, results
 	return nil
 }
 
+
+var GatewayExtraRouters []func(*mux.Router)
+
 // NewGatewayLayerWithLocker - initialize gateway with locker.
 func NewGatewayLayerWithLocker(gwLayer ObjectLayer) ObjectLayer {
 	return &GatewayLocker{ObjectLayer: gwLayer, nsMutex: newNSLock(false)}
@@ -234,6 +237,12 @@ func StartGateway(ctx *cli.Context, gw Gateway) {
 	// normalizing URL path minio/minio#3256
 	// avoid URL path encoding minio/minio#8950
 	router := mux.NewRouter().SkipClean(true).UseEncodedPath()
+
+	// Add custom gateway-extra routers FIRST so their specific paths (e.g. /internal/*)
+	// take precedence over the STS catch-all PathPrefix("/") matcher below.
+	for _, h := range GatewayExtraRouters {
+		h(router)
+	}
 
 	// Enable STS router if etcd is enabled.
 	registerSTSRouter(router)

@@ -816,7 +816,7 @@ func (c *cacheObjects) PutObject(ctx context.Context, bucket, object string, r *
 
 	// fetch from backend if there is no space on cache drive
 	if !dcache.diskSpaceAvailable(size) {
-		log.Println("uploading to  backend no space on cache drive")
+		log.Println("uploading to backend no space on cache drive")
 		return putObjectFn(ctx, bucket, object, r, opts)
 	}
 
@@ -843,12 +843,12 @@ func (c *cacheObjects) PutObject(ctx context.Context, bucket, object string, r *
 		return putObjectFn(ctx, bucket, object, r, opts)
 	}
 	if c.commitWriteback {
-		log.Println("uploading to cache writeback", object)
 		oi, err := dcache.Put(ctx, bucket, object, r, r.Size(), nil, opts, false, true)
 		if err != nil {
 			return ObjectInfo{}, err
 		}
 		objPath := oi.Bucket + "/" + oi.Name
+		log.Println("uploading to cache writeback", object, " modTime", oi.ModTime.UnixNano())
 		c.listTree.Insert(objPath, oi)
 		coi := oi.Clone()
 		//go c.uploadObject(GlobalContext, oi) // use schedule to upload in batch
@@ -931,13 +931,24 @@ func (c *cacheObjects) PutObject(ctx context.Context, bucket, object string, r *
 
 // upload cached object to backend in async commit mode.
 func (c *cacheObjects) uploadObject(ctx context.Context, oi ObjectInfo) {
-	log.Printf("uploading object %s in backend in async commit mode", oi.Name)
 	dcache, err := c.getCacheToLoc(ctx, oi.Bucket, oi.Name)
 	if err != nil {
 		// disk cache could not be located.
 		logger.LogIf(ctx, fmt.Errorf("Could not upload %s/%s to backend: %w", oi.Bucket, oi.Name, err))
 		return
 	}
+	objPath := oi.Bucket + "/" + oi.Name
+	cachedObj, ok := c.listTree.Get(objPath)
+	if !ok {
+		log.Println("object not found in list tree ", objPath)
+		return
+	}
+	cachedObjInfo := cachedObj.(ObjectInfo)
+	if !cachedObjInfo.ModTime.IsZero() && cachedObjInfo.ModTime.UnixNano() != oi.ModTime.UnixNano() {
+		log.Println("object modified since cached", cachedObjInfo.ModTime.UnixNano(), oi.ModTime.UnixNano(), oi.Name, cachedObjInfo.ModTime.UnixNano() != oi.ModTime.UnixNano())
+		return
+	}
+	log.Printf("uploading object %s in backend in async commit mode", oi.Name)
 	cReader, _, bErr := dcache.Get(ctx, oi.Bucket, oi.Name, nil, http.Header{}, ObjectOptions{})
 	if bErr != nil {
 		log.Println("errorGettingReader: ", bErr)
@@ -974,7 +985,7 @@ func (c *cacheObjects) uploadObject(ctx context.Context, oi ObjectInfo) {
 		size = cReader.ObjInfo.Size
 	} else {
 		delete(meta, writeBackRetryHeader)
-		c.deleteFromListTree(oi.Bucket + "/" + oi.Name)
+		c.listTree.CheckTimeAndDelete(objPath, cachedObjInfo.ModTime)
 	}
 	meta[writeBackStatusHeader] = wbCommitStatus.String()
 	meta["etag"] = oi.ETag

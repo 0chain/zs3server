@@ -405,3 +405,18 @@ func listObjects(ctx context.Context, obj ObjectLayer, bucket, prefix, marker, d
 	// Success.
 	return result, nil
 }
+
+// GetGlobalCacheObjectAPI returns the cache-wrapped ObjectLayer for direct
+// in-process use (e.g., NFS gateway bypassing HTTP loopback).
+func GetGlobalCacheObjectAPI() CacheObjectLayer {
+	globalObjLayerMutex.RLock()
+	defer globalObjLayerMutex.RUnlock()
+	return globalCacheObjectAPI
+}
+
+// GetGlobalObjectAPI returns the base ObjectLayer.
+func GetGlobalObjectAPI() ObjectLayer {
+	globalObjLayerMutex.RLock()
+	defer globalObjLayerMutex.RUnlock()
+	return globalObjectAPI
+}

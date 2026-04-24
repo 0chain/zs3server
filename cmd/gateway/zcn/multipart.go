@@ -418,6 +418,22 @@ func (zob *zcnObjects) CompleteMultipartUpload(ctx context.Context, bucket, obje
 		return minio.ObjectInfo{}, fmt.Errorf("error cleaning up part files and directories: %v", err)
 	}
 	log.Println("finish uploading: ", multiPartFile.fileSize, " name: ", object)
+	mirrorS3PutToExport(bucket, object, multiPartFile.fileSize)
+
+	// Write-through to upstream S3 (if configured). Streams from the
+	// /nfs_export mirror copy to avoid buffering multi-GB multipart uploads
+	// in RAM. mirrorS3PutToExport wrote a stub earlier; the inotify-driven
+	// prewarm+tee will have materialised real bytes there by the time this
+	// async goroutine runs, OR we skip and rely on a later background pass.
+	if writeThroughEnabled() != "" && serverConfig.NFSGaneshaExportDir != "" {
+		localPath := filepath.Join(serverConfig.NFSGaneshaExportDir, bucket, object)
+		if wtErr := syncPutStreamToUpstream(ctx, bucket, object, localPath, multiPartFile.fileSize, ""); wtErr != nil {
+			if writeThroughEnabled() == "mirror" {
+				return minio.ObjectInfo{}, fmt.Errorf("write-through mirror to upstream failed: %w", wtErr)
+			}
+		}
+	}
+
 	return minio.ObjectInfo{
 		Bucket:  bucket,
 		Name:    object,

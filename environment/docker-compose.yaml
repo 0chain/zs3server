@@ -2,14 +2,14 @@ version: '3.8'
 services:
   postgres-db:
     image: postgres:13-alpine
-    container_name: postgres-db
+    container_name: postgres-zs3
     restart: always
     command: -c "log_statement=all"
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
     ports:
-      - '5432:5432'
+      - '5434:5432'
     volumes:
       - db:/var/lib/postgresql/data
     networks:
@@ -17,10 +17,11 @@ services:
 
   logsearchapi:
     image: 0chaindev/blimp-logsearchapi:staging
+    container_name: logsearchapi-zs3
     depends_on:
       - postgres-db
     ports:
-      - 8080:8080
+      - 8085:8080
     environment:
       LOGSEARCH_PG_CONN_STR: "postgres://postgres:postgres@postgres-db/postgres?sslmode=disable"
       LOGSEARCH_AUDIT_AUTH_TOKEN: 1234
@@ -44,12 +45,13 @@ services:
       MINIO_ROOT_USER: rootroot
       MINIO_ROOT_PASSWORD: rootroot
       MINIO_BROWSER: "OFF"
-      MINIO_CACHE_DRIVES: "/mcache" # list of mounted cache drives or directories separated by ","
-      MINIO_CACHE_EXPIRY: 90 # expiry in days
-      MINIO_CACHE_COMMIT: "writeback" # to increase write throughput use writeback
-      MINIO_CACHE_QUOTA: 99 # maximum permitted usage of the cache in percentage 
-      MINIO_CACHE_WATERMARK_LOW: 90 # % of cache quota at which cache eviction stops
-      MINIO_CACHE_WATERMARK_HIGH: 95 # % of cache quota at which cache eviction starts
+      # Disk caching disabled - macOS APFS doesn't support atime
+      # MINIO_CACHE_DRIVES: "/mcache"
+      # MINIO_CACHE_EXPIRY: 90
+      # MINIO_CACHE_COMMIT: "writeback"
+      # MINIO_CACHE_QUOTA: 99
+      # MINIO_CACHE_WATERMARK_LOW: 90
+      # MINIO_CACHE_WATERMARK_HIGH: 95
       MINIO_WRITE_BACK_INTERVAL: 900 # interval in seconds
       MINIO_MAX_CACHE_FILE_SIZE: 1000000000 # max file size in bytes
       MINIO_WRITE_BACK_UPLOAD_WORKERS: 20
@@ -65,6 +67,7 @@ services:
       # - /mnt/mcache4:/mcache4
     networks:
       zs_network:
+      testnet0:
 
   minioclient:
     image: 0chaindev/blimp-clientapi:staging
@@ -85,3 +88,5 @@ volumes:
 networks:
   zs_network:
     driver: bridge
+  testnet0:
+    external: true
