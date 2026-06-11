@@ -1,9 +1,7 @@
 name: Upgrade old version tests
 
 on:
-  pull_request:
-    branches:
-    - master
+  workflow_dispatch:
 
 # This ensures that previous jobs for the PR are canceled when the PR is
 # updated.
@@ -18,7 +16,7 @@ jobs:
     strategy:
       matrix:
         go-version: [1.19.x]
-        os: [ubuntu-latest]
+        os: [hetzner-build]
 
     steps:
       - uses: actions/checkout@v1

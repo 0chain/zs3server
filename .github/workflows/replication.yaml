@@ -1,9 +1,7 @@
 name: Multi-site replication tests
 
 on:
-  pull_request:
-    branches:
-    - master
+  workflow_dispatch:
 
 # This ensures that previous jobs for the PR are canceled when the PR is
 # updated.
@@ -14,7 +12,7 @@ concurrency:
 jobs:
   replication-test:
     name: Replication Tests with Go ${{ matrix.go-version }}
-    runs-on: ubuntu-latest
+    runs-on: hetzner-build
 
     strategy:
       matrix:
