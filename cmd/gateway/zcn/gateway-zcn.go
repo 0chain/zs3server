@@ -173,6 +173,10 @@ func (z *ZCN) NewGatewayLayer(creds madmin.Credentials) (minio.ObjectLayer, erro
 	if err != nil {
 		return nil, err
 	}
+	if serverConfig.ConsensusThreshold <= allocation.DataShards {
+		serverConfig.ConsensusThreshold = allocation.DataShards + 1
+	}
+	allocation.SetConsensusThreshold(serverConfig.ConsensusThreshold)
 	contentMap = make(map[string]*semaphore.Weighted)
 	ctx, cancel := context.WithCancel(context.Background())
 	zob.ctxCancel = cancel
