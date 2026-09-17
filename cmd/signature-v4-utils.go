@@ -237,6 +237,23 @@ func extractSignedHeaders(signedHeaders []string, r *http.Request) (http.Header,
 			return nil, ErrUnsignedHeaders
 		}
 	}
+
+	// SECURITY (CVE-2026-54330 class): an x-amz-copy-source[-*] header turns a PUT
+	// into a server-side CopyObject that runs AS THE SIGNER — so if it is not part
+	// of the SIGNED headers, a presigned/limited PUT grant silently becomes an
+	// arbitrary cross-bucket READ (write grant -> read). AWS rejects this (403);
+	// upstream MinIO is archived and never shipped the checkMetaHeaders fix, and
+	// this fork inherited the gap: extractSignedHeaders only walked the client's
+	// signedHeaders list, never the headers that actually arrived. Reject any
+	// x-amz-copy-source* header that was not signed. (A legitimate CopyObject signs
+	// it, so this only blocks the smuggled/unsigned case.)
+	for k := range reqHeaders {
+		if strings.HasPrefix(strings.ToLower(k), "x-amz-copy-source") {
+			if _, ok := extractedSignedHeaders[http.CanonicalHeaderKey(k)]; !ok {
+				return nil, ErrUnsignedHeaders
+			}
+		}
+	}
 	return extractedSignedHeaders, ErrNone
 }
 
