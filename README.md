@@ -11,7 +11,7 @@ zs3server provides a no-code s3-compatible decentralized storage server on Züs 
 
 ## Züs Overview
 
-[Züs](https://zus.network/) is a leading privacy and secure AI data platform that provides users full ownership and control of their data, with powerful AI chat and agents on Vult.network to accelerate productivity. It is also ideal for on-prem, high speed S3 storage as well as backup and disaster recovery to prevent outage, breach, and ransomware issues. 
+[Züs](https://zus.network/) is a leading privacy and secure AI data platform that provides users full ownership and control of their data, with powerful AI chat and agents on Vult.network to accelerate productivity. It is also ideal for on-prem, high speed S3 storage as well as backup and disaster recovery to prevent outage, breach, and ransomware issues.
 
 It has an unparalleled data integrity layer on the blockchain and a zero knowledge network, with data and key distributed so that its almost impossible to breach. Another standout feature is that it allows users to share encrypted data easily, even on a public link.
 
@@ -26,31 +26,31 @@ Züs has ecosystem apps to encourage traditional storage consumption such as [Bl
 Other apps are [Bolt](https://bolt.holdings/), a wallet that is very secure with air-gapped 2FA split-key protocol to prevent hacks from compromising your digital assets, and it enables you to stake and earn from the storage providers; [Atlus](https://atlus.cloud/), a blockchain explorer and [Chimney](https://demo.chimney.software/), which allows anyone to join the network and earn using their server or by just renting one, with no prior knowledge required.
 
 We’ve built the first **S3-compatible storage platform** that is both **ACID-compliant** and runs on a **zero-knowledge network** — eliminating the need for additional services like AWS Athena or GuardDuty to secure or query your data.
-  - **5x better performance** – Real-world tests (see benchmark from s3compare.io) showed up to 5x gains versus AWS.
-  - **2x lower costs** – Thanks to zero egress and zero API fees, you save more as your usage scales.
-  - **2x lower carbon footprint** – Our erasure-coded architecture minimizes redundancy-related overhead (see below for architectural breakdown).
-  - **Bulletproof security** – Split-key security, zero-knowledge design, and erasure coding ensure unmatched internal breach resistance.
-  - **No vendor lock-in** – Easily add, remove, or swap providers with no disruption or central dependency.
 
-  One of our enterprise customers benchmarked Züs against AWS using [s3compare.io](https://s3compare.io) and saw **5x performance improvements** across common S3 operations — validating our edge in real-time workloads and data transfer scenarios.
-  
-  We also fill security and vendor neutrality gaps that MinIO and AWS have in their solution. Check the table below for comparison.
-  
-  Beyond backup and datalake storage, our platform is ideal for storing AI data, where integrity and verifiability matter such as for MCP workflows.
+- **5x better performance** – Real-world tests (see benchmark from s3compare.io) showed up to 5x gains versus AWS.
+- **2x lower costs** – Thanks to zero egress and zero API fees, you save more as your usage scales.
+- **2x lower carbon footprint** – Our erasure-coded architecture minimizes redundancy-related overhead (see below for architectural breakdown).
+- **Bulletproof security** – Split-key security, zero-knowledge design, and erasure coding ensure unmatched internal breach resistance.
+- **No vendor lock-in** – Easily add, remove, or swap providers with no disruption or central dependency.
 
-  ### Core Features – Züs vs AWS S3 vs MinIO
+One of our enterprise customers benchmarked Züs against AWS using [s3compare.io](https://s3compare.io) and saw **5x performance improvements** across common S3 operations — validating our edge in real-time workloads and data transfer scenarios.
 
-| **Feature**                             | **AWS S3**                                                                 | **MinIO**                                                               | **Züs**                                                                                   |
-|----------------------------------------|---------------------------------------------------------------------------|------------------------------------------------------------------------|-------------------------------------------------------------------------------------------|
-| **Managed Infrastructure**             | Fully managed with strong global uptime                                  | Self-hosted; requires manual setup and scaling                        | Fully managed decentralized infrastructure with flexible scaling                          |
-| **Split-key Internal Breach Security** | Not available; single-party access control                                | Not available                                                          | Built-in split-key security prevents internal breaches by decentralizing key control      |
-| **Zero Egress Fees**                   | Charges apply for all outbound data                                      | No egress fees                                                         | No egress fees on outbound traffic across providers                                       |
-| **Zero API Fees**                      | Charges per API call                                                      | Free API access                                                        | Free unlimited API requests; ideal for high-frequency apps                                |
-| **Encrypted Data Sharing**             | Requires external tools or complex configuration                         | Not supported natively                                                 | Native proxy re-encryption enables secure, private sharing of encrypted files             |
-| **Zero Knowledge Network**            | Not supported                                                             | Not supported                                                          | Zero-knowledge architecture ensures providers can't access file contents or user identity |
-| **ACID Compliant (Data Integrity)**    | Eventual consistency; not ACID compliant                                 | No built-in ACID guarantees                                            | Fully ACID compliant to ensure consistent reads/writes and verifiable storage behavior    |
-| **Add/Swap Infrastructure (No Lock-in)**| Vendor lock-in with no real-time provider switching                      | Tied to fixed infrastructure                                           | Add, remove, or swap storage providers dynamically with no lock-in                        |
+We also fill security and vendor neutrality gaps that MinIO and AWS have in their solution. Check the table below for comparison.
 
+Beyond backup and datalake storage, our platform is ideal for storing AI data, where integrity and verifiability matter such as for MCP workflows.
+
+### Core Features – Züs vs AWS S3 vs MinIO
+
+| **Feature**                              | **AWS S3**                                          | **MinIO**                                      | **Züs**                                                                                   |
+| ---------------------------------------- | --------------------------------------------------- | ---------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| **Managed Infrastructure**               | Fully managed with strong global uptime             | Self-hosted; requires manual setup and scaling | Fully managed decentralized infrastructure with flexible scaling                          |
+| **Split-key Internal Breach Security**   | Not available; single-party access control          | Not available                                  | Built-in split-key security prevents internal breaches by decentralizing key control      |
+| **Zero Egress Fees**                     | Charges apply for all outbound data                 | No egress fees                                 | No egress fees on outbound traffic across providers                                       |
+| **Zero API Fees**                        | Charges per API call                                | Free API access                                | Free unlimited API requests; ideal for high-frequency apps                                |
+| **Encrypted Data Sharing**               | Requires external tools or complex configuration    | Not supported natively                         | Native proxy re-encryption enables secure, private sharing of encrypted files             |
+| **Zero Knowledge Network**               | Not supported                                       | Not supported                                  | Zero-knowledge architecture ensures providers can't access file contents or user identity |
+| **ACID Compliant (Data Integrity)**      | Eventual consistency; not ACID compliant            | No built-in ACID guarantees                    | Fully ACID compliant to ensure consistent reads/writes and verifiable storage behavior    |
+| **Add/Swap Infrastructure (No Lock-in)** | Vendor lock-in with no real-time provider switching | Tied to fixed infrastructure                   | Add, remove, or swap storage providers dynamically with no lock-in                        |
 
 ## Architecture
 
@@ -243,7 +243,7 @@ Check `mc --help` for the exhaustive list of cmds available.
 ## Test using Postman Using REST APIs
 
 - Add the following authorization settings
-  ![](./assets/postman-auth.png 'Authorization settings')
+  ![](./assets/postman-auth.png "Authorization settings")
 - The `AccessKey` would be the MINIO_ROOT_USER which you set earlier during zs3server deployment and `SecretKey` would be the MINIO_ROOT_PASSWORD.
 - If you do not want to share the MINIO_ROOT_USER and MINIO_ROOT_PASSWORD, you can also create a user from minio console and share their access key and secret instead.
 - Use the REST APIs to interact with the server.
@@ -308,6 +308,16 @@ The server will upload and download objects concurrently based on the number of 
 {
   "upload_workers": 4,
   "download_workers": 6
+}
+```
+
+## Consensus Threshold
+
+The server will use the consensus threshold set in the configuration file to determine the number of blobbers to be used for uploading objects. The consensus threshold can be set in the zs3server.json file under .zcn folder, by default it is set to data+1. For example:
+
+```
+{
+  "consensus_threshold": 5
 }
 ```
 

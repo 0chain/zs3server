@@ -25,6 +25,7 @@ type serverOptions struct {
 	UploadWorkers         int  `json:"upload_workers"`
 	DownloadWorkers       int  `json:"download_workers"`
 	MaxConcurrentRequests int  `json:"max_concurrent_requests"`
+	ConsensusThreshold    int  `json:"consensus_threshold"`
 }
 
 func initializeSDK(configDir, allocid string, nonce int64, walletDetails string) error {

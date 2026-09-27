@@ -408,7 +408,6 @@ func (c *diskCache) purge(ctx context.Context) {
 		// cache writeback commit setting is enabled.
 		status, ok := objInfo.UserDefined[writeBackStatusHeader]
 		if ok && status != CommitComplete.String() {
-			log.Println("Skipping cache entry", objInfo.Name, "as it is not committed yet")
 			return nil
 		}
 		cc := cacheControlOpts(objInfo)
