@@ -1,10 +1,10 @@
 {
   "encrypt": false,
   "compress": false,
-  "max_batch_size": 25,
-  "batch_wait_time": 500,
-  "batch_workers": 5,
-  "upload_workers": 4,
-  "download_workers": 6,
-  "max_concurrent_requests": 150
+  "max_batch_size": 40,
+  "batch_wait_time": 70,
+  "batch_workers": 72,
+  "upload_workers": 72,
+  "download_workers": 72,
+  "max_concurrent_requests": 400
 }
